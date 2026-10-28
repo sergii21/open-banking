@@ -15,6 +15,7 @@ let config;
 try {
   config = loadConfig(process.env, {
     defaultWebDistDir: resolve(import.meta.dirname, '../../web/dist/web/browser'),
+    baseDir: resolve(import.meta.dirname, '..'),
   });
 } catch (error) {
   if (error instanceof ConfigError) {
@@ -25,6 +26,7 @@ try {
 }
 
 const { app } = await buildApp({ config });
+for (const warning of config.providerWarnings) app.log.warn(warning);
 
 const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, 'shutting down');

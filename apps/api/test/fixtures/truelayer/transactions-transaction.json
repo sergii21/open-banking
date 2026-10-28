@@ -1,0 +1,72 @@
+{
+  "results": [
+    {
+      "timestamp": "2026-10-26T00:00:00",
+      "description": "TESCO STORES 3297",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": ["Food & Dining", "Groceries"],
+      "merchant_name": "Tesco",
+      "amount": -23.45,
+      "currency": "GBP",
+      "transaction_id": "2c2c1ffb7f8a43d5a0a6f0e2e6b3b9a1",
+      "provider_transaction_id": "TX-0001",
+      "normalised_provider_transaction_id": "txn-uk-oauth-tesco-1",
+      "running_balance": { "currency": "GBP", "amount": 1076.55 }
+    },
+    {
+      "timestamp": "2026-10-25T09:30:00Z",
+      "description": "ACME LTD SALARY",
+      "transaction_type": "CREDIT",
+      "transaction_category": "TRANSFER",
+      "transaction_classification": [],
+      "amount": 2450.0,
+      "currency": "GBP",
+      "transaction_id": "7b0e9f3a2d6c4e1b8a5f0c9d3e2b1a47",
+      "provider_transaction_id": "TX-0002",
+      "normalised_provider_transaction_id": "txn-uk-oauth-salary-1"
+    },
+    {
+      "timestamp": "2026-10-24T00:00:00",
+      "description": "NETFLIX.COM",
+      "transaction_type": "DEBIT",
+      "transaction_category": "DIRECT_DEBIT",
+      "transaction_classification": ["Entertainment"],
+      "merchant_name": "Netflix",
+      "amount": 9.99,
+      "currency": "GBP",
+      "transaction_id": "c3d4e5f60718293a4b5c6d7e8f901234"
+    },
+    {
+      "timestamp": "2026-10-23T00:00:00",
+      "description": "COSTA COFFEE LONDON",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": [],
+      "merchant_name": "Costa Coffee",
+      "amount": -3.2,
+      "currency": "GBP"
+    },
+    {
+      "timestamp": "2026-10-23T00:00:00",
+      "description": "COSTA COFFEE LONDON",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": [],
+      "merchant_name": "Costa Coffee",
+      "amount": -3.2,
+      "currency": "GBP"
+    },
+    {
+      "timestamp": "2026-10-20T23:30:00+01:00",
+      "description": "TFL TRAVEL CH",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": ["Transport"],
+      "amount": -19.99,
+      "currency": "GBP",
+      "transaction_id": "0a1b2c3d4e5f60718293a4b5c6d7e8f9"
+    }
+  ],
+  "status": "Succeeded"
+}

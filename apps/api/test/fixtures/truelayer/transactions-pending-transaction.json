@@ -1,0 +1,15 @@
+{
+  "results": [
+    {
+      "timestamp": "2026-10-28T00:00:00",
+      "description": "PRET A MANGER",
+      "transaction_type": "DEBIT",
+      "transaction_category": "PURCHASE",
+      "transaction_classification": [],
+      "merchant_name": "Pret A Manger",
+      "amount": -6.85,
+      "currency": "GBP"
+    }
+  ],
+  "status": "Succeeded"
+}

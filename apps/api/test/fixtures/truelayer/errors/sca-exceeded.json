@@ -1,0 +1,4 @@
+{
+  "error_description": "Strong customer authentication has expired for this connection. Re-authenticate the user to continue.",
+  "error": "sca_exceeded"
+}

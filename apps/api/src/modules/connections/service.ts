@@ -137,7 +137,7 @@ export class ConnectionService {
   }
 
   /** Finishes the bank redirect and returns where the browser should go next (a SPA path). */
-  async complete(query: Record<string, string | undefined>): Promise<string> {
+  async complete(query: Record<string, string | undefined>, psuIp?: string): Promise<string> {
     const resultUrl = (status: string, extra: Record<string, string> = {}): string =>
       `/connect/result?${new URLSearchParams({ status, ...extra }).toString()}`;
 
@@ -161,7 +161,11 @@ export class ConnectionService {
       return resultUrl(callback.outcome);
     }
 
-    const call: CallContext = { sessionId: connection.sessionId, connectionId: connection.id };
+    const call: CallContext = {
+      sessionId: connection.sessionId,
+      connectionId: connection.id,
+      ...(psuIp ? { psuIp } : {}),
+    };
     const now = this.core.clock.now().toISOString();
     try {
       if (!connection.codeVerifierEnc) throw new AppError('invalid_state', 400);
@@ -188,7 +192,7 @@ export class ConnectionService {
         now,
       );
       const active = this.get(connection.sessionId, connection.id);
-      await this.sync.initialSync(active);
+      await this.sync.initialSync(active, psuIp);
       this.access.notify(connection.id);
       return resultUrl('success', { connection: connection.id });
     } catch (error) {

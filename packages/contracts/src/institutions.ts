@@ -16,6 +16,8 @@ export const Institution = z.object({
   }),
   /** `degraded` banks are listed but connecting will most likely fail (the mock "unhealthy" bank). */
   health: z.enum(['operational', 'degraded']),
+  /** Shown on the payment form when this bank's payments behave in a way a reader should know about. */
+  paymentsNote: z.string().nullable(),
 });
 export type Institution = z.infer<typeof Institution>;
 

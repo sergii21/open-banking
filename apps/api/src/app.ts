@@ -28,7 +28,7 @@ import { InspectorStore } from './modules/inspector/inspector-store';
 import { SessionService } from './modules/session/service';
 import { SyncService } from './modules/sync/service';
 import { registerErrorHandling } from './plugins/errors';
-import { buildRegistry } from './providers/registry';
+import { buildRegistry, type ProviderTransports } from './providers/registry';
 import type { App, AppContext, CoreContext } from './types';
 
 export interface BuildAppOptions {
@@ -36,6 +36,8 @@ export interface BuildAppOptions {
   clock?: Clock;
   /** Tests pass their own (in-memory) database; the server lets the app open the configured file. */
   db?: Db;
+  /** Tests script the provider's HTTP instead of reaching the network. */
+  transports?: ProviderTransports;
 }
 
 export interface BuiltApp {
@@ -127,7 +129,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     return reply.code(503).send({ status: 'unavailable' });
   });
 
-  const providers = await buildRegistry({ app, ctx: core });
+  const providers = await buildRegistry({
+    app,
+    ctx: core,
+    ...(options.transports ? { transports: options.transports } : {}),
+  });
   const access = new ConnectionAccess(core, providers);
   const sync = new SyncService(core, access);
   const connections = new ConnectionService(core, providers, access, sync);

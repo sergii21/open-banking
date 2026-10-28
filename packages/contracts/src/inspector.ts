@@ -10,6 +10,8 @@ export const InspectorCall = z.object({
   provider: ProviderId,
   /** Human label such as `Fetch accounts` or `Create payment`. */
   label: z.string(),
+  /** `inbound` for webhooks the provider sent us; everything else is a call we made. */
+  direction: z.enum(['outbound', 'inbound']),
   method: z.string(),
   /** Full URL with sensitive query values masked. */
   url: z.string(),

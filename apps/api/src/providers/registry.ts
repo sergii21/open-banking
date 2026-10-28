@@ -6,7 +6,8 @@ import { registerMockBank } from './mock/bank';
 import { MockBankStore } from './mock/store';
 import { createMockTransport } from './mock/transport';
 import type { BankingProvider } from './port';
-import { ProviderHttp } from './transport';
+import { TrueLayerProvider } from './truelayer/adapter';
+import { ProviderHttp, fetchTransport, type Transport } from './transport';
 
 /** The enabled adapters, and the lookup from an institution id (`<provider>:<slug>`) to its adapter. */
 export class ProviderRegistry {
@@ -43,13 +44,23 @@ export class ProviderRegistry {
   }
 }
 
+/** Tests replace the network with a scripted provider; production uses `fetch`. */
+export interface ProviderTransports {
+  truelayer?: Transport;
+}
+
 export interface RegistryDeps {
   app: App;
   ctx: Pick<CoreContext, 'config' | 'clock' | 'db' | 'inspector'>;
+  transports?: ProviderTransports;
 }
 
 /** Builds the adapters the configuration enables. An adapter without credentials is simply not registered. */
-export async function buildRegistry({ app, ctx }: RegistryDeps): Promise<ProviderRegistry> {
+export async function buildRegistry({
+  app,
+  ctx,
+  transports = {},
+}: RegistryDeps): Promise<ProviderRegistry> {
   const providers = new Map<ProviderId, BankingProvider>();
 
   if (ctx.config.providers.mock.enabled) {
@@ -68,6 +79,24 @@ export async function buildRegistry({ app, ctx }: RegistryDeps): Promise<Provide
         publicUrl: ctx.config.publicUrl,
         clock: ctx.clock,
         store,
+      }),
+    );
+  }
+
+  const truelayer = ctx.config.providers.truelayer;
+  if (truelayer) {
+    providers.set(
+      'truelayer',
+      new TrueLayerProvider({
+        http: new ProviderHttp({
+          provider: 'truelayer',
+          mode: 'sandbox',
+          transport: transports.truelayer ?? fetchTransport,
+          inspector: ctx.inspector,
+          clock: ctx.clock,
+        }),
+        config: truelayer,
+        clock: ctx.clock,
       }),
     );
   }

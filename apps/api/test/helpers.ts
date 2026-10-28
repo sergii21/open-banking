@@ -3,6 +3,7 @@ import { buildApp, type BuiltApp } from '../src/app';
 import { fixedClock } from '../src/clock';
 import { loadConfig, type AppConfig } from '../src/config';
 import { Db } from '../src/db/database';
+import type { ProviderTransports } from '../src/providers/registry';
 
 export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   const base = loadConfig({
@@ -25,10 +26,16 @@ export interface TestApp extends BuiltApp {
 export async function createTestApp(
   overrides: Partial<AppConfig> = {},
   clockIso = '2026-10-28T10:00:00.000Z',
+  transports?: ProviderTransports,
 ): Promise<TestApp> {
   const clock = fixedClock(clockIso);
   const db = new Db(':memory:');
-  const built = await buildApp({ config: testConfig(overrides), clock, db });
+  const built = await buildApp({
+    config: testConfig(overrides),
+    clock,
+    db,
+    ...(transports ? { transports } : {}),
+  });
   await built.app.ready();
   return {
     ...built,
@@ -62,6 +69,8 @@ export function hiddenFields(html: string): Record<string, string> {
 export interface RequestOptions {
   payload?: unknown;
   headers?: Record<string, string>;
+  /** The caller's address as the server sees it (`request.ip`). */
+  remoteAddress?: string;
   /** Send the XSRF header (default for mutating calls). */
   csrf?: boolean;
 }
@@ -104,6 +113,7 @@ export class Client {
         ? { 'content-type': 'application/x-www-form-urlencoded', ...headers }
         : headers,
       ...(options.payload === undefined ? {} : { payload: options.payload as string | object }),
+      ...(options.remoteAddress ? { remoteAddress: options.remoteAddress } : {}),
     });
     this.store(response);
     return response;

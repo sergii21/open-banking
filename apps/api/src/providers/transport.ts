@@ -20,6 +20,11 @@ export interface HttpRequest {
   json?: unknown;
   /** application/x-www-form-urlencoded body (OAuth token endpoints). */
   form?: Record<string, string>;
+  /**
+   * Called with the exact bytes about to be sent; the returned headers are added to the request. Request signing needs
+   * this because the signature covers the serialised body, which only this class knows.
+   */
+  sign?: (body: string) => Record<string, string>;
   timeoutMs?: number;
 }
 
@@ -62,6 +67,7 @@ export class ProviderHttp {
       headers['content-type'] = 'application/x-www-form-urlencoded';
       body = new URLSearchParams(spec.form).toString();
     }
+    if (spec.sign) Object.assign(headers, spec.sign(body ?? ''));
 
     const started = performance.now();
     const at = this.options.clock.now().toISOString();
@@ -70,6 +76,7 @@ export class ProviderHttp {
       at,
       provider: this.options.provider,
       label: spec.label,
+      direction: 'outbound' as const,
       method: spec.method,
       url: redactUrl(spec.url),
       connectionId: ctx.connectionId,

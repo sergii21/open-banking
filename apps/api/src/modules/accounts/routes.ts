@@ -24,7 +24,11 @@ export function registerAccountRoutes(api: App, ctx: AppContext): void {
       schema: { params: z.object({ id: Id }), response: { 200: RefreshAccountResponse } },
     },
     async (request) => {
-      const result = await ctx.sync.refreshAccount(requireSession(request).id, request.params.id);
+      const result = await ctx.sync.refreshAccount(
+        requireSession(request).id,
+        request.params.id,
+        request.ip,
+      );
       return { account: toAccountDto(result.account), newTransactions: result.newTransactions };
     },
   );

@@ -70,7 +70,7 @@ export function registerConnectionRoutes(api: App, ctx: AppContext): void {
       schema: { querystring: z.record(z.string(), z.string()) },
     },
     async (request, reply) => {
-      const path = await ctx.connections.complete(request.query);
+      const path = await ctx.connections.complete(request.query, request.ip);
       return reply.header('cache-control', 'no-store').redirect(path, 302);
     },
   );

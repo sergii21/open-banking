@@ -20,25 +20,20 @@ import {
   AccountsDto,
   BalanceDto,
   MeDto,
+  OAuthTokenDto,
   TransactionsDto,
   mapAccounts,
   mapBalance,
+  mapConsent,
   mapTransactions,
   parseDto,
   throwDataApiError,
+  throwTokenError,
 } from '../shared/data-api';
-import type { HttpResult, ProviderHttp } from '../transport';
+import type { ProviderHttp } from '../transport';
 import { MOCK_API_ORIGIN, MOCK_AUTH_ORIGIN } from './transport';
 import { MOCK_INSTITUTIONS, findMockInstitution } from './institutions';
 import { MOCK_CLIENT_ID, MOCK_CLIENT_SECRET, type MockBankStore } from './store';
-import * as z from 'zod';
-
-const TokenDto = z.object({
-  access_token: z.string(),
-  refresh_token: z.string().nullish(),
-  expires_in: z.number().int().positive(),
-  scope: z.string().nullish(),
-});
 
 const MAX_TRANSACTION_PAGES = 40;
 
@@ -115,6 +110,7 @@ export class MockProvider implements BankingProvider {
         logoUrl: `/mock-bank/static/logo/${i.slug}.svg`,
         capabilities: { accounts: true, payments: true },
         health: i.healthy ? ('operational' as const) : ('degraded' as const),
+        paymentsNote: null,
       })),
     );
   }
@@ -122,7 +118,9 @@ export class MockProvider implements BankingProvider {
   startConnection(input: StartConnectionInput): Promise<{ authUrl: string }> {
     const slug = slugOf(input.institutionId);
     if (!slug || !findMockInstitution(slug)) {
-      throw new AppError('provider_not_available', 404, 'That bank is not available.');
+      return Promise.reject(
+        new AppError('provider_not_available', 404, 'That bank is not available.'),
+      );
     }
     const url = new URL('/mock-bank/auth/', this.deps.publicUrl);
     url.search = new URLSearchParams({
@@ -175,24 +173,14 @@ export class MockProvider implements BankingProvider {
       url: `${MOCK_AUTH_ORIGIN}/connect/token`,
       form: { ...form, client_id: MOCK_CLIENT_ID, client_secret: MOCK_CLIENT_SECRET },
     });
-    if (!response.ok) this.throwTokenError(response);
-    const dto = parseDto(TokenDto, response.body, 'token');
+    if (!response.ok) throwTokenError(response);
+    const dto = parseDto(OAuthTokenDto, response.body, 'token');
     return {
       accessToken: dto.access_token,
       refreshToken: dto.refresh_token ?? null,
       expiresAt: new Date(this.deps.clock.now().getTime() + dto.expires_in * 1000).toISOString(),
       scope: dto.scope ?? null,
     };
-  }
-
-  private throwTokenError(response: HttpResult): never {
-    const error = (response.body as { error?: string } | undefined)?.error;
-    if (response.status === 400 && error === 'invalid_grant') {
-      throw new InvalidGrantError('The grant is no longer valid');
-    }
-    if (response.status >= 500)
-      throw new AppError('bank_unavailable', 503, 'The bank is temporarily unavailable.');
-    throw new AppError('provider_error', 502, 'The bank refused the token request.');
   }
 
   async completeConnection(
@@ -232,19 +220,13 @@ export class MockProvider implements BankingProvider {
       headers: { authorization: `Bearer ${tokens.accessToken}` },
     });
     if (!response.ok) throwDataApiError(response);
-    const me = parseDto(MeDto, response.body, 'consent').results[0];
-    const scopes = new Set(me?.scopes ?? []);
-    const permissions = (['accounts', 'balances', 'transactions'] as const).filter((p) =>
-      scopes.has(p === 'balances' ? 'balance' : p),
-    );
-    return {
-      expiresAt: me?.consent_expires_at ? new Date(me.consent_expires_at).toISOString() : null,
-      permissions,
-    };
+    return mapConsent(parseDto(MeDto, response.body, 'consent'));
   }
 
   refreshTokens(tokens: TokenSet, ctx: CallContext): Promise<TokenSet> {
-    if (!tokens.refreshToken) throw new InvalidGrantError('No refresh token is held');
+    if (!tokens.refreshToken) {
+      return Promise.reject(new InvalidGrantError('No refresh token is held'));
+    }
     return this.requestTokens(ctx, 'Refresh access token', {
       grant_type: 'refresh_token',
       refresh_token: tokens.refreshToken,

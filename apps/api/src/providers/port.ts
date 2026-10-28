@@ -13,6 +13,12 @@ import type {
 export interface CallContext {
   sessionId: string;
   connectionId: string | null;
+  /**
+   * The customer's own IP address when a call is made because they asked for it (Refresh, connecting). Providers that
+   * accept it send it as `X-PSU-IP`, which tells the bank the customer is present, so the call does not count against
+   * the cap on unattended reads.
+   */
+  psuIp?: string;
 }
 
 /** Provider credentials for one connection. Sealed with the TokenVault before it touches the database. */

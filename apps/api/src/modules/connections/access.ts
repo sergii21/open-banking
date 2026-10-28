@@ -196,10 +196,15 @@ export class ConnectionAccess {
   async withTokens<T>(
     connection: ConnectionRecord,
     fn: (tokens: TokenSet, provider: BankingProvider, call: CallContext) => Promise<T>,
+    options: { psuIp?: string | undefined } = {},
   ): Promise<T> {
     this.assertUsable(connection);
     const provider = this.providers.get(connection.provider);
-    const call: CallContext = { sessionId: connection.sessionId, connectionId: connection.id };
+    const call: CallContext = {
+      sessionId: connection.sessionId,
+      connectionId: connection.id,
+      ...(options.psuIp ? { psuIp: options.psuIp } : {}),
+    };
 
     try {
       let tokens = this.loadTokens(connection);

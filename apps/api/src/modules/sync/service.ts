@@ -57,44 +57,49 @@ export class SyncService {
   }
 
   /** First sync after consent: every account, its balance, and ~13 months of transactions. */
-  async initialSync(connection: ConnectionRecord): Promise<void> {
-    await this.access.withTokens(connection, async (tokens, provider, call) => {
-      const accounts = await provider.fetchAccounts(tokens, call);
-      const now = this.core.clock.now();
-      const nowIso = now.toISOString();
-      const window = { from: this.historyStart(), to: this.isoDate(now) };
+  async initialSync(connection: ConnectionRecord, psuIp?: string): Promise<void> {
+    await this.access.withTokens(
+      connection,
+      async (tokens, provider, call) => {
+        const accounts = await provider.fetchAccounts(tokens, call);
+        const now = this.core.clock.now();
+        const nowIso = now.toISOString();
+        const window = { from: this.historyStart(), to: this.isoDate(now) };
 
-      const keep: string[] = [];
-      for (const account of accounts) {
-        const stored = this.core.repos.accounts.upsert(connection.id, {
-          providerAccountId: account.providerAccountId,
-          name: account.name,
-          type: account.type,
-          currency: account.currency,
-          maskedIdentifier: account.maskedIdentifier,
-          balanceMinor: account.balance.amountMinor,
-          availableMinor: account.availableBalance?.amountMinor ?? null,
-          balanceAt: account.at,
-          now: nowIso,
-        });
-        keep.push(account.providerAccountId);
-        const rows = await provider.fetchTransactions(
-          tokens,
-          { providerAccountId: account.providerAccountId, currency: account.currency },
-          window,
-          call,
-        );
-        this.storeTransactions(stored.id, rows);
-      }
-      this.core.repos.accounts.deleteMissing(connection.id, keep);
-      this.core.repos.connections.update(connection.id, { lastRefreshedAt: nowIso }, nowIso);
-    });
+        const keep: string[] = [];
+        for (const account of accounts) {
+          const stored = this.core.repos.accounts.upsert(connection.id, {
+            providerAccountId: account.providerAccountId,
+            name: account.name,
+            type: account.type,
+            currency: account.currency,
+            maskedIdentifier: account.maskedIdentifier,
+            balanceMinor: account.balance.amountMinor,
+            availableMinor: account.availableBalance?.amountMinor ?? null,
+            balanceAt: account.at,
+            now: nowIso,
+          });
+          keep.push(account.providerAccountId);
+          const rows = await provider.fetchTransactions(
+            tokens,
+            { providerAccountId: account.providerAccountId, currency: account.currency },
+            window,
+            call,
+          );
+          this.storeTransactions(stored.id, rows);
+        }
+        this.core.repos.accounts.deleteMissing(connection.id, keep);
+        this.core.repos.connections.update(connection.id, { lastRefreshedAt: nowIso }, nowIso);
+      },
+      { psuIp },
+    );
   }
 
   /** User-initiated refresh of one account: consent info, balance, and recent transactions. */
   async refreshAccount(
     sessionId: string,
     accountId: string,
+    psuIp?: string,
   ): Promise<{ account: AccountWithConnection; newTransactions: number }> {
     const account = this.core.repos.accounts.findForSession(sessionId, accountId);
     if (!account) throw notFound('Account');
@@ -169,6 +174,7 @@ export class SyncService {
             return inserted;
           });
         },
+        { psuIp },
       );
       this.access.notify(connection.id);
       const refreshed = this.core.repos.accounts.findForSession(sessionId, accountId);

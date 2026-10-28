@@ -77,6 +77,11 @@ export const Payment = z.object({
   beneficiaryIdentifier: z.string(),
   reference: z.string(),
   status: PaymentStatus,
+  /**
+   * Whether a `settled` step will follow `executed`. Pay-ins to a merchant account settle; payments to an
+   * external account end at `executed` (the bank accepted it), so the timeline must not wait for a step that never comes.
+   */
+  settlementExpected: z.boolean(),
   failureReason: PaymentFailureReason.nullable(),
   statusHistory: z.array(PaymentHistoryEntry),
   createdAt: IsoDateTime,

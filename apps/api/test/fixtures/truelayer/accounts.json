@@ -1,0 +1,36 @@
+{
+  "results": [
+    {
+      "update_timestamp": "2026-10-28T09:59:10.123Z",
+      "account_id": "56c5ebe7d3b8b0e5e1f1c5b6a3a8c7d2",
+      "account_type": "TRANSACTION",
+      "display_name": "TRANSACTION ACCOUNT 1",
+      "currency": "GBP",
+      "account_number": {
+        "iban": "GB35CLRB04066800003435",
+        "swift_bic": "CPBKGB22",
+        "number": "10000000",
+        "sort_code": "04-00-72"
+      },
+      "provider": {
+        "display_name": "MOCK",
+        "provider_id": "mock",
+        "logo_uri": "https://truelayer-provider-logos.s3-eu-west-1.amazonaws.com/icons/mock.svg"
+      }
+    },
+    {
+      "update_timestamp": "2026-10-28T09:59:10.123Z",
+      "account_id": "a14f2d9c7e3b4c58b6d1e0f7a9c2b3d4",
+      "account_type": "SAVINGS",
+      "display_name": "SAVINGS ACCOUNT 1",
+      "currency": "GBP",
+      "account_number": { "number": "20000001", "sort_code": "04-00-72" },
+      "provider": {
+        "display_name": "MOCK",
+        "provider_id": "mock",
+        "logo_uri": "https://truelayer-provider-logos.s3-eu-west-1.amazonaws.com/icons/mock.svg"
+      }
+    }
+  ],
+  "status": "Succeeded"
+}

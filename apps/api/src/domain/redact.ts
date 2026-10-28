@@ -53,6 +53,13 @@ function maskIdentifier(value: unknown): unknown {
   return `${'•'.repeat(Math.min(text.length - visible, 8))}${text.slice(-visible)}`;
 }
 
+/** A customer's IP address is personal data: keep the network part, drop the host part. */
+export function maskIpAddress(value: string): string {
+  if (value.includes(':')) return `${value.split(':').slice(0, 3).join(':')}:••••`;
+  const octets = value.split('.');
+  return octets.length === 4 ? `${octets.slice(0, 3).join('.')}.•••` : REDACTED;
+}
+
 export function redactJson(value: unknown, options: RedactOptions): unknown {
   if (Array.isArray(value)) return value.map((item) => redactJson(item, options));
   if (value !== null && typeof value === 'object') {
@@ -81,6 +88,8 @@ export function redactHeaders(headers: Record<string, string>): Record<string, s
       result[name] = credential ? `${scheme} ••••${credential.slice(-4)}` : REDACTED;
     } else if (key === 'cookie' || key === 'setcookie' || key.endsWith('signature')) {
       result[name] = REDACTED;
+    } else if (key === 'xpsuip') {
+      result[name] = maskIpAddress(value);
     } else {
       result[name] = value;
     }
