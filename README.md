@@ -16,4 +16,10 @@ npm run verify     # lint, format, typecheck, unit tests, production build
 npm run e2e        # build + Playwright against the mock bank
 ```
 
+## Real banks
+
+- **Ukraine:** [`docs/UKRAINE.md`](docs/UKRAINE.md) explains which Ukrainian banks can be read for real today (monobank, with
+  your own token, on your own machine), how to connect it, and why the rest need NBU-authorised access.
+- **UK/EU sandbox:** TrueLayer, see `apps/api/.env.example`.
+
 The full README (architecture, regulatory model, demo script) lands in milestone M5.

@@ -1,4 +1,6 @@
 import type {
+  ConnectWithTokenRequest,
+  ConnectWithTokenResponse,
   Connection,
   CreateConnectionRequest,
   CreateConnectionResponse,
@@ -121,6 +123,81 @@ export class ConnectionService {
       { sessionId, connectionId },
     );
     return { connectionId, authUrl };
+  }
+
+  /**
+   * Token-based banks (monobank): the customer pastes a token they issued at the bank. It is checked with a real call, sealed
+   * like any other credential, and the first sync is queued. Nothing here is ever logged or sent back to the browser.
+   */
+  async connectWithToken(
+    sessionId: string,
+    request: ConnectWithTokenRequest,
+    psuIp?: string,
+  ): Promise<ConnectWithTokenResponse> {
+    const { provider } = this.providers.resolveInstitution(request.institutionId);
+    if (!provider.connectWithToken) {
+      throw new AppError(
+        'validation_failed',
+        400,
+        'This bank connects with a sign-in redirect, not a token.',
+      );
+    }
+    const call: CallContext = { sessionId, connectionId: null, ...(psuIp ? { psuIp } : {}) };
+    const institution = (await provider.listInstitutions({}, call)).find(
+      (i) => i.id === request.institutionId,
+    );
+    if (!institution || institution.connectMethod !== 'token') {
+      throw new AppError('provider_not_available', 404, 'That bank is not available.');
+    }
+
+    const grant = await provider.connectWithToken({ token: request.token }, call);
+    const now = this.core.clock.now().toISOString();
+    const reconnect = request.reconnectConnectionId
+      ? this.get(sessionId, request.reconnectConnectionId)
+      : undefined;
+    if (reconnect && reconnect.institutionId !== institution.id) {
+      throw new AppError('validation_failed', 400, 'Reconnect must use the same bank.');
+    }
+
+    const connectionId = reconnect?.id ?? newId('con');
+    const sealed = this.access.sealTokens(connectionId, grant.tokens);
+    if (reconnect) {
+      this.core.repos.connections.update(
+        connectionId,
+        {
+          status: 'active',
+          tokensEnc: sealed,
+          tokenExpiresAt: grant.tokens.expiresAt,
+          permissions: grant.permissions,
+          consentExpiresAt: grant.consentExpiresAt,
+        },
+        now,
+      );
+    } else {
+      this.core.repos.connections.insertActive({
+        id: connectionId,
+        sessionId,
+        provider: provider.id,
+        institutionId: institution.id,
+        institutionName: institution.name,
+        institutionLogoUrl: institution.logoUrl,
+        tokensEnc: sealed,
+        tokenExpiresAt: grant.tokens.expiresAt,
+        permissions: grant.permissions,
+        consentExpiresAt: grant.consentExpiresAt,
+        now,
+      });
+    }
+
+    try {
+      await this.sync.initialSync(this.get(sessionId, connectionId), psuIp);
+    } catch (error) {
+      // A connection that never loaded anything is not worth keeping; a reconnect keeps what it had.
+      if (!reconnect) await this.discardFailedConnection(connectionId);
+      throw error;
+    }
+    this.access.notify(connectionId);
+    return { connectionId };
   }
 
   /** Drops a failed attempt: a brand-new connection disappears, a reconnect keeps its previous state. */

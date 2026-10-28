@@ -10,6 +10,7 @@ import {
   TokenRejectedError,
   type BankingProvider,
   type CallContext,
+  type ProviderLimits,
   type TokenSet,
 } from '../../providers/port';
 import type { ProviderRegistry } from '../../providers/registry';
@@ -72,6 +73,13 @@ export class ConnectionAccess {
       { tokensEnc: this.sealTokens(connectionId, tokens), tokenExpiresAt: tokens.expiresAt },
       this.core.clock.now().toISOString(),
     );
+  }
+
+  /** How fast the connection's provider allows data to be read, when it says. */
+  limitsFor(connection: ConnectionRecord): ProviderLimits | undefined {
+    return this.providers.has(connection.provider)
+      ? this.providers.get(connection.provider).limits
+      : undefined;
   }
 
   // ----------------------------------------------------------------------------------- state machine

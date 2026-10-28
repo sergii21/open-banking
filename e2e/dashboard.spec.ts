@@ -118,8 +118,7 @@ test.describe('transactions', () => {
     await expect(page.getByTestId('txn-title').first()).toContainText(
       /GEHALT|ERSTATTUNG|ACME|AMAZON|ZALANDO|IKEA|MEDIAMARKT|REWE|.+/,
     );
-    const income = await page.getByTestId('result-count').textContent();
-    expect(income).toMatch(/Showing \d+ of \d+ transactions/);
+    await expect(page.getByTestId('result-count')).toHaveText(/Showing \d+ of \d+ transactions/);
 
     await page.getByTestId('clear-filters').click();
     await page.getByRole('radio', { name: 'Money in' }).click();

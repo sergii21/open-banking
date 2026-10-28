@@ -26,6 +26,16 @@ export interface TrueLayerConfig {
   userEmail: string;
 }
 
+/** monobank (Ukraine): the customer's own read-only token against the bank's personal API. Real accounts, so local use only. */
+export interface MonobankConfig {
+  /** How many months of history the background loader fetches (one request per minute per account and month). */
+  historyMonths: number;
+  /** Always https://api.monobank.ua except in tests, which point it at a local fake. */
+  apiUrl: string;
+  /** Gap between statement reads. monobank's own limit is one per minute; only tests and the e2e run shorten it. */
+  minIntervalSeconds: number;
+}
+
 export interface AppConfig {
   env: NodeEnv;
   isProd: boolean;
@@ -56,6 +66,8 @@ export interface AppConfig {
     mock: { enabled: boolean };
     /** Null when TrueLayer is not listed in PROVIDERS or has no credentials. */
     truelayer: TrueLayerConfig | null;
+    /** Null unless listed in PROVIDERS and PUBLIC_URL is this machine (or ALLOW_LIVE_PROVIDERS is set). */
+    monobank: MonobankConfig | null;
   };
   /** Providers named in PROVIDERS that could not be enabled, with the reason (logged at startup). */
   providerWarnings: string[];
@@ -89,6 +101,10 @@ const EnvSchema = z.object({
   REFRESH_COOLDOWN_SECONDS: z.coerce.number().int().min(0).max(3600).default(20),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(600),
   PAYMENT_APPROVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
+  ALLOW_LIVE_PROVIDERS: z.stringbool().default(false),
+  MONOBANK_HISTORY_MONTHS: z.coerce.number().int().min(1).max(13).default(3),
+  MONOBANK_API_URL: z.url().default('https://api.monobank.ua'),
+  MONOBANK_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(1).max(600).default(61),
   WEBHOOK_MAX_AGE_SECONDS: z.coerce
     .number()
     .int()
@@ -167,6 +183,46 @@ function loadSigningKey(e: Env, baseDir: string): TrueLayerConfig['signing'] {
     );
   }
   return { keyId: e.TRUELAYER_SIGNING_KEY_ID, privateKeyPem: pem };
+}
+
+const isLoopbackUrl = (url: string): boolean => {
+  const { hostname } = new URL(url);
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname.endsWith('.localhost')
+  );
+};
+
+/**
+ * Live providers read real people's accounts. A public demo must never do that (decision D7), so they only switch on when
+ * the app is served from this machine, unless the operator says otherwise on purpose.
+ */
+function loadMonobank(
+  e: Env,
+  providerIds: ReadonlySet<string>,
+  publicUrl: string,
+  warnings: string[],
+): MonobankConfig | null {
+  if (!providerIds.has('monobank')) return null;
+  if (!e.ALLOW_LIVE_PROVIDERS && !isLoopbackUrl(publicUrl)) {
+    warnings.push(
+      'monobank reads real bank accounts and is for personal use on your own machine, so it is not enabled while PUBLIC_URL is not localhost. Set ALLOW_LIVE_PROVIDERS=true only if you really mean it.',
+    );
+    return null;
+  }
+  const apiUrl = e.MONOBANK_API_URL.replace(/\/+$/, '');
+  if (!apiUrl.startsWith('https://') && !isLoopbackUrl(apiUrl)) {
+    throw new ConfigError(
+      'MONOBANK_API_URL must be https (plain http is only allowed for localhost).',
+    );
+  }
+  return {
+    historyMonths: e.MONOBANK_HISTORY_MONTHS,
+    apiUrl,
+    minIntervalSeconds: e.MONOBANK_MIN_INTERVAL_SECONDS,
+  };
 }
 
 function loadTrueLayer(
@@ -268,6 +324,7 @@ export function loadConfig(
     providers: {
       mock: { enabled: providerIds.has('mock') },
       truelayer: loadTrueLayer(e, providerIds, options.baseDir ?? process.cwd(), providerWarnings),
+      monobank: loadMonobank(e, providerIds, publicUrl, providerWarnings),
     },
     providerWarnings,
   };

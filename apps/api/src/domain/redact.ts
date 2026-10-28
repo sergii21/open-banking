@@ -27,6 +27,7 @@ const SECRET_KEYS = new Set([
   'tlsignature',
   'apikey',
   'privatekey',
+  'xtoken',
 ]);
 
 const IDENTIFIER_KEYS = new Set([
@@ -37,7 +38,10 @@ const IDENTIFIER_KEYS = new Set([
   'swiftbic',
   'bic',
   'pan',
+  'maskedpan',
   'cardnumber',
+  'counteriban',
+  'sendid',
 ]);
 
 export interface RedactOptions {
@@ -69,7 +73,7 @@ export function redactJson(value: unknown, options: RedactOptions): unknown {
       if (SECRET_KEYS.has(normalised) && child !== null && child !== undefined) {
         result[key] = REDACTED;
       } else if (options.maskIdentifiers && IDENTIFIER_KEYS.has(normalised)) {
-        result[key] = maskIdentifier(child);
+        result[key] = Array.isArray(child) ? child.map(maskIdentifier) : maskIdentifier(child);
       } else {
         result[key] = redactJson(child, options);
       }
@@ -86,7 +90,12 @@ export function redactHeaders(headers: Record<string, string>): Record<string, s
     if (key === 'authorization') {
       const [scheme, credential] = value.split(' ');
       result[name] = credential ? `${scheme} ••••${credential.slice(-4)}` : REDACTED;
-    } else if (key === 'cookie' || key === 'setcookie' || key.endsWith('signature')) {
+    } else if (
+      key === 'cookie' ||
+      key === 'setcookie' ||
+      key === 'xtoken' ||
+      key.endsWith('signature')
+    ) {
       result[name] = REDACTED;
     } else if (key === 'xpsuip') {
       result[name] = maskIpAddress(value);

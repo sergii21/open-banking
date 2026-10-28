@@ -98,6 +98,18 @@ export interface AccountRef {
   currency: string;
 }
 
+/** Providers that cap how fast data may be read declare it, and the sync worker paces itself to match. */
+export interface ProviderLimits {
+  /** Minimum gap between two transaction reads for one connection. */
+  minIntervalMs: number;
+  /** Longest window one transaction read may cover, in days. */
+  maxWindowDays: number;
+  /** A response with this many rows may have been cut short: ask for the rest of the window. */
+  maxItemsPerCall: number;
+  /** How far back background history loading goes. */
+  historyMonths: number;
+}
+
 /**
  * The seam between Ledger Lens and every bank or aggregator. An adapter owns its provider's wire format and
  * hands the core normalised types; it never touches the database. See `.claude/skills/provider-adapter`.
@@ -106,6 +118,14 @@ export interface BankingProvider {
   readonly id: ProviderId;
   readonly mode: ProviderMode;
   readonly label: string;
+  /** Present when the provider rate-limits reads; absent providers are read in full during the first sync. */
+  readonly limits?: ProviderLimits;
+
+  /**
+   * Token-based providers only: check a token the customer issued at the bank and read what it grants. The token is
+   * the credential from then on (no refresh), and it is validated with a real call so a typo fails here, not later.
+   */
+  connectWithToken?(input: { token: string }, ctx: CallContext): Promise<ConnectionGrant>;
 
   listInstitutions(query: InstitutionQuery, ctx: CallContext): Promise<Institution[]>;
   startConnection(input: StartConnectionInput, ctx: CallContext): Promise<{ authUrl: string }>;

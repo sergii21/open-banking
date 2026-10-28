@@ -54,6 +54,17 @@ export class ConsentBanner {
     const name = c.institutionName;
     switch (c.status) {
       case 'needs_reauth':
+        if (c.provider === 'monobank') {
+          return {
+            icon: 'key_off',
+            title: `${name} no longer accepts your token`,
+            message:
+              'The token was replaced or revoked at api.monobank.ua. Your data is still here but won’t update until you paste a new token.',
+            action: 'Add a new token',
+            classes: ERROR,
+            role: 'alert',
+          };
+        }
         return {
           icon: 'lock_reset',
           title: `${name} needs you to sign in again`,

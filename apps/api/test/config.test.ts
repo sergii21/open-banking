@@ -148,3 +148,50 @@ describe('loadConfig: TrueLayer', () => {
     );
   });
 });
+
+describe('loadConfig: monobank', () => {
+  it('is off unless listed', () => {
+    const config = loadConfig({});
+    expect(config.providers.monobank).toBeNull();
+    expect(config.providerWarnings).toEqual([]);
+  });
+
+  it('switches on for this machine, with three months of history by default', () => {
+    expect(loadConfig({ PROVIDERS: 'monobank' }).providers.monobank).toEqual({
+      historyMonths: 3,
+      apiUrl: 'https://api.monobank.ua',
+      minIntervalSeconds: 61,
+    });
+    expect(
+      loadConfig({ PROVIDERS: 'monobank', MONOBANK_HISTORY_MONTHS: '12' }).providers.monobank
+        ?.historyMonths,
+    ).toBe(12);
+  });
+
+  it('refuses to read real accounts on a public deployment, and says why', () => {
+    const config = loadConfig({ PROVIDERS: 'monobank', PUBLIC_URL: 'https://demo.example.com' });
+    expect(config.providers.monobank).toBeNull();
+    expect(config.providerWarnings).toEqual([
+      expect.stringMatching(/personal use on your own machine/),
+    ]);
+  });
+
+  it('can be forced on a public URL only on purpose', () => {
+    const config = loadConfig({
+      PROVIDERS: 'monobank',
+      PUBLIC_URL: 'https://demo.example.com',
+      ALLOW_LIVE_PROVIDERS: 'true',
+    });
+    expect(config.providers.monobank).not.toBeNull();
+  });
+
+  it('will not send a token over plain http to anything but this machine', () => {
+    expect(() =>
+      loadConfig({ PROVIDERS: 'monobank', MONOBANK_API_URL: 'http://api.example.com' }),
+    ).toThrow(/https/);
+    expect(
+      loadConfig({ PROVIDERS: 'monobank', MONOBANK_API_URL: 'http://127.0.0.1:4310/' }).providers
+        .monobank?.apiUrl,
+    ).toBe('http://127.0.0.1:4310');
+  });
+});

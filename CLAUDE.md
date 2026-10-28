@@ -35,6 +35,7 @@ unquoted variables and macOS has no `timeout`; keep scripts POSIX-simple.
 | `npm run e2e:only`                                              | Playwright without rebuilding                                                         |
 | `PLAYWRIGHT_BASE_URL=http://localhost:4200 npx playwright test` | run against `npm run dev` instead                                                     |
 | `npm run e2e:sandbox`                                           | opt-in TrueLayer sandbox suite (needs credentials in `apps/api/.env`)                 |
+| `npm run test:live -w @ledger-lens/api`                         | opt-in checks against the real monobank service (your own `MONOBANK_TOKEN` optional)  |
 | `npm run keys:truelayer`                                        | generate the ES512 signing key pair for TrueLayer Payments                            |
 | `npm test -w @ledger-lens/api`                                  | one workspace's tests                                                                 |
 
@@ -97,6 +98,9 @@ Project specifics on top of it (enforced by ESLint where possible):
 - The SPA only ever talks to the BFF, same origin, with an HttpOnly session cookie. **Provider tokens, client secrets and
   signing keys never reach the browser, API responses, logs or the Inspector.** Tokens are AES-256-GCM encrypted at rest.
 - Money is integer minor units + ISO 4217 currency. Never floats; never sum across currencies.
+- Live providers (real people's accounts, e.g. monobank) only run when `PUBLIC_URL` is localhost; a public instance uses sandbox
+  providers only (decision D7). Their credentials are tokens the customer pastes into the app, sealed like any other.
+- Providers that cap read speed declare `limits` on the port; the sync worker (`modules/sync`) paces itself from them.
 - All provider HTTP goes through the instrumented transport so the Inspector sees it (and redaction applies).
   Providers sit behind the `BankingProvider` port; see the `provider-adapter` skill.
 - SQL lives only in `db/` repositories. `node:sqlite` is still early-stability: keep it behind that layer.

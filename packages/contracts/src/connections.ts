@@ -18,6 +18,13 @@ export type Permission = z.infer<typeof Permission>;
 export const ConsentState = z.enum(['valid', 'expiring_soon', 'expired', 'none']);
 export type ConsentState = z.infer<typeof ConsentState>;
 
+/** Background history loading for banks that cap how fast data may be read. */
+export const SyncProgress = z.object({
+  done: z.number().int().nonnegative(),
+  total: z.number().int().positive(),
+});
+export type SyncProgress = z.infer<typeof SyncProgress>;
+
 export const Connection = z.object({
   id: Id,
   provider: ProviderId,
@@ -34,6 +41,8 @@ export const Connection = z.object({
   consentDaysRemaining: z.number().int().nullable(),
   lastRefreshedAt: IsoDateTime.nullable(),
   accountCount: z.number().int().nonnegative(),
+  /** Present while older history is still being fetched in the background; null once everything is loaded. */
+  sync: SyncProgress.nullable(),
 });
 export type Connection = z.infer<typeof Connection>;
 
@@ -46,6 +55,18 @@ export const CreateConnectionRequest = z.object({
   reconnectConnectionId: Id.optional(),
 });
 export type CreateConnectionRequest = z.infer<typeof CreateConnectionRequest>;
+
+/** Token-based banks (monobank): the customer pastes a personal token instead of being redirected. */
+export const ConnectWithTokenRequest = z.object({
+  institutionId: z.string().min(1),
+  token: z.string().trim().min(8, 'Paste the token from the bank').max(512),
+  /** Replace the token of an existing connection instead of creating a second one. */
+  reconnectConnectionId: Id.optional(),
+});
+export type ConnectWithTokenRequest = z.infer<typeof ConnectWithTokenRequest>;
+
+export const ConnectWithTokenResponse = z.object({ connectionId: Id });
+export type ConnectWithTokenResponse = z.infer<typeof ConnectWithTokenResponse>;
 
 export const CreateConnectionResponse = z.object({
   connectionId: Id,

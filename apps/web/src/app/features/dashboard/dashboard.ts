@@ -5,6 +5,7 @@ import { describeError } from '../../core/api/api-error';
 import { Data } from '../../core/data/data';
 import { Money } from '../../shared/money/money';
 import { Skeleton } from '../../shared/states/skeleton';
+import { SyncBanner } from '../../shared/sync-banner/sync-banner';
 import { StateCard } from '../../shared/states/state-card';
 import { TransactionRow } from '../../shared/transaction-row/transaction-row';
 import { AccountCard } from './account-card';
@@ -20,6 +21,7 @@ import { ConsentBanner } from './consent-banner';
     RouterLink,
     Skeleton,
     StateCard,
+    SyncBanner,
     TransactionRow,
   ],
   templateUrl: './dashboard.html',

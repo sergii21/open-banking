@@ -202,6 +202,26 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: '006_sync_jobs',
+    sql: `
+      -- Transaction reads for banks that cap how fast data may be read (monobank: one statement per minute).
+      CREATE TABLE sync_jobs (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        window_from TEXT NOT NULL,               -- inclusive calendar dates
+        window_to TEXT NOT NULL,
+        seq INTEGER NOT NULL,                    -- fetch order: the newest window of every account comes first
+        status TEXT NOT NULL CHECK (status IN ('pending','done','failed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_sync_jobs_pending ON sync_jobs(connection_id, status, seq, created_at);
+    `,
+  },
 ];
 
 export function migrate(db: Db, available: readonly Migration[] = migrations): string[] {

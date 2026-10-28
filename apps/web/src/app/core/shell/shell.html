@@ -75,7 +75,7 @@
       <button
         mat-icon-button
         type="button"
-        [attr.aria-label]="inspector.open() ? 'Close API Inspector' : 'Open API Inspector'"
+        [attr.aria-label]="inspectorLabel()"
         [attr.aria-expanded]="inspector.open()"
         aria-controls="inspector"
         [matBadge]="inspector.unseen()"

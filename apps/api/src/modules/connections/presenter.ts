@@ -13,6 +13,7 @@ export const MODE_BY_PROVIDER: Record<ProviderId, ProviderMode> = {
   mock: 'mock',
   truelayer: 'sandbox',
   enablebanking: 'live',
+  monobank: 'live',
 };
 
 export function toConnectionDto(core: CoreContext, record: ConnectionRecord): Connection {
@@ -32,6 +33,7 @@ export function toConnectionDto(core: CoreContext, record: ConnectionRecord): Co
     consentDaysRemaining: consent.daysRemaining,
     lastRefreshedAt: record.lastRefreshedAt,
     accountCount: core.repos.connections.accountCount(record.id),
+    sync: core.repos.syncJobs.progress(record.id),
   };
 }
 

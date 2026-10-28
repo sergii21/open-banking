@@ -1,0 +1,52 @@
+{
+  "clientId": "3MSaMMtczs",
+  "name": "Test Customer",
+  "webHookUrl": "",
+  "permissions": "psfj",
+  "accounts": [
+    {
+      "id": "kKGVoZuHWzqVoZuH",
+      "sendId": "uHWzqVoZuH",
+      "currencyCode": 980,
+      "cashbackType": "UAH",
+      "balance": 1050000,
+      "creditLimit": 0,
+      "maskedPan": ["537541******1234"],
+      "type": "black",
+      "iban": "UA733220010000026201234567890"
+    },
+    {
+      "id": "Zq8LQ2xK0mT7aBcD",
+      "sendId": "Zq8LQ2xK0m",
+      "currencyCode": 980,
+      "cashbackType": "UAH",
+      "balance": 2500000,
+      "creditLimit": 3000000,
+      "maskedPan": ["444111******9876"],
+      "type": "platinum",
+      "iban": "UA213220010000026207654321098"
+    },
+    {
+      "id": "uD3pX9sVn1QeLw7Y",
+      "sendId": "uD3pX9sVn1",
+      "currencyCode": 840,
+      "cashbackType": "None",
+      "balance": 120050,
+      "creditLimit": 0,
+      "maskedPan": ["537541******5678"],
+      "type": "black",
+      "iban": "UA453220010000026201122334455"
+    }
+  ],
+  "jars": [
+    {
+      "id": "hJ4kL8mN2pQ6rS0t",
+      "sendId": "hJ4kL8mN2p",
+      "title": "На відпустку",
+      "description": "Літо",
+      "currencyCode": 980,
+      "balance": 4500000,
+      "goal": 10000000
+    }
+  ]
+}

@@ -364,7 +364,7 @@ let stub: TrueLayerStub;
 async function appWithTrueLayer(): Promise<Client> {
   stub = new TrueLayerStub();
   t = await createTestApp(
-    { providers: { mock: { enabled: true }, truelayer: truelayerConfig() } },
+    { providers: { mock: { enabled: true }, truelayer: truelayerConfig(), monobank: null } },
     undefined,
     { truelayer: stub.transport },
   );

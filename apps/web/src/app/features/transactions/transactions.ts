@@ -20,6 +20,7 @@ import { CATEGORY_INFO } from '../../shared/categories';
 import { dayHeading } from '../../shared/format';
 import { Skeleton } from '../../shared/states/skeleton';
 import { StateCard } from '../../shared/states/state-card';
+import { SyncBanner } from '../../shared/sync-banner/sync-banner';
 import { TransactionRow } from '../../shared/transaction-row/transaction-row';
 import { TransactionFilters } from './transaction-filters';
 
@@ -44,6 +45,7 @@ interface DayGroup {
     MatSelect,
     Skeleton,
     StateCard,
+    SyncBanner,
     TransactionRow,
   ],
   templateUrl: './transactions.html',

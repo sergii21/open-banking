@@ -183,6 +183,39 @@ export class ConnectionsRepo {
     );
   }
 
+  /** Token-based banks have no consent redirect: the connection is active as soon as the token has been checked. */
+  insertActive(input: {
+    id: string;
+    sessionId: string;
+    provider: ProviderId;
+    institutionId: string;
+    institutionName: string;
+    institutionLogoUrl: string | null;
+    tokensEnc: string;
+    tokenExpiresAt: string;
+    permissions: Permission[];
+    consentExpiresAt: string | null;
+    now: string;
+  }): void {
+    this.db.run(
+      `INSERT INTO connections (id, session_id, provider, institution_id, institution_name, institution_logo_url, status,
+         tokens_enc, token_expires_at, permissions, consent_expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
+      input.id,
+      input.sessionId,
+      input.provider,
+      input.institutionId,
+      input.institutionName,
+      input.institutionLogoUrl,
+      input.tokensEnc,
+      input.tokenExpiresAt,
+      JSON.stringify(input.permissions),
+      input.consentExpiresAt,
+      input.now,
+      input.now,
+    );
+  }
+
   findById(id: string): ConnectionRecord | undefined {
     const row = this.db.get<ConnectionRow>('SELECT * FROM connections WHERE id = ?', id);
     return row ? toConnection(row) : undefined;
@@ -405,6 +438,11 @@ export class AccountsRepo {
       if (!keepProviderIds.includes(row.provider_account_id))
         this.db.run('DELETE FROM accounts WHERE id = ?', row.id);
     }
+  }
+
+  findById(id: string): AccountRecord | undefined {
+    const row = this.db.get<AccountRow>('SELECT * FROM accounts WHERE id = ?', id);
+    return row ? toAccount(row) : undefined;
   }
 
   listBySession(sessionId: string): AccountWithConnection[] {
@@ -693,6 +731,124 @@ export class TransactionsRepo {
   }
 }
 
+// ============================================================================================== sync jobs
+
+export interface SyncJobRecord {
+  id: string;
+  connectionId: string;
+  accountId: string;
+  from: string;
+  to: string;
+  seq: number;
+  attempts: number;
+}
+
+interface SyncJobRow {
+  id: string;
+  connection_id: string;
+  account_id: string;
+  window_from: string;
+  window_to: string;
+  seq: number;
+  attempts: number;
+}
+
+/** Queue of paced transaction reads. Rows survive a restart, so a long history load resumes where it stopped. */
+export class SyncJobsRepo {
+  constructor(private readonly db: Db) {}
+
+  enqueue(
+    input: { connectionId: string; accountId: string; from: string; to: string; seq: number },
+    now: string,
+  ): void {
+    this.db.run(
+      `INSERT INTO sync_jobs (id, connection_id, account_id, window_from, window_to, seq, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      newId('job'),
+      input.connectionId,
+      input.accountId,
+      input.from,
+      input.to,
+      input.seq,
+      now,
+      now,
+    );
+  }
+
+  next(connectionId: string): SyncJobRecord | undefined {
+    const row = this.db.get<SyncJobRow>(
+      `SELECT id, connection_id, account_id, window_from, window_to, seq, attempts FROM sync_jobs
+       WHERE connection_id = ? AND status = 'pending' ORDER BY seq ASC, created_at ASC, id ASC LIMIT 1`,
+      connectionId,
+    );
+    return row
+      ? {
+          id: row.id,
+          connectionId: row.connection_id,
+          accountId: row.account_id,
+          from: row.window_from,
+          to: row.window_to,
+          seq: row.seq,
+          attempts: row.attempts,
+        }
+      : undefined;
+  }
+
+  connectionsWithPending(): string[] {
+    return this.db
+      .all<{ connection_id: string }>(
+        `SELECT DISTINCT connection_id FROM sync_jobs WHERE status = 'pending'`,
+      )
+      .map((row) => row.connection_id);
+  }
+
+  markDone(id: string, now: string): void {
+    this.db.run(`UPDATE sync_jobs SET status = 'done', updated_at = ? WHERE id = ?`, now, id);
+  }
+
+  /** A failed attempt: stays pending until `maxAttempts`, then gives up so the queue cannot stall forever. */
+  recordFailure(id: string, error: string, maxAttempts: number, now: string): void {
+    this.db.run(
+      `UPDATE sync_jobs SET attempts = attempts + 1, last_error = ?, updated_at = ?,
+         status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE 'pending' END WHERE id = ?`,
+      error,
+      now,
+      maxAttempts,
+      id,
+    );
+  }
+
+  cancelPending(connectionId: string, reason: string, now: string): void {
+    this.db.run(
+      `UPDATE sync_jobs SET status = 'failed', last_error = ?, updated_at = ? WHERE connection_id = ? AND status = 'pending'`,
+      reason,
+      now,
+      connectionId,
+    );
+  }
+
+  /** Null when nothing is left to load, so the UI shows a banner only while there is something to wait for. */
+  progress(connectionId: string): { done: number; total: number } | null {
+    const row = this.db.get<{ total: number; done: number }>(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(status <> 'pending'), 0) AS done FROM sync_jobs WHERE connection_id = ?`,
+      connectionId,
+    );
+    if (!row || row.total === 0 || row.done >= row.total) return null;
+    return { done: row.done, total: row.total };
+  }
+
+  /** Once a batch has finished, forget it so the next one reports its own progress from zero. */
+  purgeFinished(connectionId: string): void {
+    const pending = this.db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM sync_jobs WHERE connection_id = ? AND status = 'pending'`,
+      connectionId,
+    );
+    if ((pending?.n ?? 0) === 0) {
+      this.db.run('DELETE FROM sync_jobs WHERE connection_id = ?', connectionId);
+    }
+  }
+}
+
 // ============================================================================================ repositories
 
 export interface Repositories {
@@ -700,6 +856,7 @@ export interface Repositories {
   connections: ConnectionsRepo;
   accounts: AccountsRepo;
   transactions: TransactionsRepo;
+  syncJobs: SyncJobsRepo;
 }
 
 export function createRepositories(db: Db): Repositories {
@@ -708,5 +865,6 @@ export function createRepositories(db: Db): Repositories {
     connections: new ConnectionsRepo(db),
     accounts: new AccountsRepo(db),
     transactions: new TransactionsRepo(db),
+    syncJobs: new SyncJobsRepo(db),
   };
 }

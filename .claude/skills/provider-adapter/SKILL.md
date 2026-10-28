@@ -23,6 +23,24 @@ apps/api/src/providers/
   mock/              the fake bank: adapter, bank.ts (OAuth + data API routes), html.ts pages, dataset.ts, store.ts
   <id>/              one folder per provider: adapter, DTO schemas, fixtures-based tests
 apps/api/test/fixtures/<id>/   recorded provider payloads (verbatim JSON)
+
+## Token providers and rate-limited banks (monobank)
+
+Not every bank has a consent redirect. `providers/monobank/` is the pattern for a **token** provider: `Institution.connectMethod:
+'token'` makes the SPA show a token field, `POST /api/connections/token` calls `provider.connectWithToken()` (a real call, so a typo
+fails immediately), and the token is stored as `TokenSet.accessToken` with a far-future expiry and no refresh token
+(`refreshTokens` throws `InvalidGrantError`, so a rejected token becomes `needs_reauth`).
+
+A provider that caps read speed sets `limits` (`minIntervalMs`, `maxWindowDays`, `maxItemsPerCall`, `historyMonths`). Then
+`SyncService.initialSync` stores accounts and balances at once and queues `sync_jobs` (one per account and window, newest first)
+instead of reading history inline; `runDue()` runs one job per open rate gate, waits out a 429, asks for the rest of a window that hit
+the row cap, and stops when the connection is lost. Cache whatever you can inside the adapter (monobank's client-info is cached for a
+minute because the account list *is* the balance call). Redact the credential header in `domain/redact.ts` and mark the provider's
+`mode` as `live`, which also masks identifiers in the Inspector.
+
+`test/monobank-stub.ts` enforces the real service's rules (token check, one request per minute per endpoint, window and row caps), so a
+test fails if the worker ever goes faster than the bank allows. Keep a `test/live/*.live.ts` file for the checks that can run against
+the real service without secrets, and let it read an optional personal token from the environment, never from a file.
 apps/api/src/modules/connections/access.ts   the only place tokens are unsealed, refreshed (single-flight) and retried
 ```
 

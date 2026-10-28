@@ -33,6 +33,8 @@ export function truelayerInstitutions(
     capabilities: { accounts: true, payments: payable.length > 0 },
     health: 'operational',
     fixedPayee: config.beneficiary.type === 'merchant_account',
+    connectMethod: 'redirect',
+    tokenHelp: null,
     paymentsNote:
       payable.length === 0
         ? null

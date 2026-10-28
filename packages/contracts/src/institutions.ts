@@ -23,6 +23,20 @@ export const Institution = z.object({
    * form hides them. When false the customer chooses the payee: sort code + account number for GBP, IBAN for EUR.
    */
   fixedPayee: z.boolean(),
+  /**
+   * `redirect`: the customer signs in on the bank's own page (OAuth). `token`: the bank has no consent redirect for
+   * individuals and instead lets the customer issue a personal access token, which they paste into the app.
+   */
+  connectMethod: z.enum(['redirect', 'token']),
+  /** For `token` banks: where to get the token and what to know before pasting it. */
+  tokenHelp: z
+    .object({
+      url: z.string(),
+      steps: z.array(z.string()),
+      /** What removing the connection does and does not undo at the bank. */
+      revokeNote: z.string(),
+    })
+    .nullable(),
 });
 export type Institution = z.infer<typeof Institution>;
 

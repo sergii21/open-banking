@@ -21,7 +21,7 @@ export const Money = z.object({
 export type Money = z.infer<typeof Money>;
 
 /** Provider adapters that can sit behind the BankingProvider port. */
-export const ProviderId = z.enum(['mock', 'truelayer', 'enablebanking']);
+export const ProviderId = z.enum(['mock', 'truelayer', 'enablebanking', 'monobank']);
 export type ProviderId = z.infer<typeof ProviderId>;
 
 /** `mock` is the in-process fake bank, `sandbox` is a provider test environment, `live` is real banks. */

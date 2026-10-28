@@ -1,4 +1,4 @@
-import type { ProviderId } from '@ledger-lens/contracts';
+import { ProviderId } from '@ledger-lens/contracts';
 import { AppError } from '../errors';
 import type { App, CoreContext } from '../types';
 import { MockProvider } from './mock/adapter';
@@ -6,6 +6,7 @@ import { registerMockBank } from './mock/bank';
 import { MockBankStore } from './mock/store';
 import { createMockTransport } from './mock/transport';
 import type { BankingProvider } from './port';
+import { MonobankProvider } from './monobank/adapter';
 import { TrueLayerProvider } from './truelayer/adapter';
 import { ProviderHttp, fetchTransport, type Transport } from './transport';
 
@@ -31,7 +32,7 @@ export class ProviderRegistry {
   resolveInstitution(institutionId: string): { provider: BankingProvider; slug: string } {
     const separator = institutionId.indexOf(':');
     const id = institutionId.slice(0, separator);
-    if (separator < 1 || !['mock', 'truelayer', 'enablebanking'].includes(id)) {
+    if (separator < 1 || !ProviderId.safeParse(id).success) {
       throw new AppError('provider_not_available', 404, 'That bank is not available.');
     }
     return { provider: this.get(id as ProviderId), slug: institutionId.slice(separator + 1) };
@@ -47,6 +48,7 @@ export class ProviderRegistry {
 /** Tests replace the network with a scripted provider; production uses `fetch`. */
 export interface ProviderTransports {
   truelayer?: Transport;
+  monobank?: Transport;
 }
 
 export interface RegistryDeps {
@@ -96,6 +98,24 @@ export async function buildRegistry({
           clock: ctx.clock,
         }),
         config: truelayer,
+        clock: ctx.clock,
+      }),
+    );
+  }
+
+  const monobank = ctx.config.providers.monobank;
+  if (monobank) {
+    providers.set(
+      'monobank',
+      new MonobankProvider({
+        http: new ProviderHttp({
+          provider: 'monobank',
+          mode: 'live',
+          transport: transports.monobank ?? fetchTransport,
+          inspector: ctx.inspector,
+          clock: ctx.clock,
+        }),
+        config: monobank,
         clock: ctx.clock,
       }),
     );

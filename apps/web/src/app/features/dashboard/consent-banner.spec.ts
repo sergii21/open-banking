@@ -18,6 +18,7 @@ const connection = (overrides: Partial<Connection> = {}): Connection => ({
   consentDaysRemaining: 90,
   lastRefreshedAt: '2026-10-28T10:00:00.000Z',
   accountCount: 3,
+  sync: null,
   ...overrides,
 });
 

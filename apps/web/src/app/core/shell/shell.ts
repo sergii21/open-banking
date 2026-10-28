@@ -78,6 +78,15 @@ export class Shell {
   );
   protected readonly navOpen = signal(false);
 
+  /** The unseen-calls badge is visible text, so the accessible name has to carry the same number (WCAG 2.5.3). */
+  protected readonly inspectorLabel = computed(() => {
+    if (this.inspector.open()) return 'Close API Inspector';
+    const unseen = this.inspector.unseen();
+    return unseen > 0
+      ? `Open API Inspector, ${unseen} new ${unseen === 1 ? 'call' : 'calls'}`
+      : 'Open API Inspector';
+  });
+
   protected readonly modeLabel = computed(() => {
     const mode = this.session.mode();
     return mode === 'mock' ? 'Mock bank' : mode === 'sandbox' ? 'Sandbox' : 'Live banks';

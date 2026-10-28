@@ -151,8 +151,20 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     purge();
     const timer = setInterval(purge, 6 * 60 * 60_000);
     timer.unref();
+    // Paced history loading (monobank): one step per open rate gate, checked every few seconds.
+    const gaps = providers.all().flatMap((p) => (p.limits ? [p.limits.minIntervalMs] : []));
+    const syncTimer = setInterval(
+      () => {
+        sync.runDue().catch((error: unknown) => {
+          app.log.error({ err: error }, 'background sync failed');
+        });
+      },
+      Math.max(1_000, Math.min(5_000, ...gaps)),
+    );
+    syncTimer.unref();
     app.addHook('onClose', () => {
       clearInterval(timer);
+      clearInterval(syncTimer);
     });
   }
 

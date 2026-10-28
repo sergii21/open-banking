@@ -73,6 +73,7 @@ Other useful commands:
 | `lifecycle.spec.ts`    | fresh per test     | refresh + Inspector, outage, rate limit, revoke + reconnect, consent countdown/expiry, remove, delete-all       |
 | `a11y.spec.ts`         | shared             | axe (WCAG 2.2 AA) for every route, the Inspector and the dialog, in light and dark; skip link, focus handling   |
 | `phone.mobile.spec.ts` | shared             | drawer navigation, stacked cards, no horizontal overflow, bottom-sheet Inspector                                |
+| `monobank.spec.ts`     | fresh, serial      | token journey for a real bank against a fake of its API: wrong token, history loading banner, revoked token     |
 
 `REFRESH_COOLDOWN_SECONDS` is 3 in e2e, so Refresh re-enables by itself (assert with `toBeEnabled()`, never sleep).
 
@@ -88,4 +89,10 @@ Other useful commands:
   transition delay when opening.
 - **`toBeVisible()` does not detect occlusion.** A button under a sticky bar or clipped by a scroll container still passes.
   Assert geometry (`boundingBox()`) or hit-test with `document.elementFromPoint` when layout is the point.
+- **The `monobank` project runs a second app instance** (port 4301, `PROVIDERS=mock,monobank`) next to `e2e/support/fake-monobank.mjs`
+  (port 4310, started with `reuseExistingServer: false`: a stale server on that port would otherwise answer 200 and pass for the fake).
+  The shell's mode badge reflects the enabled providers, so the main instance stays mock-only. Leftover `node apps/api/dist/server.js`
+  processes from manual runs are the usual cause of "port already used".
+- **Background pacing makes states race you.** A Refresh pressed right after a background step is told to wait (the designed rate-limit
+  state); retry with `expect(async () => ...).toPass()` rather than sleeping.
 - **`input[value="..."]` matches the HTML attribute, not the live value.** Signal Forms set the property. Use `toHaveValue(...)`.

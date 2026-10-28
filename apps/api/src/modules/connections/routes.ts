@@ -1,5 +1,7 @@
 import {
   ConnectionList,
+  ConnectWithTokenRequest,
+  ConnectWithTokenResponse,
   CreateConnectionRequest,
   CreateConnectionResponse,
   Id,
@@ -46,6 +48,29 @@ export function registerConnectionRoutes(api: App, ctx: AppContext): void {
     },
     async (request, reply) => {
       const response = await ctx.connections.start(requireSession(request).id, request.body);
+      return reply.code(201).send(response);
+    },
+  );
+
+  /** Token-based banks. Tight limit: every attempt is a call to the bank with a credential the caller typed. */
+  api.post(
+    '/connections/token',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          keyGenerator: (r) => r.cookies[ctx.sessions.cookieName] ?? r.ip,
+        },
+      },
+      schema: { body: ConnectWithTokenRequest, response: { 201: ConnectWithTokenResponse } },
+    },
+    async (request, reply) => {
+      const response = await ctx.connections.connectWithToken(
+        requireSession(request).id,
+        request.body,
+        request.ip,
+      );
       return reply.code(201).send(response);
     },
   );
