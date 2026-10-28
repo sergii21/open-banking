@@ -1,0 +1,177 @@
+<header class="mb-6 max-w-2xl">
+  <h1 class="text-3xl font-semibold tracking-tight">Connections &amp; privacy</h1>
+  <p class="mt-1 text-on-surface-variant">
+    Who can read your accounts, for how long, and how to take that back.
+  </p>
+</header>
+
+@if (loading()) {
+  <p class="sr-only" role="status">Loading connections…</p>
+  <div class="space-y-4" aria-hidden="true">
+    <ll-skeleton height="12rem" />
+  </div>
+} @else if (data.connections.status() === 'error') {
+  <ll-state
+    [icon]="failure().icon"
+    [title]="failure().title"
+    [message]="failure().message"
+    tone="error"
+    role="alert"
+  >
+    <button mat-flat-button type="button" (click)="data.reload()">Try again</button>
+  </ll-state>
+} @else {
+  @if (data.connections.value().length === 0) {
+    <ll-state
+      icon="account_balance"
+      title="No banks connected"
+      message="Connect a bank to see your accounts here."
+      data-testid="connections-empty"
+    >
+      <a mat-flat-button routerLink="/connect">Connect a bank</a>
+    </ll-state>
+  } @else {
+    <ul role="list" class="space-y-4" data-testid="connection-list">
+      @for (connection of data.connections.value(); track connection.id) {
+        <li>
+          <article
+            class="rounded-3xl border border-outline-variant bg-surface-container-low p-5"
+            [attr.aria-label]="connection.institutionName"
+            data-testid="connection-card"
+          >
+            <header class="flex flex-wrap items-center gap-3">
+              <ll-bank-logo
+                [src]="connection.institutionLogoUrl"
+                [name]="connection.institutionName"
+                [size]="44"
+              />
+              <div class="min-w-0 flex-1">
+                <h2 class="truncate text-xl font-semibold tracking-tight">
+                  {{ connection.institutionName }}
+                </h2>
+                <p class="text-sm text-on-surface-variant">
+                  {{ connection.accountCount }}
+                  {{ connection.accountCount === 1 ? 'account' : 'accounts' }} ·
+                  {{
+                    connection.mode === 'mock'
+                      ? 'Mock bank'
+                      : connection.mode === 'sandbox'
+                        ? 'Sandbox'
+                        : 'Live'
+                  }}
+                </p>
+              </div>
+              @let view = status(connection);
+              <ll-status-chip
+                [tone]="view.tone"
+                [icon]="view.icon"
+                data-testid="connection-status"
+                >{{ view.label }}</ll-status-chip
+              >
+            </header>
+
+            <dl class="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt class="text-on-surface-variant">Consent</dt>
+                <dd class="font-medium" data-testid="consent-line">
+                  {{ consentLine(connection) }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-on-surface-variant">Last refreshed</dt>
+                <dd class="font-medium">
+                  @if (connection.lastRefreshedAt) {
+                    <ll-relative-time [at]="connection.lastRefreshedAt" />
+                  } @else {
+                    Never
+                  }
+                </dd>
+              </div>
+              <div class="sm:col-span-2">
+                <dt class="text-on-surface-variant">What we can read</dt>
+                <dd class="mt-1 flex flex-wrap gap-1.5">
+                  @for (permission of connection.permissions; track permission) {
+                    <ll-status-chip tone="info" icon="visibility">{{
+                      permissionLabel(permission)
+                    }}</ll-status-chip>
+                  }
+                  <ll-status-chip tone="neutral" icon="block">Cannot move money</ll-status-chip>
+                </dd>
+              </div>
+            </dl>
+
+            @if (connection.status !== 'active' || connection.consentState === 'expiring_soon') {
+              <ll-consent-banner class="mt-4" [connection]="connection" />
+            }
+
+            <div class="mt-4 flex flex-wrap gap-2">
+              <a
+                mat-stroked-button
+                [routerLink]="['/connect', 'review', connection.institutionId]"
+                [queryParams]="{ reconnect: connection.id }"
+              >
+                <mat-icon>autorenew</mat-icon>
+                Reconnect
+              </a>
+              <button
+                mat-stroked-button
+                type="button"
+                class="!text-error"
+                [disabled]="busyId() === connection.id"
+                data-testid="remove-connection"
+                (click)="remove(connection)"
+              >
+                <mat-icon>delete</mat-icon>
+                Remove and delete data
+              </button>
+            </div>
+          </article>
+        </li>
+      }
+    </ul>
+    <p class="mt-4">
+      <a mat-stroked-button routerLink="/connect"><mat-icon>add</mat-icon> Connect another bank</a>
+    </p>
+  }
+
+  <section class="mt-10 max-w-3xl" aria-labelledby="privacy-title">
+    <h2 id="privacy-title" class="text-xl font-semibold tracking-tight">Your data</h2>
+    <div class="mt-3 grid gap-4 md:grid-cols-2">
+      <div class="rounded-2xl border border-outline-variant p-4">
+        <h3 class="mb-1 font-semibold">What we keep</h3>
+        <ul class="list-disc space-y-1 pl-5 text-sm text-on-surface-variant">
+          <li>Account names and masked numbers, balances, and transactions from your banks</li>
+          <li>The bank’s access tokens, encrypted at rest and never sent to your browser</li>
+          <li>A record of the calls shown in the API Inspector, in memory only</li>
+        </ul>
+      </div>
+      <div class="rounded-2xl border border-outline-variant p-4">
+        <h3 class="mb-1 font-semibold">What we never see</h3>
+        <ul class="list-disc space-y-1 pl-5 text-sm text-on-surface-variant">
+          <li>Your bank login. You sign in on your bank’s own page</li>
+          <li>Full IBANs or account numbers; only a masked form is stored</li>
+          <li>The ability to move money without you approving it at your bank</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-error/40 bg-error-container/30 p-4">
+      <h3 class="font-semibold">Delete all my data</h3>
+      <p class="mt-1 text-sm text-on-surface-variant">
+        Withdraws access at every bank and erases everything we hold for this demo session,
+        including payments.
+      </p>
+      <button
+        mat-flat-button
+        type="button"
+        class="mt-3 !bg-error !text-on-error"
+        [disabled]="deletingAll()"
+        data-testid="delete-all"
+        (click)="deleteEverything()"
+      >
+        <mat-icon>delete_forever</mat-icon>
+        Delete all my data
+      </button>
+    </div>
+  </section>
+}

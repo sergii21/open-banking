@@ -23,9 +23,14 @@
   --color-tertiary-container: var(--mat-sys-tertiary-container);
   --color-on-tertiary-container: var(--mat-sys-on-tertiary-container);
   --color-error: var(--mat-sys-error);
+  --color-on-error: var(--mat-sys-on-error);
   --color-error-container: var(--mat-sys-error-container);
   --color-on-error-container: var(--mat-sys-on-error-container);
   --color-positive: var(--ll-positive);
   --color-negative: var(--ll-negative);
   --color-warning: var(--ll-warning);
+  --color-positive-container: var(--ll-positive-container);
+  --color-on-positive-container: var(--ll-on-positive-container);
+  --color-warning-container: var(--ll-warning-container);
+  --color-on-warning-container: var(--ll-on-warning-container);
 }

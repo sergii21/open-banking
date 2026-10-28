@@ -40,6 +40,8 @@ export default defineConfig({
           PROVIDERS: 'mock',
           DEMO_CONTROLS: 'true',
           RATE_LIMIT_PER_MINUTE: '100000',
+          // Short enough that tests do not wait, long enough to see the button's cool-down state.
+          REFRESH_COOLDOWN_SECONDS: '3',
           LOG_LEVEL: 'warn',
         },
       },

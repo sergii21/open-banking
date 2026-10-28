@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { Id, IsoDate, IsoDateTime, Money } from './common';
 
 export const Category = z.enum([

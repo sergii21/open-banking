@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /**
  * Stable machine-readable error codes. The SPA maps each one to a designed state, so adding a

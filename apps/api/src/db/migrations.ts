@@ -20,6 +20,94 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: '002_account_information',
+    sql: `
+      CREATE TABLE connections (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,
+        institution_id TEXT NOT NULL,            -- '<provider>:<slug>'
+        institution_name TEXT NOT NULL,
+        institution_logo_url TEXT,
+        status TEXT NOT NULL CHECK (status IN ('pending','active','expired','revoked','needs_reauth','error')),
+        state TEXT UNIQUE,                       -- OAuth state, only while a consent redirect is in flight
+        state_expires_at TEXT,
+        code_verifier_enc TEXT,                  -- PKCE verifier, sealed, only while pending
+        tokens_enc TEXT,                         -- sealed JSON token set, never sent to the browser
+        token_expires_at TEXT,
+        permissions TEXT NOT NULL DEFAULT '[]',
+        consent_expires_at TEXT,
+        last_refreshed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_connections_session ON connections(session_id);
+
+      CREATE TABLE accounts (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+        provider_account_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        currency TEXT NOT NULL,
+        masked_identifier TEXT,                  -- the full IBAN / account number is never stored
+        balance_minor INTEGER NOT NULL,
+        available_minor INTEGER,
+        balance_at TEXT NOT NULL,
+        last_refreshed_at TEXT NOT NULL,
+        UNIQUE (connection_id, provider_account_id)
+      );
+
+      CREATE TABLE transactions (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        provider_txn_id TEXT NOT NULL,
+        booked_at TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','booked')),
+        amount_minor INTEGER NOT NULL,           -- signed integer minor units; no floats anywhere
+        currency TEXT NOT NULL,
+        description TEXT NOT NULL,
+        counterparty TEXT,
+        category TEXT NOT NULL,
+        category_source TEXT NOT NULL CHECK (category_source IN ('auto','user')),
+        UNIQUE (account_id, provider_txn_id)
+      );
+      CREATE INDEX idx_transactions_account_date ON transactions(account_id, booked_at DESC, id DESC);
+    `,
+  },
+  {
+    id: '003_mock_bank',
+    sql: `
+      -- State of the fake bank. It lives in the same database but is only ever touched by providers/mock.
+      CREATE TABLE mock_consents (
+        id TEXT PRIMARY KEY,
+        institution TEXT NOT NULL,
+        persona TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        seed TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        fail_next TEXT                           -- demo control: 'unavailable' | 'rate_limit', consumed by one data call
+      );
+      CREATE TABLE mock_auth_codes (
+        code_hash TEXT PRIMARY KEY,
+        consent_id TEXT NOT NULL REFERENCES mock_consents(id) ON DELETE CASCADE,
+        redirect_uri TEXT NOT NULL,
+        code_challenge TEXT,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      );
+      CREATE TABLE mock_tokens (
+        token_hash TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('access','refresh')),
+        consent_id TEXT NOT NULL REFERENCES mock_consents(id) ON DELETE CASCADE,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      );
+    `,
+  },
 ];
 
 export function migrate(db: Db, available: readonly Migration[] = migrations): string[] {

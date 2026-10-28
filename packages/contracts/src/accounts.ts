@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { Id, IsoDateTime, Money } from './common';
 
 export const AccountType = z.enum(['current', 'savings', 'credit_card', 'other']);

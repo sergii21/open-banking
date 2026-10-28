@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { Currency, Id, IsoDateTime, Money, ProviderId, ProviderMode } from './common';
 import { isValidIban } from './iban';
 

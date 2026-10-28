@@ -1,0 +1,112 @@
+<div class="@container">
+  <header class="mb-6">
+    <h1 class="text-3xl font-semibold tracking-tight">Dashboard</h1>
+    <p class="mt-1 text-on-surface-variant">
+      Your balances across every connected bank, from the data we last fetched.
+    </p>
+  </header>
+
+  @if (loading()) {
+    <p class="sr-only" role="status">Loading your accounts…</p>
+    <div class="space-y-6" aria-hidden="true">
+      <div class="grid gap-4 @2xl:grid-cols-2 @4xl:grid-cols-3">
+        <ll-skeleton height="7rem" />
+        <ll-skeleton height="7rem" />
+      </div>
+      <div class="grid gap-4 @2xl:grid-cols-2 @4xl:grid-cols-3">
+        <ll-skeleton height="11rem" />
+        <ll-skeleton height="11rem" />
+        <ll-skeleton height="11rem" />
+      </div>
+    </div>
+  } @else if (failed()) {
+    <ll-state
+      [icon]="failure().icon"
+      [title]="failure().title"
+      [message]="failure().message"
+      tone="error"
+      role="alert"
+    >
+      <button mat-flat-button type="button" (click)="data.reload()">Try again</button>
+    </ll-state>
+  } @else if (data.connections.value().length === 0) {
+    <ll-state
+      icon="account_balance"
+      title="Connect your first bank"
+      message="Link a bank through Open Banking to see all your balances and spending in one place. You approve it at your bank, and you can revoke it any time."
+      data-testid="dashboard-empty"
+    >
+      <a mat-flat-button routerLink="/connect" data-testid="connect-first-bank">Connect a bank</a>
+    </ll-state>
+  } @else {
+    @if (attention().length > 0) {
+      <section class="mb-6 space-y-3" aria-label="Needs your attention">
+        @for (connection of attention(); track connection.id) {
+          <ll-consent-banner [connection]="connection" />
+        }
+      </section>
+    }
+
+    <section
+      class="mb-8 grid gap-4 @2xl:grid-cols-2 @4xl:grid-cols-3"
+      aria-label="Totals by currency"
+    >
+      @for (total of totals(); track total.currency) {
+        <div
+          class="rounded-3xl bg-primary-container p-5 text-on-primary-container"
+          data-testid="currency-total"
+        >
+          <p class="text-sm font-medium">Total in {{ total.currency }}</p>
+          <p class="mt-1 text-3xl font-semibold tracking-tight">
+            <ll-money [amountMinor]="total.amountMinor" [currency]="total.currency" />
+          </p>
+          <p class="mt-1 text-sm opacity-90">
+            {{ total.accounts }} {{ total.accounts === 1 ? 'account' : 'accounts' }}, credit cards
+            included
+          </p>
+        </div>
+      }
+    </section>
+
+    <section aria-labelledby="accounts-title" class="mb-10">
+      <h2 id="accounts-title" class="mb-3 text-xl font-semibold tracking-tight">Accounts</h2>
+      <ul
+        role="list"
+        class="grid gap-4 @2xl:grid-cols-2 @4xl:grid-cols-3"
+        data-testid="account-list"
+      >
+        @for (account of data.accounts.value(); track account.id) {
+          <li>
+            <ll-account-card
+              [account]="account"
+              [connection]="connectionsById().get(account.connectionId)"
+            />
+          </li>
+        }
+      </ul>
+    </section>
+
+    <section aria-labelledby="recent-title">
+      <div class="mb-1 flex items-center justify-between">
+        <h2 id="recent-title" class="text-xl font-semibold tracking-tight">Recent transactions</h2>
+        <a routerLink="/transactions" class="text-sm">View all</a>
+      </div>
+      @if (recent().length === 0) {
+        <p class="py-6 text-on-surface-variant">
+          No transactions yet. Refresh an account to fetch the latest.
+        </p>
+      } @else {
+        <ul role="list" class="divide-y divide-outline-variant" data-testid="recent-transactions">
+          @for (transaction of recent(); track transaction.id) {
+            <li>
+              <ll-transaction-row
+                [transaction]="transaction"
+                [accountName]="accountNames().get(transaction.accountId) ?? null"
+              />
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</div>

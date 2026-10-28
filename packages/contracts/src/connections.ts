@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { Id, IsoDateTime, ProviderId, ProviderMode } from './common';
 
 export const ConnectionStatus = z.enum([

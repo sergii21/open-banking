@@ -73,7 +73,17 @@ Project specifics on top of it (enforced by ESLint where possible):
 - Styling: Tailwind 4 utilities for layout/spacing, Material 3 tokens (`--mat-sys-*`) for colour. Tailwind is configured
   CSS-first (`src/tailwind.css`) through `.postcssrc.json` + `@tailwindcss/postcss`; there is **no** `tailwind.config.js`
   (a stale one is what broke Karma builds in the older workspace). No `ngClass` / `ngStyle` / `CommonModule`.
-- Dark mode is token-based (`light-dark()`); never hard-code a colour that only works on a light surface.
+- Dark mode is token-based (`light-dark()`); never hard-code a colour that only works on a light surface. The theme uses our own
+  tonal palette (`src/_palette.scss`, generated with Material Color Utilities; stock `$cyan-palette` is neon). Material's
+  surface tokens need the extra neutral tones (4, 6, 12, 17, 22, 24, 87, 92, 94, 96): without them dark mode silently falls
+  back to white. The axe suite (light + dark) is the guard.
+- Layout adapts to the width a component actually gets: grids use Tailwind **container queries** (`@container` +
+  `@2xl:grid-cols-2`), not viewport breakpoints, because the Inspector can take space. The API Inspector is a non-modal
+  `<aside>` docked at the bottom below 1440px and on the right above it (content gets padding and `scroll-padding` so a
+  focused control is never hidden behind it: WCAG 2.2 "Focus Not Obscured").
+- **zod in the SPA**: always `import * as z from 'zod'` (namespace import), never `import { z } from 'zod'` - the latter
+  makes esbuild bundle all 64 locales (~300 kB). `src/zod-config.ts` (imported first by `main.ts`) sets `jitless` so zod never
+  probes `new Function` under our strict CSP (which logs a violation). The initial bundle budget is 900 kB warn / 1.2 MB error.
 - Bank logos use `NgOptimizedImage`. Every route must pass axe (WCAG AA): labels, focus order, contrast, status text — never colour alone.
 - Feature-first folders with lazy routes: `core/` (config, interceptors, session, inspector stream), `shared/`, `features/<name>/`.
 - File names follow the CLI 2025 style guide: `transactions.ts`, `transactions.html`, no `.component` suffix.
@@ -97,7 +107,10 @@ Project specifics on top of it (enforced by ESLint where possible):
 
 - Vitest everywhere (`@angular/build:unit-test` for the SPA). Provider adapters are tested from recorded fixtures with a
   stubbed transport, so they run offline in CI. Live sandbox checks are opt-in (`e2e:sandbox`).
-- Playwright smoke journeys run against the **mock bank** and must stay deterministic. See the `e2e-smoke-testing` skill.
+- Playwright journeys run against the **mock bank** and must stay deterministic: `connect` (journey + every failure state),
+  `dashboard`/`transactions`/`connections` (read-only, shared session), `lifecycle` (refresh, outage, rate limit, revoke,
+  consent expiry, privacy; each test uses its own fresh session), `a11y` (axe in light and dark, keyboard basics) and
+  `*.mobile.spec.ts` (Pixel 7). See the `e2e-smoke-testing` skill.
 - Before calling work done: `npm run verify` and `npm run e2e`, then use the running app in a browser (desktop + phone width,
   dark mode, axe). Say what was and was not verified.
 

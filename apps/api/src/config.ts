@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
+import * as z from 'zod';
 
 export type NodeEnv = 'development' | 'test' | 'production';
 

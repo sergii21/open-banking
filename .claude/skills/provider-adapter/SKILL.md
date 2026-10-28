@@ -16,22 +16,33 @@ format: adapters normalise to the types in `packages/contracts` and throw `AppEr
 
 ```
 apps/api/src/providers/
-  port.ts            BankingProvider interface + shared types (ProviderAccount, ProviderTransaction, TokenSet, ...)
-  registry.ts        builds the enabled adapters from config; `get(providerId)` / `forInstitution(institutionId)`
-  transport.ts       instrumented HTTP: every provider call is timed, redacted and pushed to the Inspector
-  <id>/              one folder per provider: adapter, mapping, DTO schemas, fixtures-based tests
+  port.ts            BankingProvider interface, TokenSet, ProviderAccount/Transaction, typed errors
+  registry.ts        builds the enabled adapters from config; `resolveInstitution('<provider>:<slug>')`, `mock()`
+  transport.ts       ProviderHttp: every provider call is timed, redacted and pushed to the Inspector
+  shared/data-api.ts DTO schemas + mappers for the "Data API" dialect (TrueLayer and the mock both speak it)
+  mock/              the fake bank: adapter, bank.ts (OAuth + data API routes), html.ts pages, dataset.ts, store.ts
+  <id>/              one folder per provider: adapter, DTO schemas, fixtures-based tests
 apps/api/test/fixtures/<id>/   recorded provider payloads (verbatim JSON)
+apps/api/src/modules/connections/access.ts   the only place tokens are unsealed, refreshed (single-flight) and retried
 ```
 
 ## The port (what an adapter implements)
 
-- `listInstitutions(query)` — bank picker. Institution ids are `<provider>:<slug>`.
-- `startConnection({ institutionId, state, codeChallenge, redirectUri })` → `{ authUrl }`. Always send `state` and PKCE.
-- `completeConnection({ code, codeVerifier, redirectUri })` → encrypted-at-rest `TokenSet` + `consentExpiresAt`.
-- `refreshTokens(tokens)` — single-flight is handled by the caller; throw `reauth_required` on `invalid_grant`.
-- `fetchAccounts` / `fetchBalance` / `fetchTransactions` (booked + pending, cursor or date-window pagination).
-- `revoke(tokens)` — best effort; local data is deleted regardless.
-- `createPayment` / `getPayment` / `verifyWebhook` for payment initiation (set `capabilities.payments`).
+- `listInstitutions(query, ctx)` — bank picker. Institution ids are `<provider>:<slug>`; `mode` is mock | sandbox | live.
+- `startConnection({ institutionId, state, codeChallenge, redirectUri }, ctx)` → `{ authUrl }`. Always send `state` and PKCE (S256).
+- `parseCallback(query)` → `{ kind: 'code', code }` or `{ kind: 'failure', outcome }` where outcome is one of
+  `denied | timeout | unavailable | error`: the SPA has a designed state for each. Never throw from here.
+- `completeConnection({ code, codeVerifier, redirectUri }, ctx)` → `{ tokens, consentExpiresAt, permissions }`.
+- `refreshTokens(tokens, ctx)` — throw `InvalidGrantError` on `invalid_grant`; the caller marks the connection `needs_reauth`.
+- `fetchConsent(tokens, ctx)` → `{ expiresAt, permissions }`, called on every user-initiated refresh so reminders stay accurate.
+- `fetchAccounts` / `fetchBalance` / `fetchTransactions` (booked + pending merged and de-duplicated; paginate inside the adapter).
+- `revoke(tokens, ctx)` — best effort; local data is deleted regardless.
+- Payments (M3): `createPayment` / `getPayment` / `verifyWebhook`, advertised through institution `capabilities.payments`.
+
+Typed errors the adapter throws so the core can react: `TokenRejectedError` (401 on a data call: refresh once and retry),
+`InvalidGrantError` (re-auth needed), `ConsentGoneError('expired' | 'revoked')` (403), and `AppError` for the rest
+(`bank_unavailable`, `rate_limited` with `retryAfterSeconds`, `provider_error`). `throwDataApiError` in `shared/data-api.ts` maps a
+Data-API-style response in one call.
 
 ## Rules
 
@@ -40,9 +51,10 @@ apps/api/test/fixtures/<id>/   recorded provider payloads (verbatim JSON)
 2. **IDs**: de-duplicate transactions on `(account_id, provider_txn_id)`. If the provider has no stable id, derive a
    deterministic hash from date + amount + description + counter, and say so in a comment.
 3. **Pending vs booked**: map both; pending rows are replaced when the booked row arrives.
-4. **Transport**: use `ProviderHttp` only (never bare `fetch`) so the Inspector records the call. Declare which headers and
-   JSON paths are secret; the transport redacts `authorization`, tokens, `client_secret`, `code`, signatures and account
-   identifiers before anything is stored or logged.
+4. **Transport**: use `ProviderHttp` only (never bare `fetch`) so the Inspector records the call. Redaction lives in
+   `domain/redact.ts` (`authorization`, tokens, `client_secret`, `code`, `code_verifier`, signatures always; account identifiers
+   for live providers); add new secret key names there, with a test. The transport is injectable (`Transport`), which is how
+   adapter tests replay fixtures and how the mock bank is reached in-process.
 5. **Errors** (throw `AppError`): 401 on data call → refresh once, then `reauth_required`; `invalid_grant` → `reauth_required`;
    consent expired/revoked → `consent_expired` / `consent_revoked`; 429 → `rate_limited` with `retryAfterSeconds`;
    5xx/timeouts → `bank_unavailable`; everything else → `provider_error` (log the provider's request id, not the body).

@@ -17,10 +17,19 @@ import { systemClock, type Clock } from './clock';
 import type { AppConfig } from './config';
 import { Db } from './db/database';
 import { migrate } from './db/migrations';
+import { createRepositories } from './db/repos';
+import { TokenVault } from './domain/crypto';
 import { AppError } from './errors';
 import { loggerOptions, stripQuery } from './logging';
+import { ConnectionAccess } from './modules/connections/access';
+import { ConnectionService } from './modules/connections/service';
+import { EventBus } from './modules/events/event-bus';
+import { InspectorStore } from './modules/inspector/inspector-store';
+import { SessionService } from './modules/session/service';
+import { SyncService } from './modules/sync/service';
 import { registerErrorHandling } from './plugins/errors';
-import type { App, AppContext } from './types';
+import { buildRegistry } from './providers/registry';
+import type { App, AppContext, CoreContext } from './types';
 
 export interface BuildAppOptions {
   config: AppConfig;
@@ -65,7 +74,17 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     done(null, payload);
   });
 
-  const ctx: AppContext = { config, clock, db };
+  const events = new EventBus();
+  const core: CoreContext = {
+    config,
+    clock,
+    db,
+    log: app.log,
+    vault: new TokenVault({ id: config.tokenKeyId, key: config.tokenEncryptionKey }),
+    events,
+    inspector: new InspectorStore(events),
+    repos: createRepositories(db),
+  };
 
   // The SPA, the mock bank's own pages and the provider redirects are all served from this origin,
   // so the policy can stay strict: no inline scripts, no third-party origins.
@@ -108,7 +127,28 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     return reply.code(503).send({ status: 'unavailable' });
   });
 
+  const providers = await buildRegistry({ app, ctx: core });
+  const access = new ConnectionAccess(core, providers);
+  const sync = new SyncService(core, access);
+  const connections = new ConnectionService(core, providers, access, sync);
+  const sessions = new SessionService(core, providers, connections);
+  const ctx: AppContext = { ...core, providers, access, sync, connections, sessions };
+
   await registerApi(app, ctx);
+
+  if (config.env !== 'test') {
+    // Keep a public demo tidy: forget sessions nobody has touched for the configured TTL.
+    const purge = (): void => {
+      const removed = sessions.purgeIdle();
+      if (removed > 0) app.log.info({ removed }, 'purged idle sessions');
+    };
+    purge();
+    const timer = setInterval(purge, 6 * 60 * 60_000);
+    timer.unref();
+    app.addHook('onClose', () => {
+      clearInterval(timer);
+    });
+  }
 
   const spaEnabled =
     config.webDistDir !== null && existsSync(join(config.webDistDir, 'index.html'));

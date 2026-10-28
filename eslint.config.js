@@ -38,7 +38,10 @@ export default defineConfig(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        { considerDefaultExhaustiveForUnions: true },
+      ],
       '@typescript-eslint/no-non-null-assertion': 'error',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-console': 'error',

@@ -1,4 +1,5 @@
 @use '@angular/material' as mat;
+@use './palette' as brand;
 
 // Material 3 system tokens (--mat-sys-*). `color-scheme: light dark` follows the OS; the toolbar toggle
 // pins it with data-theme. Everything else in the app reads these variables, so dark mode needs no
@@ -8,8 +9,8 @@ html {
   @include mat.theme(
     (
       color: (
-        primary: mat.$cyan-palette,
-        tertiary: mat.$azure-palette,
+        primary: brand.$primary,
+        tertiary: brand.$tertiary,
         theme-type: color-scheme,
       ),
       typography: (
@@ -32,6 +33,10 @@ html {
   --ll-positive: light-dark(#0b6b3a, #7ddba4);
   --ll-negative: light-dark(#ae2b21, #ffb4ab);
   --ll-warning: light-dark(#8a5300, #ffcf7a);
+  --ll-positive-container: light-dark(#d4f3df, #0f3d25);
+  --ll-on-positive-container: light-dark(#06361c, #c2f2d3);
+  --ll-warning-container: light-dark(#ffe9b8, #4a3500);
+  --ll-on-warning-container: light-dark(#3d2900, #ffe2a6);
 }
 
 body {

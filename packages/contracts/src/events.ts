@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { Connection } from './connections';
 import { InspectorCall } from './inspector';
 import { Payment } from './payments';

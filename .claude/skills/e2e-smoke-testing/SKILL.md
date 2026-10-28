@@ -63,8 +63,29 @@ Other useful commands:
   violations for WCAG 2.x A/AA tags.
 - When you fix a real bug, add a regression test with a one-line comment explaining what it guards.
 
-## Two traps worth knowing
+## Specs
 
+| Spec                   | Session            | Covers                                                                                                          |
+| ---------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `smoke.spec.ts`        | shared (connected) | shell, navigation, probes, security headers, no tokens in browser storage                                       |
+| `connect.spec.ts`      | fresh per test     | the full journey, GBP bank, denied, SCA timeout, outage, degraded bank, bad/reused callback, redirect-URI check |
+| `dashboard.spec.ts`    | shared (read-only) | balances, recent transactions, cache-only reads, redacted Inspector detail, filters, paging, privacy copy       |
+| `lifecycle.spec.ts`    | fresh per test     | refresh + Inspector, outage, rate limit, revoke + reconnect, consent countdown/expiry, remove, delete-all       |
+| `a11y.spec.ts`         | shared             | axe (WCAG 2.2 AA) for every route, the Inspector and the dialog, in light and dark; skip link, focus handling   |
+| `phone.mobile.spec.ts` | shared             | drawer navigation, stacked cards, no horizontal overflow, bottom-sheet Inspector                                |
+
+`REFRESH_COOLDOWN_SECONDS` is 3 in e2e, so Refresh re-enables by itself (assert with `toBeEnabled()`, never sleep).
+
+## Traps (each cost a debugging round)
+
+- **Status chips contain their icon's ligature text** (`check_circle200`). Use `toContainText`, not `toHaveText`, on chips.
+- **`toHaveText(/^...$/)` does not trim**: padded template text breaks anchored regexes. Prefer `toContainText` or unanchored regexes.
+- **`getByRole('link', { name: 'Transactions' })` is a substring match** and also hits "View transactions for Girokonto".
+  Scope navigation links with `mainNav(page)` from `e2e/support.ts`.
+- **Run axe after animations finish** (`settleAnimations(page)`): a dialog mid-fade fails contrast on blended colours.
+- **Press Tab only after the shell has rendered**; Angular bootstraps asynchronously after the session call.
+- Focus tests rely on the Inspector being _visible_ when focus moves (`afterNextRender`), which is why its `visibility` has no
+  transition delay when opening.
 - **`toBeVisible()` does not detect occlusion.** A button under a sticky bar or clipped by a scroll container still passes.
   Assert geometry (`boundingBox()`) or hit-test with `document.elementFromPoint` when layout is the point.
 - **`input[value="..."]` matches the HTML attribute, not the live value.** Signal Forms set the property. Use `toHaveValue(...)`.

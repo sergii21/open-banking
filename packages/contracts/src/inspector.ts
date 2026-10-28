@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { Id, IsoDateTime, ProviderId } from './common';
 
 const Headers = z.record(z.string(), z.string());

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { Currency, Id, IsoDate, IsoDateTime, Money } from './common';
 import { Category } from './transactions';
 
