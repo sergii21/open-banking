@@ -111,6 +111,7 @@ export class MockProvider implements BankingProvider {
         capabilities: { accounts: true, payments: true },
         health: i.healthy ? ('operational' as const) : ('degraded' as const),
         paymentsNote: null,
+        fixedPayee: false,
       })),
     );
   }

@@ -53,7 +53,8 @@ export const CreatePaymentRequest = z.object({
   institutionId: z.string().min(1),
   amountMinor: z.number().int().positive().max(MAX_PAYMENT_MINOR),
   currency: Currency,
-  beneficiary: BeneficiaryInput,
+  /** Omitted when the institution pays a fixed account (`Institution.fixedPayee`). */
+  beneficiary: BeneficiaryInput.optional(),
   reference: PaymentReference,
 });
 export type CreatePaymentRequest = z.infer<typeof CreatePaymentRequest>;

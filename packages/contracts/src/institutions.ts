@@ -18,6 +18,11 @@ export const Institution = z.object({
   health: z.enum(['operational', 'degraded']),
   /** Shown on the payment form when this bank's payments behave in a way a reader should know about. */
   paymentsNote: z.string().nullable(),
+  /**
+   * The provider pays a fixed account (a merchant account pay-in), so the payee fields on the form are not used and the
+   * form hides them. When false the customer chooses the payee: sort code + account number for GBP, IBAN for EUR.
+   */
+  fixedPayee: z.boolean(),
 });
 export type Institution = z.infer<typeof Institution>;
 

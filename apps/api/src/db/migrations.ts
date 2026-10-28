@@ -108,6 +108,100 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: '004_payments',
+    sql: `
+      CREATE TABLE payments (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL,
+        institution_id TEXT NOT NULL,
+        institution_name TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,           -- the client's key; unique per session
+        request_hash TEXT NOT NULL,              -- same key with a different request is refused, not silently replayed
+        provider_idempotency_key TEXT NOT NULL,  -- sent to the provider, so retrying an unknown outcome cannot pay twice
+        provider_payment_id TEXT,                -- null until the provider has accepted the payment
+        amount_minor INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        beneficiary_name TEXT NOT NULL,
+        beneficiary_identifier TEXT NOT NULL,    -- masked; the full identifier is never stored
+        reference TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending','authorised','executed','settled','failed','cancelled')),
+        settlement_expected INTEGER NOT NULL DEFAULT 1,
+        failure_reason TEXT,
+        status_history TEXT NOT NULL,
+        auth_url_enc TEXT,                       -- sealed: the bank link carries a one-time resource token
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_checked_at TEXT,                    -- last webhook or poll that touched this payment
+        UNIQUE (session_id, idempotency_key)
+      );
+      CREATE UNIQUE INDEX idx_payments_provider_id ON payments(provider, provider_payment_id)
+        WHERE provider_payment_id IS NOT NULL;
+      CREATE INDEX idx_payments_session ON payments(session_id, created_at DESC);
+
+      CREATE TABLE webhook_events (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        event_id TEXT NOT NULL,                  -- the provider's id: the same event delivered twice shares it
+        event_type TEXT NOT NULL,
+        provider_payment_id TEXT,
+        payload TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        UNIQUE (provider, event_id)
+      );
+    `,
+  },
+  {
+    id: '005_mock_payments',
+    sql: `
+      -- Which Ledger Lens customer a mock consent belongs to, so payments they make show up in their own mock accounts only.
+      ALTER TABLE mock_consents ADD COLUMN customer_ref TEXT;
+
+      CREATE TABLE mock_payments (
+        id TEXT PRIMARY KEY,
+        institution TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_hash TEXT NOT NULL,
+        amount_minor INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        beneficiary_name TEXT NOT NULL,
+        beneficiary_identifier TEXT NOT NULL,
+        reference TEXT NOT NULL,
+        return_uri TEXT NOT NULL,
+        customer_ref TEXT NOT NULL,
+        settlement_expected INTEGER NOT NULL,
+        resource_token_hash TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('authorization_required','authorizing','authorized','executed','settled','failed')),
+        failure_stage TEXT,
+        failure_reason TEXT,
+        persona TEXT,
+        outcome TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        executed_at TEXT,
+        settled_at TEXT,
+        failed_at TEXT,
+        next_status TEXT,                        -- the scheduled transition, applied by the bank's ticker
+        next_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE mock_outbox (
+        id TEXT PRIMARY KEY,
+        payment_id TEXT NOT NULL REFERENCES mock_payments(id) ON DELETE CASCADE,
+        event_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT NOT NULL,
+        delivered_at TEXT,
+        last_status INTEGER
+      );
+    `,
+  },
 ];
 
 export function migrate(db: Db, available: readonly Migration[] = migrations): string[] {

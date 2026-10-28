@@ -471,6 +471,8 @@ const LOCALES = { de: DE, gb: GB } as const;
 
 interface Draft extends Omit<MockTransaction, 'id' | 'timestamp'> {
   hour: number;
+  /** Set for payments made through the app: their id must not shift when other same-day items change. */
+  fixedId?: string;
 }
 
 export function buildDataset(options: DatasetOptions): Dataset {
@@ -730,6 +732,7 @@ export function buildDataset(options: DatasetOptions): Dataset {
       merchant: null,
       category: 'DEBIT',
       pending: false,
+      fixedId: `mpay_${payment.id}`,
     });
   }
 
@@ -764,14 +767,18 @@ export function buildDataset(options: DatasetOptions): Dataset {
   // Chronological order, stable ids per account/day, then balances.
   drafts.sort((a, b) => (a.date === b.date ? a.hour - b.hour : a.date < b.date ? -1 : 1));
   const counters = new Map<string, number>();
+  const paymentIds = new Set<string>();
   const transactions: MockTransaction[] = drafts.map((draft) => {
     const key = `${draft.accountId}|${draft.date}`;
     const n = (counters.get(key) ?? 0) + 1;
     counters.set(key, n);
-    const { hour, ...rest } = draft;
+    const { hour, fixedId, ...rest } = draft;
+    if (fixedId) paymentIds.add(fixedId);
     return {
       ...rest,
-      id: draft.pending ? null : `${draft.accountId}-${draft.date.replaceAll('-', '')}-${n}`,
+      id: draft.pending
+        ? null
+        : (fixedId ?? `${draft.accountId}-${draft.date.replaceAll('-', '')}-${n}`),
       timestamp: `${draft.date}T${String(hour).padStart(2, '0')}:${String(10 + ((n * 7) % 50)).padStart(2, '0')}:00.000Z`,
     };
   });
@@ -782,6 +789,10 @@ export function buildDataset(options: DatasetOptions): Dataset {
     const booked = transactions.filter((t) => t.accountId === account.id && !t.pending);
     const pending = transactions.filter((t) => t.accountId === account.id && t.pending);
     const bookedSum = booked.reduce((sum, t) => sum + t.amountMinor, 0);
+    // Payments made through the app move the balance; the target only describes the seeded history.
+    const paymentsSum = booked
+      .filter((t) => t.id !== null && paymentIds.has(t.id))
+      .reduce((sum, t) => sum + t.amountMinor, 0);
     const pendingSum = pending.reduce((sum, t) => sum + t.amountMinor, 0);
     const targetMinor =
       account.type === 'TRANSACTION'
@@ -790,7 +801,7 @@ export function buildDataset(options: DatasetOptions): Dataset {
           ? target.savings
           : null;
     // The opening balance is whatever makes today's balance land on the target (cards start from zero).
-    const opening = targetMinor === null ? 0 : targetMinor - bookedSum;
+    const opening = targetMinor === null ? 0 : targetMinor - (bookedSum - paymentsSum);
     const currentMinor = opening + bookedSum;
     balances.set(account.id, {
       currentMinor,
