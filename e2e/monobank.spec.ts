@@ -24,6 +24,19 @@ async function expectNoViolations(page: Page, scope: string): Promise<void> {
   expect(summary, `${scope} has accessibility violations`).toEqual([]);
 }
 
+/** Saves a screenshot when SHOTS_DIR is set, so a person can look at the screens; does nothing otherwise. */
+async function shot(page: Page, name: string): Promise<void> {
+  const dir = process.env['SHOTS_DIR'];
+  if (dir) await page.screenshot({ path: `${dir}/${name}.png`, fullPage: true });
+}
+
+async function expectNoOverflow(page: Page): Promise<void> {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'the page scrolls sideways').toBeLessThanOrEqual(0);
+}
+
 test.describe.configure({ mode: 'serial' });
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -127,3 +140,35 @@ test.describe('monobank (real-bank token journey)', () => {
     await expect(page.getByTestId('consent-banner')).toHaveCount(0);
   });
 });
+
+for (const view of [
+  { name: 'dark mode', options: { colorScheme: 'dark' as const }, phone: false },
+  { name: 'phone width', options: { viewport: { width: 393, height: 851 } }, phone: true },
+]) {
+  test.describe(`monobank screens in ${view.name}`, () => {
+    test.use(view.options);
+
+    test('the token form and the history banner are readable, accessible and fit the screen', async ({
+      page,
+    }) => {
+      const tag = view.phone ? 'phone' : 'dark';
+      await page.goto('/connect/review/monobank:monobank');
+      await expect(page.getByTestId('token-input')).toBeVisible();
+      await settleAnimations(page);
+      await expectNoViolations(page, `the token form (${view.name})`);
+      await expectNoOverflow(page);
+      await shot(page, `${tag}-token-form`);
+
+      await page.getByTestId('token-input').fill(TOKEN_ONE);
+      await page.getByTestId('connect-with-token').click();
+      await expect(page.getByTestId('connect-result')).toContainText('Bank connected');
+      await page.goto('/dashboard');
+      await expect(page.getByTestId('account-card')).toHaveCount(4);
+      await expect(page.getByTestId('sync-banner')).toBeVisible();
+      await settleAnimations(page);
+      await expectNoViolations(page, `the dashboard with the history banner (${view.name})`);
+      await expectNoOverflow(page);
+      await shot(page, `${tag}-dashboard-loading`);
+    });
+  });
+}

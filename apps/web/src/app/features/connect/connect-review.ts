@@ -122,7 +122,7 @@ const TOKEN_PROMISES: readonly Promise_[] = [
               class="mt-4 flex items-start gap-2 rounded-2xl bg-warning-container p-4 text-on-warning-container"
               role="note"
             >
-              <mat-icon>warning</mat-icon>
+              <mat-icon class="shrink-0">warning</mat-icon>
               <span
                 >This bank is reporting problems, so connecting will most likely fail. That makes it
                 a good way to see the outage state.</span
@@ -164,7 +164,7 @@ const TOKEN_PROMISES: readonly Promise_[] = [
               role="note"
               data-testid="live-note"
             >
-              <mat-icon aria-hidden="true">shield</mat-icon>
+              <mat-icon class="shrink-0" aria-hidden="true">shield</mat-icon>
               <span
                 ><strong>This is a real bank.</strong> Your own accounts are read from this machine
                 and kept encrypted here. {{ selected.name }}’s terms limit this API to personal and
