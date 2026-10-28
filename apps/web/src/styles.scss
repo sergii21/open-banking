@@ -1,0 +1,66 @@
+@use '@angular/material' as mat;
+
+// Material 3 system tokens (--mat-sys-*). `color-scheme: light dark` follows the OS; the toolbar toggle
+// pins it with data-theme. Everything else in the app reads these variables, so dark mode needs no
+// per-component overrides.
+html {
+  color-scheme: light dark;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$cyan-palette,
+        tertiary: mat.$azure-palette,
+        theme-type: color-scheme,
+      ),
+      typography: (
+        plain-family: 'Inter Variable',
+        brand-family: 'Inter Variable',
+      ),
+      density: 0,
+    )
+  );
+
+  &[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  &[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  // Semantic money colours, tuned for WCAG AA on surface in both schemes.
+  --ll-positive: light-dark(#0b6b3a, #7ddba4);
+  --ll-negative: light-dark(#ae2b21, #ffb4ab);
+  --ll-warning: light-dark(#8a5300, #ffcf7a);
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-large);
+  -webkit-font-smoothing: antialiased;
+}
+
+// Keyboard focus ring that is visible on every surface.
+:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
+// Amounts line up in tables and lists.
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

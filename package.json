@@ -1,0 +1,47 @@
+{
+  "name": "ledger-lens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ledger Lens - an Open Banking proof of concept (account information + payment initiation) with an API Inspector.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": "^24.15.0",
+    "npm": ">=11"
+  },
+  "scripts": {
+    "check:node": "node scripts/check-node.mjs",
+    "dev": "npm run check:node && concurrently --kill-others-on-fail --names api,web --prefix-colors blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev -w @ledger-lens/api",
+    "dev:web": "npm run start -w @ledger-lens/web",
+    "build": "npm run check:node && npm run build -w @ledger-lens/api && npm run build -w @ledger-lens/web",
+    "start": "npm run start -w @ledger-lens/api",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p e2e/tsconfig.json && npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "verify": "npm run check:node && npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build",
+    "e2e": "npm run build && playwright test",
+    "e2e:only": "playwright test",
+    "e2e:sandbox": "playwright test --project=sandbox",
+    "e2e:report": "playwright show-report",
+    "keys:truelayer": "node scripts/generate-truelayer-keys.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^24.19.2",
+    "angular-eslint": "^22.6.0",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}

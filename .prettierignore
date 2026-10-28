@@ -1,0 +1,12 @@
+node_modules
+dist
+.angular
+coverage
+playwright-report
+test-results
+e2e/.auth
+package-lock.json
+# Approved plan, kept verbatim as the source of truth
+docs/PLAN.md
+# Recorded provider fixtures are verbatim payloads
+apps/api/test/fixtures

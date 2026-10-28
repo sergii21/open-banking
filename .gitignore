@@ -1,0 +1,44 @@
+# Dependencies and build output
+node_modules/
+dist/
+out-tsc/
+.angular/
+coverage/
+*.tsbuildinfo
+
+# Secrets and local runtime state (never commit)
+.env
+.env.*
+!.env.example
+apps/api/.secrets/
+/data/
+/apps/api/data/
+*.pem
+*.key
+*.db
+*.db-shm
+*.db-wal
+
+# Playwright
+e2e/.auth/
+playwright-report/
+test-results/
+blob-report/
+
+# Editors and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.history/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude Code local settings
+.claude/settings.local.json
+__screenshots__/
