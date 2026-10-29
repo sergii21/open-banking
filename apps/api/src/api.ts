@@ -17,6 +17,12 @@ export async function registerApi(app: App, ctx: AppContext): Promise<void> {
     (api, _options, done) => {
       registerSessionHooks(api, ctx);
 
+      // Everything here is per-customer (or a one-off redirect): no browser or proxy should keep a copy.
+      api.addHook('onSend', (_request, reply, payload, next) => {
+        if (!reply.hasHeader('cache-control')) reply.header('cache-control', 'no-store');
+        next(null, payload);
+      });
+
       api.get('/meta', { config: { public: true } }, () => ({
         name: APP_NAME,
         version: APP_VERSION,

@@ -28,6 +28,7 @@ export async function createTestApp(
   overrides: Partial<AppConfig> = {},
   clockIso = '2026-10-28T10:00:00.000Z',
   transports?: ProviderTransports,
+  logStream?: { write(line: string): void },
 ): Promise<TestApp> {
   const clock = fixedClock(clockIso);
   const db = new Db(':memory:');
@@ -36,6 +37,7 @@ export async function createTestApp(
     clock,
     db,
     ...(transports ? { transports } : {}),
+    ...(logStream ? { logStream } : {}),
   });
   await built.app.ready();
   return {
@@ -77,8 +79,19 @@ export interface RequestOptions {
 }
 
 /** A browser stand-in: keeps cookies and echoes the XSRF cookie into the header like Angular does. */
+export interface Exchange {
+  method: string;
+  url: string;
+  status: number;
+  /** Response headers, without `set-cookie`: handing the browser its own cookies is the point of that header. */
+  headers: Record<string, unknown>;
+  body: string;
+}
+
 export class Client {
   readonly cookies = new Map<string, string>();
+  /** Everything this browser stand-in was ever told, for audits that search it for things that must not be there. */
+  readonly transcript: Exchange[] = [];
 
   constructor(private readonly t: TestApp) {}
 
@@ -117,6 +130,14 @@ export class Client {
       ...(options.remoteAddress ? { remoteAddress: options.remoteAddress } : {}),
     });
     this.store(response);
+    const { 'set-cookie': _setCookie, ...responseHeaders } = response.headers;
+    this.transcript.push({
+      method,
+      url,
+      status: response.statusCode,
+      headers: responseHeaders,
+      body: response.body,
+    });
     return response;
   }
 

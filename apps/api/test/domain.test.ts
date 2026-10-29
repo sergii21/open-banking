@@ -6,6 +6,7 @@ import { createPkce, safeEqual, TokenVault, VaultError, verifyPkce } from '../sr
 import {
   INSPECTOR_TRUNCATION,
   redactHeaders,
+  maskUrlSecrets,
   redactJson,
   redactUrl,
   truncateJson,
@@ -129,6 +130,14 @@ describe('redaction', () => {
       'https://auth.example/cb?code=[redacted]&state=ok&client_secret=[redacted]',
     );
     expect(redactUrl('/relative?code=1')).toBe('/relative?code=1');
+    // A hosted payment page keeps its resource token in the fragment.
+    expect(
+      redactUrl(
+        'https://payment.example/payments#payment_id=p1&resource_token=SECRET&return_uri=https%3A%2F%2Fapp.example%2Fback',
+      ),
+    ).toBe(
+      'https://payment.example/payments#payment_id=p1&resource_token=[redacted]&return_uri=https%3A%2F%2Fapp.example%2Fback',
+    );
   });
 
   it('truncates long arrays and strings and reports it', () => {
@@ -227,5 +236,37 @@ describe('categorise', () => {
   it('matches on the counterparty as well as the description and ignores diacritics', () => {
     expect(cat('Kartenzahlung 12.10.', -450, 'Bäckerei Müller')).toBe('other');
     expect(cat('Kartenzahlung', -450, 'Café Roma')).toBe('dining');
+  });
+});
+
+describe('secrets inside links', () => {
+  it('masks a resource token wherever a link carries it, and leaves other links exactly as they were', () => {
+    expect(maskUrlSecrets('https://bank.example/pay?payment_id=p1&resource_token=SECRET')).toBe(
+      'https://bank.example/pay?payment_id=p1&resource_token=[redacted]',
+    );
+    expect(maskUrlSecrets('https://bank.example/pay#resource_token=SECRET&x=1')).toBe(
+      'https://bank.example/pay#resource_token=[redacted]&x=1',
+    );
+    expect(maskUrlSecrets('https://bank.example')).toBe('https://bank.example');
+    expect(maskUrlSecrets('https://bank.example/a?b=c#frag')).toBe(
+      'https://bank.example/a?b=c#frag',
+    );
+    expect(maskUrlSecrets('https://bank.example/a?%63ode=SECRET')).toBe(
+      'https://bank.example/a?%63ode=[redacted]',
+    );
+  });
+
+  it('finds them inside response bodies, at any depth', () => {
+    const body = {
+      id: 'p1',
+      hosted_page: { uri: 'https://bank.example/pay?payment_id=p1&resource_token=SECRET' },
+      links: ['https://bank.example/pay#resource_token=SECRET2', 'https://docs.example/guide'],
+      note: 'see https://bank.example/pay?resource_token=SECRET3 for details',
+    };
+    const redacted = JSON.stringify(redactJson(body, { maskIdentifiers: false }));
+    expect(redacted).not.toContain('SECRET"');
+    expect(redacted).not.toContain('SECRET2');
+    expect(redacted).toContain('payment_id=p1&resource_token=[redacted]');
+    expect(redacted).toContain('https://docs.example/guide');
   });
 });

@@ -9,6 +9,23 @@ const KEY = Buffer.alloc(32, 7).toString('base64');
 const SECRET = 'x'.repeat(40);
 
 describe('loadConfig', () => {
+  it('takes the platform’s external URL for PUBLIC_URL when none is given, and PUBLIC_URL still wins', () => {
+    const render = { NODE_ENV: 'production', SESSION_SECRET: SECRET, TOKEN_ENCRYPTION_KEY: KEY };
+    const onRender = loadConfig({
+      ...render,
+      RENDER_EXTERNAL_URL: 'https://ledger-lens.onrender.com',
+    });
+    expect(onRender.publicUrl).toBe('https://ledger-lens.onrender.com');
+    expect(onRender.secureCookies).toBe(true);
+
+    const explicit = loadConfig({
+      ...render,
+      RENDER_EXTERNAL_URL: 'https://ledger-lens.onrender.com',
+      PUBLIC_URL: 'https://demo.example.com',
+    });
+    expect(explicit.publicUrl).toBe('https://demo.example.com');
+  });
+
   it('uses development defaults: SPA proxy origin, demo controls on, derived dev secrets', () => {
     const config = loadConfig({});
     expect(config.env).toBe('development');

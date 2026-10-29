@@ -58,6 +58,8 @@ export interface AppConfig {
   refreshCooldownSeconds: number;
   /** Per-IP request ceiling for the whole app; sensitive routes add tighter per-session limits. */
   rateLimitPerMinute: number;
+  /** New anonymous sessions one address may start per minute: each costs a database row, so a public demo caps it. */
+  sessionCreatesPerMinute: number;
   /** Payments older than this, still awaiting the bank, are marked expired (TrueLayer's resource token lasts 15 minutes). */
   paymentApprovalMinutes: number;
   /** A webhook claiming to be older than this is rejected. TrueLayer retries for up to 72 hours. */
@@ -88,6 +90,8 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   LOG_LEVEL: LogLevel.optional(),
   PUBLIC_URL: z.url().optional(),
+  /** Render sets this to the service's public https URL; it stands in for PUBLIC_URL when that is not given. */
+  RENDER_EXTERNAL_URL: z.url().optional(),
   DATABASE_PATH: z.string().min(1).default('./data/ledger-lens.db'),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters').optional(),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
@@ -102,6 +106,7 @@ const EnvSchema = z.object({
   MAX_PAYMENT_MINOR: z.coerce.number().int().min(1).max(5_000_000).default(500_000),
   REFRESH_COOLDOWN_SECONDS: z.coerce.number().int().min(0).max(3600).default(20),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(600),
+  SESSION_CREATES_PER_MINUTE: z.coerce.number().int().min(1).max(100_000).default(30),
   PAYMENT_APPROVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   ALLOW_LIVE_PROVIDERS: z.stringbool().default(false),
   MONOBANK_HISTORY_MONTHS: z.coerce.number().int().min(1).max(13).default(3),
@@ -291,6 +296,7 @@ export function loadConfig(
 
   const publicUrl = (
     e.PUBLIC_URL ??
+    e.RENDER_EXTERNAL_URL ??
     (e.NODE_ENV === 'development' ? 'http://localhost:4200' : `http://localhost:${e.PORT}`)
   ).replace(/\/+$/, '');
 
@@ -322,6 +328,7 @@ export function loadConfig(
     maxPaymentMinor: e.MAX_PAYMENT_MINOR,
     refreshCooldownSeconds: e.REFRESH_COOLDOWN_SECONDS,
     rateLimitPerMinute: e.RATE_LIMIT_PER_MINUTE,
+    sessionCreatesPerMinute: e.SESSION_CREATES_PER_MINUTE,
     paymentApprovalMinutes: e.PAYMENT_APPROVAL_MINUTES,
     webhookMaxAgeSeconds: e.WEBHOOK_MAX_AGE_SECONDS,
     mockBankStepSeconds: e.MOCK_BANK_STEP_SECONDS,

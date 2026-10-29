@@ -65,6 +65,10 @@ export function maskIpAddress(value: string): string {
 }
 
 export function redactJson(value: unknown, options: RedactOptions): unknown {
+  // A link inside a value can carry a secret in its query or fragment (a payment's hosted page does): mask it there too.
+  if (typeof value === 'string') {
+    return /^https?:\/\//i.test(value) && /[?#]/.test(value) ? maskUrlSecrets(value) : value;
+  }
   if (Array.isArray(value)) return value.map((item) => redactJson(item, options));
   if (value !== null && typeof value === 'object') {
     const result: Record<string, unknown> = {};
@@ -119,14 +123,50 @@ const SECRET_QUERY_PARAMS = new Set([
   'token',
 ]);
 
-/** Masks secret query values; relative or malformed URLs are returned as given. */
+function maskParameters(parameters: string): string {
+  return parameters
+    .split('&')
+    .map((part) => {
+      const equals = part.indexOf('=');
+      if (equals < 0) return part;
+      let name = part.slice(0, equals);
+      try {
+        name = decodeURIComponent(name);
+      } catch {
+        // Not valid percent-encoding: compare the name as it is.
+      }
+      return SECRET_QUERY_PARAMS.has(name) ? `${part.slice(0, equals)}=${REDACTED}` : part;
+    })
+    .join('&');
+}
+
+/**
+ * Masks secret parameters wherever a URL carries them, in the query (`?code=...`) or in the fragment, which is where a
+ * hosted payment page keeps its resource token (`#payment_id=...&resource_token=...`). Everything else is left exactly as
+ * it was, so a URL with nothing to hide comes back unchanged.
+ */
+export function maskUrlSecrets(url: string): string {
+  const hashAt = url.indexOf('#');
+  const beforeHash = hashAt < 0 ? url : url.slice(0, hashAt);
+  const hash = hashAt < 0 ? '' : url.slice(hashAt + 1);
+  const queryAt = beforeHash.indexOf('?');
+  const base = queryAt < 0 ? beforeHash : beforeHash.slice(0, queryAt);
+  const query = queryAt < 0 ? '' : beforeHash.slice(queryAt + 1);
+  return (
+    base +
+    (queryAt < 0 ? '' : `?${maskParameters(query)}`) +
+    (hashAt < 0 ? '' : `#${maskParameters(hash)}`)
+  );
+}
+
+/** Masks secret query and fragment values; relative or malformed URLs are returned as given. */
 export function redactUrl(url: string): string {
   try {
     const parsed = new URL(url);
     for (const name of [...parsed.searchParams.keys()]) {
       if (SECRET_QUERY_PARAMS.has(name)) parsed.searchParams.set(name, REDACTED);
     }
-    return decodeURI(parsed.toString());
+    return maskUrlSecrets(decodeURI(parsed.toString()));
   } catch {
     return url;
   }

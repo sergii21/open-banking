@@ -89,8 +89,10 @@ Project specifics on top of it (enforced by ESLint where possible):
   `<aside>` docked at the bottom below 1440px and on the right above it (content gets padding and `scroll-padding` so a
   focused control is never hidden behind it: WCAG 2.2 "Focus Not Obscured").
 - **zod in the SPA**: always `import * as z from 'zod'` (namespace import), never `import { z } from 'zod'` - the latter
-  makes esbuild bundle all 64 locales (~300 kB). `src/zod-config.ts` (imported first by `main.ts`) sets `jitless` so zod never
-  probes `new Function` under our strict CSP (which logs a violation). The initial bundle budget is 900 kB warn / 1.2 MB error.
+  makes esbuild bundle all 64 locales (~300 kB). In the SPA the specifier `zod` is mapped (`apps/web/tsconfig.json` `paths`) to `src/zod-jitless.ts`, which turns on
+  `jitless` before any schema exists, so zod never probes `new Function` under our strict CSP (which logs a violation). It must
+  be a module every schema file imports: a `config()` call in `main.ts` runs after the shared chunk that builds the contract
+  schemas. `e2e/csp.spec.ts` watches for violations. The initial bundle budget is 900 kB warn / 1.2 MB error.
 - Bank logos use `NgOptimizedImage`. Every route must pass axe (WCAG AA): labels, focus order, contrast, status text — never colour alone.
 - Feature-first folders with lazy routes: `core/` (config, interceptors, session, inspector stream), `shared/`, `features/<name>/`.
 - File names follow the CLI 2025 style guide: `transactions.ts`, `transactions.html`, no `.component` suffix.

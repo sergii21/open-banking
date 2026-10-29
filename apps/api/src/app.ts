@@ -39,6 +39,8 @@ export interface BuildAppOptions {
   db?: Db;
   /** Tests script the provider's HTTP instead of reaching the network. */
   transports?: ProviderTransports;
+  /** Tests capture what the server logs, to check that nothing sensitive is ever written there. */
+  logStream?: { write(line: string): void };
 }
 
 export interface BuiltApp {
@@ -55,8 +57,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const db = options.db ?? new Db(config.databasePath);
   migrate(db);
 
+  const logger = loggerOptions(config);
   const app: App = Fastify({
-    logger: loggerOptions(config),
+    logger:
+      options.logStream && typeof logger === 'object'
+        ? { ...(logger as object), stream: options.logStream }
+        : logger,
     trustProxy: config.trustProxy,
     requestIdHeader: 'x-request-id',
     genReqId: () => randomUUID(),
@@ -213,6 +219,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     }
     return reply
       .code(404)
+      .header('cache-control', 'no-store')
       .type(PROBLEM_CONTENT_TYPE)
       .send({
         type: `${PROBLEM_TYPE_BASE}not-found`,

@@ -18,6 +18,9 @@ export const CSRF_HEADER = 'x-xsrf-token';
  * "delete my data" deletes the session.
  */
 export class SessionService {
+  /** When each address last started sessions, newest last: a one-minute sliding window, kept in memory. */
+  private readonly creations = new Map<string, number[]>();
+
   constructor(
     private readonly core: CoreContext,
     private readonly providers: ProviderRegistry,
@@ -31,6 +34,31 @@ export class SessionService {
 
   get cookieMaxAgeSeconds(): number {
     return this.core.config.sessionTtlDays * 86_400;
+  }
+
+  /**
+   * Whether this address may start another session right now. Starting one is free for the caller and costs us a row, so
+   * without a cap a loop could fill the database; real people start a handful. Returns seconds to wait when refused.
+   */
+  admitCreation(address: string): { ok: true } | { ok: false; retryAfterSeconds: number } {
+    const now = this.core.clock.now().getTime();
+    const recent = (this.creations.get(address) ?? []).filter((at) => now - at < 60_000);
+    if (recent.length >= this.core.config.sessionCreatesPerMinute) {
+      this.creations.set(address, recent);
+      const oldest = recent[0] ?? now;
+      return {
+        ok: false,
+        retryAfterSeconds: Math.max(1, Math.ceil((oldest + 60_000 - now) / 1000)),
+      };
+    }
+    recent.push(now);
+    this.creations.set(address, recent);
+    if (this.creations.size > 10_000) {
+      for (const [key, times] of this.creations) {
+        if (times.every((at) => now - at >= 60_000)) this.creations.delete(key);
+      }
+    }
+    return { ok: true };
   }
 
   create(): { token: string; record: SessionRecord } {

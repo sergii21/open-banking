@@ -1,0 +1,54 @@
+# Render blueprint for a SANDBOX-ONLY public demo of Ledger Lens: the mock bank, no real accounts, anonymous sessions that are
+# forgotten after two days. It is a starting point and has NOT been deployed from this repository; check the first build's log.
+#
+# How to use it: push the repository somewhere Render can read, create a Blueprint from this file, and open the service URL.
+#
+# Things to know:
+#  - Decision D7: a public instance never reads real accounts. `PROVIDERS` stays `mock`. The monobank adapter refuses to start on a
+#    public URL anyway, and TrueLayer (sandbox) is optional (see the commented block).
+#  - The free plan sleeps when idle and its disk is ephemeral, so the SQLite file is recreated after a restart: every visitor then
+#    simply starts a fresh anonymous session. Use a paid plan with a disk (and a DATABASE_PATH on it) to keep data.
+#  - Render sets RENDER_EXTERNAL_URL to the service's https URL and the app uses it as PUBLIC_URL (redirects, cookies).
+#  - `generateValue` produces a random base64 value; the app needs SESSION_SECRET (>= 32 characters) and TOKEN_ENCRYPTION_KEY
+#    (32 bytes, base64). If the key is ever rejected at startup the error says what shape it needs.
+services:
+  - type: web
+    name: ledger-lens-demo
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /readyz
+    envVars:
+      - key: NODE_VERSION
+        value: 24.15.0
+      - key: NODE_ENV
+        value: production
+      - key: PROVIDERS
+        value: mock
+      - key: TRUST_PROXY
+        value: 'true'
+      - key: DEMO_CONTROLS
+        value: 'true'
+      - key: SESSION_TTL_DAYS
+        value: '2'
+      - key: DATABASE_PATH
+        value: /tmp/ledger-lens.db
+      - key: LOG_LEVEL
+        value: info
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      # TrueLayer sandbox (optional): switch PROVIDERS to `mock,truelayer`, register {service URL}/api/connections/callback,
+      # /api/payments/return and the webhook /api/webhooks/truelayer in the TrueLayer Console, and give Render these (never commit them):
+      # - key: TRUELAYER_CLIENT_ID
+      #   sync: false
+      # - key: TRUELAYER_CLIENT_SECRET
+      #   sync: false
+      # - key: TRUELAYER_SIGNING_KEY_ID
+      #   sync: false
+      # - key: TRUELAYER_PRIVATE_KEY       # the PEM with newlines written as \n
+      #   sync: false
+      # - key: TRUELAYER_MERCHANT_ACCOUNT_ID_GBP
+      #   sync: false

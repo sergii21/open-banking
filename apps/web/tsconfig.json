@@ -6,7 +6,11 @@
     "experimentalDecorators": true,
     "importHelpers": true,
     "target": "ES2022",
-    "module": "preserve"
+    "module": "preserve",
+    "paths": {
+      "@ledger-lens/contracts": ["../../packages/contracts/src/index.ts"],
+      "zod": ["./src/zod-jitless.ts"]
+    }
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,

@@ -1,5 +1,6 @@
 import { SessionInfo } from '@ledger-lens/contracts';
 import * as z from 'zod';
+import { AppError } from '../../errors';
 import { requireSession } from '../../plugins/session';
 import type { App, AppContext } from '../../types';
 import { CSRF_COOKIE } from './service';
@@ -19,6 +20,17 @@ export function registerSessionRoutes(api: App, ctx: AppContext): void {
     (request, reply) => {
       let record = request.session;
       if (!record) {
+        const admitted = ctx.sessions.admitCreation(request.ip);
+        if (!admitted.ok) {
+          throw new AppError(
+            'rate_limited',
+            429,
+            'Too many new sessions from this address. Try again in a minute.',
+            {
+              retryAfterSeconds: admitted.retryAfterSeconds,
+            },
+          );
+        }
         const created = ctx.sessions.create();
         record = created.record;
         reply.setCookie(ctx.sessions.cookieName, created.token, { ...cookieBase, httpOnly: true });
