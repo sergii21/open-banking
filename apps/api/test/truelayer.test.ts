@@ -41,6 +41,8 @@ function adapter(stub = new TrueLayerStub()) {
     }),
     config: truelayerConfig(),
     clock,
+    transport: stub.transport,
+    webhookMaxAgeSeconds: 86_400,
   });
   return { provider, stub, inspector };
 }
@@ -178,6 +180,8 @@ describe('TrueLayer adapter: connecting', () => {
       }),
       config: truelayerConfig({ clientSecret: 'wrong' }),
       clock: fixedClock('2026-10-28T10:00:00.000Z'),
+      transport: wrong.stub.transport,
+      webhookMaxAgeSeconds: 86_400,
     });
     await expect(
       broken.completeConnection(

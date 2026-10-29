@@ -9,3 +9,7 @@ the body from the API Inspector) and keep the test green. A fixture that no long
 tests exist to catch.
 
 Account ids, merchant account ids and payment ids here are made up.
+
+`payments/` holds the Payments v3 shapes (create response, payment objects per status, the RFC 7807 errors, webhook
+events). The webhook key set and every signature are generated per test run with a throwaway P-521 key, so no key
+material is committed.

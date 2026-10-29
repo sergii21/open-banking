@@ -1,0 +1,7 @@
+{
+  "type": "https://docs.truelayer.com/docs/error-types#conflict",
+  "title": "Conflict",
+  "status": 409,
+  "trace_id": "00000000000000000000000000000003",
+  "detail": "A request with this Idempotency-Key is still being processed."
+}

@@ -42,6 +42,12 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 .error { color: var(--danger); font-weight: 600; }
+dl.summary { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; }
+dl.summary div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+dl.summary div:last-child { border-bottom: 0; }
+dl.summary dt { color: var(--muted); }
+dl.summary dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.amount { font-size: 1.6rem; font-weight: 700; margin: 0 0 12px; }
 `;
 
 export function logoSvg(institution: Pick<MockInstitution, 'name' | 'color' | 'initials'>): string {
@@ -80,6 +86,8 @@ export interface AuthRequest {
   codeChallenge: string;
   scope: string;
   institution: string;
+  /** Opaque id of the Ledger Lens customer, passed through so the bank can link their payments to these accounts. */
+  customerRef?: string | undefined;
 }
 
 export function hiddenFields(values: Record<string, string>): string {
@@ -96,6 +104,7 @@ export function authFields(request: AuthRequest): Record<string, string> {
     code_challenge: request.codeChallenge,
     scope: request.scope,
     institution: request.institution,
+    ...(request.customerRef ? { customer_ref: request.customerRef } : {}),
   };
 }
 
@@ -216,5 +225,88 @@ export function errorPage(institution: MockInstitution | undefined, message: str
     'Request problem',
     fallback,
     `<h1>We can't continue</h1><p class="error" role="alert">${esc(message)}</p>`,
+  );
+}
+
+// ------------------------------------------------------------------------------------------------ payments
+
+/** What the hosted payment page needs to describe the payment being approved. */
+export interface PaySummary {
+  paymentId: string;
+  resourceToken: string;
+  amount: string;
+  beneficiaryName: string;
+  beneficiaryIdentifier: string;
+  reference: string;
+}
+
+export interface PayOutcomeOption {
+  value: string;
+  label: string;
+  hint: string;
+}
+
+export function payPage(
+  institution: MockInstitution,
+  summary: PaySummary,
+  personas: readonly Persona[],
+  outcomes: readonly PayOutcomeOption[],
+): string {
+  const personaOptions = personas
+    .map(
+      (persona, index) => `<label class="persona">
+<input type="radio" name="persona" value="${esc(persona.id)}"${index === 0 ? ' checked' : ''}>
+<div><strong>${esc(persona.name)}</strong><span>${esc(persona.blurb)}</span></div>
+</label>`,
+    )
+    .join('\n');
+  const outcomeOptions = outcomes
+    .map(
+      (outcome, index) => `<label class="persona">
+<input type="radio" name="outcome" value="${esc(outcome.value)}"${index === 0 ? ' checked' : ''}>
+<div><strong>${esc(outcome.label)}</strong><span>${esc(outcome.hint)}</span></div>
+</label>`,
+    )
+    .join('\n');
+  return layout(
+    'Approve payment',
+    institution,
+    `<h1>Approve payment</h1>
+<p class="amount">${esc(summary.amount)}</p>
+<dl class="summary">
+<div><dt>To</dt><dd>${esc(summary.beneficiaryName)}</dd></div>
+<div><dt>Account</dt><dd>${esc(summary.beneficiaryIdentifier)}</dd></div>
+<div><dt>Reference</dt><dd>${esc(summary.reference)}</dd></div>
+</dl>
+<form method="post" action="/mock-bank/pay/decision">
+${hiddenFields({ payment_id: summary.paymentId, resource_token: summary.resourceToken })}
+<fieldset>
+<legend>Paying from</legend>
+${personaOptions}
+</fieldset>
+<fieldset>
+<legend>What should happen</legend>
+${outcomeOptions}
+</fieldset>
+<div class="actions">
+<button type="submit" name="decision" value="approve">Approve payment</button>
+<button type="submit" class="secondary" name="decision" value="cancel">Cancel</button>
+</div>
+</form>`,
+  );
+}
+
+/** Shown instead of the approval form when the payment is already settled one way or the other. */
+export function payClosedPage(
+  institution: MockInstitution,
+  message: string,
+  returnUrl: string,
+): string {
+  return layout(
+    'Payment',
+    institution,
+    `<h1>This payment is closed</h1>
+<p role="status">${esc(message)}</p>
+<div class="actions"><a class="button secondary" href="${esc(returnUrl)}">Return to Ledger Lens</a></div>`,
   );
 }

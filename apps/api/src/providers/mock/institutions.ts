@@ -108,3 +108,32 @@ export const MOCK_INSTITUTIONS: readonly MockInstitution[] = [
 export function findMockInstitution(slug: string): MockInstitution | undefined {
   return MOCK_INSTITUTIONS.find((institution) => institution.slug === slug);
 }
+
+/**
+ * The id the payments API knows a bank by, shaped like TrueLayer's mock providers (`mock-payments-gb-redirect`). The
+ * degraded bank is a bank whose hosted page is down, so a payment sent to it fails at the bank.
+ */
+export const paymentProviderId = (institution: MockInstitution): string =>
+  `mock-payments-${institution.locale}-${institution.healthy ? 'redirect' : 'degraded'}`;
+
+export function findMockInstitutionByPaymentProvider(id: string): MockInstitution | undefined {
+  return MOCK_INSTITUTIONS.find((institution) => paymentProviderId(institution) === id);
+}
+
+/** The customers who can pay at the bank's page: those with a working account (not the outage or timeout stories). */
+export const PAYING_PERSONAS: readonly Persona[] = PERSONAS.filter(
+  (persona) => persona.outcome === 'ok' && persona.id !== 'short_consent',
+);
+
+/** The German bank settles a payment a step after executing it (SEPA); the UK bank ends at "executed" (Faster Payments). */
+export const settlesPayments = (institution: MockInstitution): boolean =>
+  institution.country === 'DE';
+
+export function paymentsNote(institution: MockInstitution): string {
+  if (!institution.healthy) {
+    return 'This bank’s payment page is down, so a payment sent here fails at the bank.';
+  }
+  return settlesPayments(institution)
+    ? 'Simulated SEPA transfer. The bank settles it a few seconds after executing it.'
+    : 'Simulated Faster Payment. It ends at “Executed”; there is no settlement step.';
+}

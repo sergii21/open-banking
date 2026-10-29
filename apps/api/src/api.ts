@@ -3,6 +3,7 @@ import { registerConnectionRoutes } from './modules/connections/routes';
 import { registerDemoRoutes } from './modules/demo/routes';
 import { registerEventRoutes } from './modules/events/routes';
 import { registerInspectorRoutes } from './modules/inspector/routes';
+import { registerPaymentRoutes } from './modules/payments/routes';
 import { registerSessionRoutes } from './modules/session/routes';
 import { registerTransactionRoutes } from './modules/transactions/routes';
 import { registerSessionHooks } from './plugins/session';
@@ -27,6 +28,7 @@ export async function registerApi(app: App, ctx: AppContext): Promise<void> {
       registerConnectionRoutes(api, ctx);
       registerAccountRoutes(api, ctx);
       registerTransactionRoutes(api, ctx);
+      registerPaymentRoutes(api, ctx);
       registerInspectorRoutes(api, ctx);
       registerEventRoutes(api, ctx);
       registerDemoRoutes(api, ctx);

@@ -6,7 +6,7 @@ import type {
   CreateConnectionResponse,
 } from '@ledger-lens/contracts';
 import type { ConnectionRecord } from '../../db/repos';
-import { createPkce, newId, randomToken } from '../../domain/crypto';
+import { createPkce, customerRef, newId, randomToken } from '../../domain/crypto';
 import { AppError, notFound } from '../../errors';
 import type { CallContext } from '../../providers/port';
 import type { ProviderRegistry } from '../../providers/registry';
@@ -119,6 +119,7 @@ export class ConnectionService {
         state,
         codeChallenge: challenge,
         redirectUri: this.redirectUri,
+        customerRef: customerRef(sessionId),
       },
       { sessionId, connectionId },
     );

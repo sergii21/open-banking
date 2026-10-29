@@ -59,6 +59,18 @@ export const CreatePaymentRequest = z.object({
 });
 export type CreatePaymentRequest = z.infer<typeof CreatePaymentRequest>;
 
+/** `Idempotency-Key` request header on `POST /api/payments`: one fresh value (a UUID) per payment attempt. */
+export const IDEMPOTENCY_HEADER = 'idempotency-key';
+export const IdempotencyKey = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{8,64}$/, 'The Idempotency-Key must be 8-64 letters, digits, "-" or "_"');
+
+/** What `POST /api/webhooks/:provider` answers. Anything 2xx tells the provider to stop retrying. */
+export const WebhookAck = z.object({
+  status: z.enum(['applied', 'ignored', 'duplicate', 'unknown_payment', 'unsupported_event']),
+});
+export type WebhookAck = z.infer<typeof WebhookAck>;
+
 export const PaymentHistoryEntry = z.object({
   status: PaymentStatus,
   at: IsoDateTime,

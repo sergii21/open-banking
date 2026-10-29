@@ -98,3 +98,9 @@ export function createPkce(): { verifier: string; challenge: string } {
 export function verifyPkce(verifier: string, challenge: string): boolean {
   return safeEqual(createHash('sha256').update(verifier).digest('base64url'), challenge);
 }
+
+/**
+ * An opaque, stable stand-in for "this customer" that is safe to hand to a provider: it identifies a session to the fake
+ * bank (so a payment shows up in that customer's accounts) without revealing the session id.
+ */
+export const customerRef = (sessionId: string): string => sha256Hex(`customer-ref:${sessionId}`);

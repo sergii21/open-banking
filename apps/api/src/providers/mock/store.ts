@@ -17,6 +17,8 @@ export interface MockConsent {
   expiresAt: string;
   revokedAt: string | null;
   failNext: 'unavailable' | 'rate_limit' | null;
+  /** Which Ledger Lens customer this consent belongs to; payments they make show up in these accounts only. */
+  customerRef: string | null;
 }
 
 interface ConsentRow {
@@ -29,6 +31,7 @@ interface ConsentRow {
   expires_at: string;
   revoked_at: string | null;
   fail_next: string | null;
+  customer_ref: string | null;
 }
 
 const toConsent = (row: ConsentRow): MockConsent => ({
@@ -42,6 +45,7 @@ const toConsent = (row: ConsentRow): MockConsent => ({
   revokedAt: row.revoked_at,
   failNext:
     row.fail_next === 'unavailable' || row.fail_next === 'rate_limit' ? row.fail_next : null,
+  customerRef: row.customer_ref,
 });
 
 export interface IssuedTokens {
@@ -67,6 +71,7 @@ export class MockBankStore {
     seed: string;
     validDays: number;
     clientId?: string;
+    customerRef?: string | undefined;
   }): MockConsent {
     const now = this.clock.now();
     const consent: MockConsent = {
@@ -79,9 +84,10 @@ export class MockBankStore {
       expiresAt: new Date(now.getTime() + input.validDays * 86_400_000).toISOString(),
       revokedAt: null,
       failNext: null,
+      customerRef: input.customerRef ?? null,
     };
     this.db.run(
-      `INSERT INTO mock_consents (id, institution, persona, client_id, seed, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO mock_consents (id, institution, persona, client_id, seed, created_at, expires_at, customer_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       consent.id,
       consent.institution,
       consent.persona,
@@ -89,6 +95,7 @@ export class MockBankStore {
       consent.seed,
       consent.createdAt,
       consent.expiresAt,
+      consent.customerRef,
     );
     return consent;
   }

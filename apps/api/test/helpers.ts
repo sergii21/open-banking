@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { LightMyRequestResponse } from 'fastify';
 import { buildApp, type BuiltApp } from '../src/app';
 import { fixedClock } from '../src/clock';
@@ -117,6 +118,47 @@ export class Client {
     });
     this.store(response);
     return response;
+  }
+
+  /** Sends a payment-creating request with an Idempotency-Key (a fresh one unless given). */
+  createPayment(payload: unknown, key: string | null = randomUUID()) {
+    return this.post(
+      '/api/payments',
+      payload,
+      key === null ? {} : { headers: { 'idempotency-key': key } },
+    );
+  }
+
+  /**
+   * Walks the mock bank's hosted payment page like a browser: open the link, choose who pays and what happens, press the
+   * button, follow the bank's redirect to the app's return endpoint, and follow that to the page it names.
+   */
+  async payAtBank(
+    authUrl: string,
+    options: { persona?: string; outcome?: string; decision?: 'approve' | 'cancel' } = {},
+  ): Promise<{ bankLocation: string; resultPath: string }> {
+    const link = new URL(authUrl);
+    const page = await this.t.app.inject({ method: 'GET', url: `${link.pathname}${link.search}` });
+    if (page.statusCode !== 200) throw new Error(`payment page: ${page.statusCode} ${page.body}`);
+
+    const decision = await this.t.app.inject({
+      method: 'POST',
+      url: '/mock-bank/pay/decision',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        ...hiddenFields(page.body),
+        persona: options.persona ?? 'anna',
+        outcome: options.outcome ?? 'test_executed',
+        decision: options.decision ?? 'approve',
+      }).toString(),
+    });
+    if (decision.statusCode !== 302)
+      throw new Error(`decision: ${decision.statusCode} ${decision.body}`);
+    const bankLocation = decision.headers['location'] as string;
+
+    const back = new URL(bankLocation);
+    const returned = await this.get(`${back.pathname}${back.search}`);
+    return { bankLocation, resultPath: returned.headers['location'] as string };
   }
 
   get = (url: string, options?: RequestOptions) => this.request('GET', url, options);

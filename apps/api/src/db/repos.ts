@@ -2,6 +2,9 @@ import type {
   AccountType,
   Category,
   ConnectionStatus,
+  PaymentFailureReason,
+  PaymentHistoryEntry,
+  PaymentStatus,
   Permission,
   ProviderId,
   TransactionQuery,
@@ -849,6 +852,309 @@ export class SyncJobsRepo {
   }
 }
 
+// ================================================================================================= payments
+
+export interface PaymentRecord {
+  id: string;
+  sessionId: string;
+  provider: ProviderId;
+  institutionId: string;
+  institutionName: string;
+  idempotencyKey: string;
+  requestHash: string;
+  providerIdempotencyKey: string;
+  /** Null until the provider has accepted the payment; such a row is invisible to the customer. */
+  providerPaymentId: string | null;
+  amountMinor: number;
+  currency: string;
+  beneficiaryName: string;
+  beneficiaryIdentifier: string;
+  reference: string;
+  status: PaymentStatus;
+  settlementExpected: boolean;
+  failureReason: PaymentFailureReason | null;
+  statusHistory: PaymentHistoryEntry[];
+  authUrlEnc: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastCheckedAt: string | null;
+}
+
+interface PaymentRow {
+  id: string;
+  session_id: string;
+  provider: string;
+  institution_id: string;
+  institution_name: string;
+  idempotency_key: string;
+  request_hash: string;
+  provider_idempotency_key: string;
+  provider_payment_id: string | null;
+  amount_minor: number;
+  currency: string;
+  beneficiary_name: string;
+  beneficiary_identifier: string;
+  reference: string;
+  status: string;
+  settlement_expected: number;
+  failure_reason: string | null;
+  status_history: string;
+  auth_url_enc: string | null;
+  created_at: string;
+  updated_at: string;
+  last_checked_at: string | null;
+}
+
+const toPayment = (row: PaymentRow): PaymentRecord => ({
+  id: row.id,
+  sessionId: row.session_id,
+  provider: row.provider as ProviderId,
+  institutionId: row.institution_id,
+  institutionName: row.institution_name,
+  idempotencyKey: row.idempotency_key,
+  requestHash: row.request_hash,
+  providerIdempotencyKey: row.provider_idempotency_key,
+  providerPaymentId: row.provider_payment_id,
+  amountMinor: row.amount_minor,
+  currency: row.currency,
+  beneficiaryName: row.beneficiary_name,
+  beneficiaryIdentifier: row.beneficiary_identifier,
+  reference: row.reference,
+  status: row.status as PaymentStatus,
+  settlementExpected: row.settlement_expected === 1,
+  failureReason: row.failure_reason as PaymentFailureReason | null,
+  statusHistory: JSON.parse(row.status_history) as PaymentHistoryEntry[],
+  authUrlEnc: row.auth_url_enc,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  lastCheckedAt: row.last_checked_at,
+});
+
+export type PaymentPatch = Partial<
+  Pick<
+    PaymentRecord,
+    | 'providerPaymentId'
+    | 'status'
+    | 'settlementExpected'
+    | 'failureReason'
+    | 'statusHistory'
+    | 'authUrlEnc'
+    | 'lastCheckedAt'
+  >
+>;
+
+const PAYMENT_COLUMNS: Record<keyof PaymentPatch, string> = {
+  providerPaymentId: 'provider_payment_id',
+  status: 'status',
+  settlementExpected: 'settlement_expected',
+  failureReason: 'failure_reason',
+  statusHistory: 'status_history',
+  authUrlEnc: 'auth_url_enc',
+  lastCheckedAt: 'last_checked_at',
+};
+
+/** A payment with nothing left to wait for: failed, cancelled, settled, or executed where no settlement follows. */
+const NOT_FINAL = `(status IN ('pending','authorised') OR (status = 'executed' AND settlement_expected = 1))`;
+
+export class PaymentsRepo {
+  constructor(private readonly db: Db) {}
+
+  insert(record: PaymentRecord): void {
+    this.db.run(
+      `INSERT INTO payments (id, session_id, provider, institution_id, institution_name, idempotency_key, request_hash,
+         provider_idempotency_key, provider_payment_id, amount_minor, currency, beneficiary_name, beneficiary_identifier,
+         reference, status, settlement_expected, failure_reason, status_history, auth_url_enc, created_at, updated_at,
+         last_checked_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      record.id,
+      record.sessionId,
+      record.provider,
+      record.institutionId,
+      record.institutionName,
+      record.idempotencyKey,
+      record.requestHash,
+      record.providerIdempotencyKey,
+      record.providerPaymentId,
+      record.amountMinor,
+      record.currency,
+      record.beneficiaryName,
+      record.beneficiaryIdentifier,
+      record.reference,
+      record.status,
+      record.settlementExpected ? 1 : 0,
+      record.failureReason,
+      JSON.stringify(record.statusHistory),
+      record.authUrlEnc,
+      record.createdAt,
+      record.updatedAt,
+      record.lastCheckedAt,
+    );
+  }
+
+  /** Only payments the provider has accepted: an attempt that never reached it is not a payment yet. */
+  findForSession(sessionId: string, id: string): PaymentRecord | undefined {
+    const row = this.db.get<PaymentRow>(
+      'SELECT * FROM payments WHERE session_id = ? AND id = ? AND provider_payment_id IS NOT NULL',
+      sessionId,
+      id,
+    );
+    return row ? toPayment(row) : undefined;
+  }
+
+  findById(id: string): PaymentRecord | undefined {
+    const row = this.db.get<PaymentRow>('SELECT * FROM payments WHERE id = ?', id);
+    return row ? toPayment(row) : undefined;
+  }
+
+  /** Includes attempts that never reached the provider: a retry with the same key completes them. */
+  findByIdempotencyKey(sessionId: string, key: string): PaymentRecord | undefined {
+    const row = this.db.get<PaymentRow>(
+      'SELECT * FROM payments WHERE session_id = ? AND idempotency_key = ?',
+      sessionId,
+      key,
+    );
+    return row ? toPayment(row) : undefined;
+  }
+
+  findByProviderPaymentId(
+    providerPaymentId: string,
+    provider?: ProviderId,
+  ): PaymentRecord | undefined {
+    const row = provider
+      ? this.db.get<PaymentRow>(
+          'SELECT * FROM payments WHERE provider = ? AND provider_payment_id = ?',
+          provider,
+          providerPaymentId,
+        )
+      : this.db.get<PaymentRow>(
+          'SELECT * FROM payments WHERE provider_payment_id = ? ORDER BY created_at DESC LIMIT 1',
+          providerPaymentId,
+        );
+    return row ? toPayment(row) : undefined;
+  }
+
+  listBySession(sessionId: string): PaymentRecord[] {
+    return this.db
+      .all<PaymentRow>(
+        'SELECT * FROM payments WHERE session_id = ? AND provider_payment_id IS NOT NULL ORDER BY created_at DESC, id DESC',
+        sessionId,
+      )
+      .map(toPayment);
+  }
+
+  update(id: string, patch: PaymentPatch, now: string): void {
+    const sets: string[] = [];
+    const params: SqlParam[] = [];
+    for (const [key, value] of Object.entries(patch) as [keyof PaymentPatch, unknown][]) {
+      sets.push(`${PAYMENT_COLUMNS[key]} = ?`);
+      if (key === 'statusHistory') params.push(JSON.stringify(value));
+      else if (key === 'settlementExpected') params.push(value ? 1 : 0);
+      else params.push((value ?? null) as SqlParam);
+    }
+    if (sets.length === 0) return;
+    this.db.run(
+      `UPDATE payments SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`,
+      ...params,
+      now,
+      id,
+    );
+  }
+
+  /** A poll or webhook looked at the payment and found nothing new: remember that without calling it an update. */
+  touchChecked(id: string, now: string): void {
+    this.db.run('UPDATE payments SET last_checked_at = ? WHERE id = ?', now, id);
+  }
+
+  delete(id: string): void {
+    this.db.run('DELETE FROM payments WHERE id = ?', id);
+  }
+
+  /**
+   * Payments the polling fallback should ask the provider about: not final, accepted by the provider, and not touched by
+   * a webhook or a poll lately. A payment nobody has checked yet is first looked at after `firstCheckBefore`.
+   */
+  listDueForPoll(firstCheckBefore: string, recheckBefore: string): PaymentRecord[] {
+    return this.db
+      .all<PaymentRow>(
+        `SELECT * FROM payments WHERE provider_payment_id IS NOT NULL AND ${NOT_FINAL}
+           AND ((last_checked_at IS NULL AND created_at <= ?) OR last_checked_at <= ?)
+         ORDER BY created_at ASC LIMIT 50`,
+        firstCheckBefore,
+        recheckBefore,
+      )
+      .map(toPayment);
+  }
+
+  /** Still `pending` since before the cut-off: the customer never finished at the bank. */
+  listPendingBefore(before: string): PaymentRecord[] {
+    return this.db
+      .all<PaymentRow>(
+        `SELECT * FROM payments WHERE provider_payment_id IS NOT NULL AND status = 'pending' AND created_at <= ?
+         ORDER BY created_at ASC LIMIT 50`,
+        before,
+      )
+      .map(toPayment);
+  }
+
+  /** Attempts the provider never acknowledged, abandoned long enough ago that a retry can no longer complete them. */
+  deleteUnsentBefore(before: string): number {
+    return this.db.run(
+      'DELETE FROM payments WHERE provider_payment_id IS NULL AND created_at <= ?',
+      before,
+    ).changes;
+  }
+}
+
+// ======================================================================================== webhook events
+
+export interface WebhookEventInput {
+  provider: ProviderId;
+  eventId: string;
+  eventType: string;
+  providerPaymentId: string | null;
+  /** Redacted JSON text. */
+  payload: string;
+  receivedAt: string;
+  outcome: string;
+}
+
+/** The record that makes webhook handling idempotent: the provider's event id can be stored once. */
+export class WebhookEventsRepo {
+  constructor(private readonly db: Db) {}
+
+  /** False when this event id was already stored, which means the delivery is a duplicate. */
+  insert(input: WebhookEventInput): boolean {
+    const result = this.db.run(
+      `INSERT OR IGNORE INTO webhook_events (id, provider, event_id, event_type, provider_payment_id, payload, received_at, outcome)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      newId('whe'),
+      input.provider,
+      input.eventId,
+      input.eventType,
+      input.providerPaymentId,
+      input.payload,
+      input.receivedAt,
+      input.outcome,
+    );
+    return result.changes > 0;
+  }
+
+  has(provider: ProviderId, eventId: string): boolean {
+    return (
+      this.db.get<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM webhook_events WHERE provider = ? AND event_id = ?',
+        provider,
+        eventId,
+      )?.n === 1
+    );
+  }
+
+  /** Providers stop retrying after a while, so remembering an event for longer than that buys nothing. */
+  pruneBefore(before: string): number {
+    return this.db.run('DELETE FROM webhook_events WHERE received_at < ?', before).changes;
+  }
+}
+
 // ============================================================================================ repositories
 
 export interface Repositories {
@@ -857,6 +1163,8 @@ export interface Repositories {
   accounts: AccountsRepo;
   transactions: TransactionsRepo;
   syncJobs: SyncJobsRepo;
+  payments: PaymentsRepo;
+  webhookEvents: WebhookEventsRepo;
 }
 
 export function createRepositories(db: Db): Repositories {
@@ -866,5 +1174,7 @@ export function createRepositories(db: Db): Repositories {
     accounts: new AccountsRepo(db),
     transactions: new TransactionsRepo(db),
     syncJobs: new SyncJobsRepo(db),
+    payments: new PaymentsRepo(db),
+    webhookEvents: new WebhookEventsRepo(db),
   };
 }

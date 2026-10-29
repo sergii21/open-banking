@@ -25,6 +25,7 @@ import { ConnectionAccess } from './modules/connections/access';
 import { ConnectionService } from './modules/connections/service';
 import { EventBus } from './modules/events/event-bus';
 import { InspectorStore } from './modules/inspector/inspector-store';
+import { PaymentService } from './modules/payments/service';
 import { SessionService } from './modules/session/service';
 import { SyncService } from './modules/sync/service';
 import { registerErrorHandling } from './plugins/errors';
@@ -138,7 +139,8 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const sync = new SyncService(core, access);
   const connections = new ConnectionService(core, providers, access, sync);
   const sessions = new SessionService(core, providers, connections);
-  const ctx: AppContext = { ...core, providers, access, sync, connections, sessions };
+  const payments = new PaymentService(core, providers);
+  const ctx: AppContext = { ...core, providers, access, sync, connections, sessions, payments };
 
   await registerApi(app, ctx);
 
@@ -162,9 +164,28 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
       Math.max(1_000, Math.min(5_000, ...gaps)),
     );
     syncTimer.unref();
+    // Payments: look at the ones nobody has heard about (the fallback for webhooks that never arrive), and give the fake
+    // bank its clock so authorised payments execute and settle and its webhooks go out.
+    const paymentTimer = setInterval(() => {
+      payments.pollDue().catch((error: unknown) => {
+        app.log.error({ err: error }, 'polling payments failed');
+      });
+    }, 5_000);
+    paymentTimer.unref();
+    const bank = providers.mock();
+    const bankTimer = bank
+      ? setInterval(() => {
+          bank.tick().catch((error: unknown) => {
+            app.log.error({ err: error }, 'the mock bank tick failed');
+          });
+        }, 1_000)
+      : null;
+    bankTimer?.unref();
     app.addHook('onClose', () => {
       clearInterval(timer);
       clearInterval(syncTimer);
+      clearInterval(paymentTimer);
+      if (bankTimer) clearInterval(bankTimer);
     });
   }
 

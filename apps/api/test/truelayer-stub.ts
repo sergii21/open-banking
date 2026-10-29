@@ -1,6 +1,12 @@
+import { createHash, type JsonWebKey, type KeyObject } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TrueLayerConfig } from '../src/config';
+import {
+  canonicalRequest,
+  parseSignature,
+  verifySignature,
+} from '../src/providers/truelayer/signing';
 import type { Transport } from '../src/providers/transport';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures/truelayer');
@@ -51,6 +57,13 @@ export class TrueLayerStub {
   private issued = 0;
   private validAccess: string | null = null;
   private validRefresh: string | null = null;
+  private paymentTokens = 0;
+  private validPayments: string | null = null;
+  private signingKey: { kid: string; jwk: JsonWebKey } | null = null;
+  private readonly payments = new Map<string, Record<string, unknown>>();
+  private readonly idempotency = new Map<string, { digest: string; id: string }>();
+  /** What the webhook key endpoint answers with. Tests publish the public half of the key they sign webhooks with. */
+  jwks: JsonWebKey[] = [];
 
   /** Reply once to the next request whose "METHOD host/path" contains `needle`. */
   once(needle: string, reply: Reply): this {
@@ -61,6 +74,27 @@ export class TrueLayerStub {
   /** Make the access token the bank last issued stop working, as if it had expired there. */
   expireAccessToken(): void {
     this.validAccess = null;
+  }
+
+  /** The payments API now rejects the client-credentials token it last issued. */
+  expirePaymentsToken(): void {
+    this.validPayments = null;
+  }
+
+  /** The public half of the key the app signs payment requests with; the stub verifies every signature against it. */
+  trustSigningKey(kid: string, publicKey: KeyObject): void {
+    this.signingKey = { kid, jwk: publicKey.export({ format: 'jwk' }) };
+  }
+
+  /** Puts a payment (a fixture, optionally changed) where `GET /v3/payments/{id}` will find it. */
+  setPayment(id: string, fixtureName: string, patch: Record<string, unknown> = {}): void {
+    this.payments.set(id, { ...fixture<Record<string, unknown>>(fixtureName), id, ...patch });
+  }
+
+  paymentRequests(): RecordedRequest[] {
+    return this.requests.filter(
+      (r) => this.key(r) === 'POST api.truelayer-sandbox.com/v3/payments',
+    );
   }
 
   count(needle: string): number {
@@ -108,6 +142,20 @@ export class TrueLayerStub {
       ) {
         return { status: 401, body: fixture('errors/invalid-client.json') };
       }
+      if (body['grant_type'] === 'client_credentials') {
+        if (body['scope'] !== 'payments') return { status: 400, body: { error: 'invalid_scope' } };
+        this.paymentTokens += 1;
+        this.validPayments = `tl_pt_${String(this.paymentTokens).padStart(4, '0')}_fixture`;
+        return {
+          status: 200,
+          body: {
+            access_token: this.validPayments,
+            expires_in: 3600,
+            token_type: 'Bearer',
+            scope: 'payments',
+          },
+        };
+      }
       if (body['grant_type'] === 'authorization_code') {
         return body['code'] === 'good-code' && body['code_verifier']
           ? this.issueTokens()
@@ -147,10 +195,92 @@ export class TrueLayerStub {
           : { status: 501, body: fixture('errors/endpoint-not-supported.json') };
       }
     }
+    if (key === 'GET webhooks.truelayer-sandbox.com/.well-known/jwks') {
+      return { status: 200, body: { keys: this.jwks } };
+    }
+
+    if (host === 'api.truelayer-sandbox.com' && pathname.startsWith('/v3/payments')) {
+      return this.routePayments(request, pathname);
+    }
+
     return {
       status: 404,
       body: { error: 'not_found', error_description: `${key} is not scripted` },
     };
+  }
+
+  private routePayments(request: RecordedRequest, pathname: string): Reply {
+    if (
+      request.headers['authorization'] !== `Bearer ${this.validPayments ?? ''}` ||
+      !this.validPayments
+    ) {
+      return { status: 401, body: fixture('payments/errors/unauthorized.json') };
+    }
+
+    if (request.method === 'GET') {
+      const id = decodeURIComponent(pathname.slice('/v3/payments/'.length));
+      const payment = this.payments.get(id);
+      return payment
+        ? { status: 200, body: payment }
+        : { status: 404, body: { title: 'Not Found', status: 404 } };
+    }
+
+    if (request.method !== 'POST' || pathname !== '/v3/payments') {
+      return { status: 404, body: { title: 'Not Found', status: 404 } };
+    }
+
+    // Like the real API: the request is refused unless the signature checks out against the registered public key.
+    const idempotencyKey = request.headers['idempotency-key'];
+    const signature = request.headers['tl-signature'];
+    const parsed = signature ? parseSignature(signature) : null;
+    const signed =
+      parsed !== null &&
+      this.signingKey !== null &&
+      parsed.header.kid === this.signingKey.kid &&
+      parsed.header.alg === 'ES512' &&
+      idempotencyKey !== undefined &&
+      verifySignature(
+        this.signingKey.jwk,
+        parsed,
+        canonicalRequest(
+          'POST',
+          '/v3/payments',
+          [['Idempotency-Key', idempotencyKey]],
+          request.body ?? '',
+        ),
+      );
+    if (!signed) {
+      return {
+        status: 401,
+        body: {
+          ...fixture<object>('payments/errors/unauthorized.json'),
+          detail: 'Signature verification failed.',
+        },
+      };
+    }
+
+    const digest = createHash('sha256')
+      .update(request.body ?? '')
+      .digest('hex');
+    const seen = this.idempotency.get(idempotencyKey);
+    if (seen) {
+      if (seen.digest !== digest) {
+        return { status: 422, body: fixture('payments/errors/idempotency-conflict.json') };
+      }
+      return { status: 201, body: { ...fixture<object>('payments/created.json'), id: seen.id } };
+    }
+
+    const body = request.json as { amount_in_minor?: number; currency?: string } | undefined;
+    if (!body?.amount_in_minor || !body.currency) {
+      return { status: 400, body: fixture('payments/errors/invalid-parameters.json') };
+    }
+    const id = `0b1c2d3e-4f50-4a61-8b72-${String(this.payments.size + 1).padStart(12, '0')}`;
+    this.idempotency.set(idempotencyKey, { digest, id });
+    this.setPayment(id, 'payments/authorization-required.json', {
+      amount_in_minor: body.amount_in_minor,
+      currency: body.currency,
+    });
+    return { status: 201, body: { ...fixture<object>('payments/created.json'), id } };
   }
 
   readonly transport: Transport = (url, init) => {

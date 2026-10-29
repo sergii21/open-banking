@@ -1,13 +1,16 @@
 import type {
   AccountType,
+  BeneficiaryInput,
   ConnectOutcome,
   Institution,
   InstitutionQuery,
   Money,
+  PaymentStatus,
   Permission,
   ProviderId,
   ProviderMode,
 } from '@ledger-lens/contracts';
+import type { PaymentUpdate } from '../domain/payment-state';
 
 /** Who a provider call is made for; the Inspector files the call under this session. */
 export interface CallContext {
@@ -35,6 +38,8 @@ export interface StartConnectionInput {
   state: string;
   codeChallenge: string;
   redirectUri: string;
+  /** See {@link CreatePaymentInput.customerRef}. */
+  customerRef?: string;
 }
 
 export interface CompleteConnectionInput {
@@ -148,6 +153,83 @@ export interface BankingProvider {
   ): Promise<ProviderTransaction[]>;
   /** Best effort: local data is deleted even if the provider call fails. */
   revoke(tokens: TokenSet, ctx: CallContext): Promise<void>;
+}
+
+// ===================================================================================== payment initiation
+
+export interface CreatePaymentInput {
+  /** Our payment id. Providers that accept free-form metadata echo it, so a payment can be traced from their dashboard. */
+  clientReference: string;
+  institutionId: string;
+  amount: Money;
+  /** Null when the institution pays a fixed account (`fixedPayee`). */
+  beneficiary: BeneficiaryInput | null;
+  reference: string;
+  /** Sent as the provider's `Idempotency-Key`, so retrying a call whose outcome is unknown cannot create a second payment. */
+  idempotencyKey: string;
+  /** Where the bank sends the customer's browser back to once they have approved or abandoned the payment. */
+  returnUri: string;
+  /**
+   * Opaque and stable per customer (a hash of the session id). Only the fake bank uses it, to show an executed payment
+   * in that customer's own accounts and nobody else's.
+   */
+  customerRef: string;
+  psuIp?: string;
+}
+
+export interface CreatedPayment {
+  providerPaymentId: string;
+  /** The bank's hosted page. It carries a short-lived resource token, so it is sealed at rest and only shown while pending. */
+  authUrl: string;
+  status: PaymentStatus;
+  /** Whether a `settled` step follows `executed` (pay-ins to a merchant account settle, payments to an external account do not). */
+  settlementExpected: boolean;
+}
+
+export interface WebhookRequest {
+  method: string;
+  /** Path as received, without the query string. The signature covers it. */
+  path: string;
+  headers: Record<string, string | string[] | undefined>;
+  /** The exact bytes the provider sent: signatures are computed over them, so they are never re-serialised. */
+  rawBody: Buffer;
+}
+
+export interface VerifiedWebhook {
+  /** The provider's id for this event; the same event delivered twice shares it. */
+  eventId: string;
+  type: string;
+  providerPaymentId: string;
+  /** Null for event types that do not change a payment (they are acknowledged and ignored). */
+  update: PaymentUpdate | null;
+  /** The parsed body with secrets masked, for the Inspector and the event log. */
+  payload: unknown;
+}
+
+/** What a provider adds when it can also send money. Check with {@link supportsPayments}. */
+export interface PaymentInitiation {
+  /** The account every payment goes to when the institution pays a fixed payee; null when the customer chooses. */
+  fixedPayee(institutionId: string, currency: string): { name: string; identifier: string } | null;
+  createPayment(input: CreatePaymentInput, ctx: CallContext): Promise<CreatedPayment>;
+  /** Current state at the provider; the polling fallback and the return handler use it. */
+  getPayment(providerPaymentId: string, ctx: CallContext): Promise<PaymentUpdate>;
+  /**
+   * Checks the signature (and, where the provider signs one, the timestamp) and reads the event. Throws
+   * `invalid_webhook_signature` for anything that does not verify; nothing in the body is trusted before that.
+   */
+  verifyWebhook(request: WebhookRequest): Promise<VerifiedWebhook>;
+}
+
+export function supportsPayments(
+  provider: BankingProvider,
+): provider is BankingProvider & PaymentInitiation {
+  const candidate = provider as Partial<PaymentInitiation>;
+  return (
+    typeof candidate.createPayment === 'function' &&
+    typeof candidate.getPayment === 'function' &&
+    typeof candidate.verifyWebhook === 'function' &&
+    typeof candidate.fixedPayee === 'function'
+  );
 }
 
 /** The access token was rejected (expired or revoked). The caller refreshes once and retries. */

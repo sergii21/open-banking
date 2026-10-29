@@ -97,8 +97,11 @@ export function redactHeaders(headers: Record<string, string>): Record<string, s
       key.endsWith('signature')
     ) {
       result[name] = REDACTED;
-    } else if (key === 'xpsuip') {
-      result[name] = maskIpAddress(value);
+    } else if (key === 'xpsuip' || key === 'xforwardedfor') {
+      result[name] = value
+        .split(',')
+        .map((address) => maskIpAddress(address.trim()))
+        .join(', ');
     } else {
       result[name] = value;
     }

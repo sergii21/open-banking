@@ -1,7 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import * as z from 'zod';
 import type { App, CoreContext } from '../../types';
-import { buildDataset, type Dataset } from './dataset';
+import type { Dataset } from './dataset';
+import type { MockDatasets } from './datasets';
 import {
   BANK_CSS,
   consentPage,
@@ -19,6 +20,9 @@ import {
   type MockInstitution,
   type Persona,
 } from './institutions';
+import type { MockPaymentsEngine } from './payments';
+import { registerMockPaymentRoutes } from './payments-routes';
+import type { MockPaymentsStore } from './payments-store';
 import { MOCK_CLIENT_ID, MOCK_CLIENT_SECRET, type MockBankStore, type MockConsent } from './store';
 
 const PAGE_SIZE = 100;
@@ -33,6 +37,7 @@ const AuthQuery = z.object({
   code_challenge_method: z.literal('S256'),
   scope: z.string().default('accounts balance transactions'),
   provider: z.string(),
+  customer_ref: z.string().max(100).optional(),
 });
 
 const AuthForm = z.object({
@@ -42,6 +47,7 @@ const AuthForm = z.object({
   code_challenge: z.string(),
   scope: z.string(),
   institution: z.string(),
+  customer_ref: z.string().max(100).optional(),
   persona: z.string().optional(),
   decision: z.enum(['allow', 'deny']).optional(),
 });
@@ -61,28 +67,13 @@ const TokenForm = z.discriminatedUnion('grant_type', [
     client_id: z.string(),
     client_secret: z.string(),
   }),
+  z.object({
+    grant_type: z.literal('client_credentials'),
+    scope: z.string().optional(),
+    client_id: z.string(),
+    client_secret: z.string(),
+  }),
 ]);
-
-/** The dataset is a pure function of (profile, bank, day): cache it per day. */
-class DatasetCache {
-  private readonly entries = new Map<string, Dataset>();
-
-  get(institution: MockInstitution, persona: Persona, today: Date): Dataset {
-    const key = `${persona.profile}|${institution.slug}|${today.toISOString().slice(0, 10)}`;
-    let dataset = this.entries.get(key);
-    if (!dataset) {
-      dataset = buildDataset({
-        seed: `${persona.profile}:${institution.slug}`,
-        institution,
-        profile: persona.profile,
-        today,
-      });
-      if (this.entries.size > 40) this.entries.clear();
-      this.entries.set(key, dataset);
-    }
-    return dataset;
-  }
-}
 
 const money = (minor: number): number => Number((minor / 100).toFixed(2));
 
@@ -97,12 +88,18 @@ const callbackUrl = (redirectUri: string, params: Record<string, string>): strin
  * OAuth + data API for the BFF. It is deliberately a separate "service" (own routes, own tables, own error
  * format) so the MockProvider adapter exercises the same code paths a real aggregator would.
  */
+export interface MockBankPayments {
+  engine: MockPaymentsEngine;
+  store: MockPaymentsStore;
+}
+
 export async function registerMockBank(
   app: App,
   ctx: Pick<CoreContext, 'config' | 'clock'>,
   store: MockBankStore,
+  datasets: MockDatasets,
+  payments: MockBankPayments,
 ): Promise<void> {
-  const datasets = new DatasetCache();
   const allowedRedirect = `${ctx.config.publicUrl}/api/connections/callback`;
 
   await app.register(
@@ -164,6 +161,7 @@ export async function registerMockBank(
           codeChallenge: q.code_challenge,
           scope: q.scope,
           institution: q.provider,
+          customerRef: q.customer_ref,
         };
         const problem = validRequest(authRequest);
         const institution = findMockInstitution(q.provider);
@@ -194,6 +192,7 @@ export async function registerMockBank(
           codeChallenge: form.code_challenge,
           scope: form.scope,
           institution: form.institution,
+          customerRef: form.customer_ref,
         };
         const problem = validRequest(auth);
         const institution = findMockInstitution(auth.institution);
@@ -222,7 +221,7 @@ export async function registerMockBank(
         }
 
         // The consent does not exist until the customer allows access; only account names are needed here.
-        const dataset = datasets.get(institution, persona, ctx.clock.now());
+        const dataset = datasets.get(institution, persona, auth.customerRef);
         const validUntil = new Date(ctx.clock.now().getTime() + persona.consentDays * 86_400_000)
           .toISOString()
           .slice(0, 10);
@@ -272,6 +271,7 @@ export async function registerMockBank(
           seed: `${persona.profile}:${institution.slug}`,
           validDays: persona.consentDays,
           clientId: auth.clientId,
+          customerRef: auth.customerRef,
         });
         const code = store.createAuthCode(consent.id, auth.redirectUri, auth.codeChallenge);
         return reply.redirect(callbackUrl(auth.redirectUri, { code, state: auth.state }), 302);
@@ -296,6 +296,19 @@ export async function registerMockBank(
         const form = parsed.data;
         if (form.client_id !== MOCK_CLIENT_ID || form.client_secret !== MOCK_CLIENT_SECRET) {
           return oauthError(reply, 401, 'invalid_client', 'Client authentication failed');
+        }
+
+        if (form.grant_type === 'client_credentials') {
+          if (form.scope !== 'payments') {
+            return oauthError(reply, 400, 'invalid_scope', 'Only the payments scope is available');
+          }
+          const issued = payments.engine.issueApiToken();
+          return reply.header('cache-control', 'no-store').send({
+            access_token: issued.token,
+            expires_in: issued.expiresInSeconds,
+            token_type: 'Bearer',
+            scope: 'payments',
+          });
         }
 
         let consent: MockConsent;
@@ -406,7 +419,7 @@ export async function registerMockBank(
           consent,
           institution,
           persona,
-          dataset: datasets.get(institution, persona, ctx.clock.now()),
+          dataset: datasets.get(institution, persona, consent.customerRef),
         };
       };
 
@@ -546,6 +559,14 @@ export async function registerMockBank(
           },
         );
       }
+
+      registerMockPaymentRoutes(bank, {
+        engine: payments.engine,
+        publicUrl: ctx.config.publicUrl,
+        allowedReturnUri: `${ctx.config.publicUrl}/api/payments/return`,
+        html,
+        oauthError,
+      });
 
       done();
     },

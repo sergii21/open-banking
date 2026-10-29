@@ -10,12 +10,17 @@ import {
   type CallContext,
   type CompleteConnectionInput,
   type ConnectionGrant,
+  type CreatedPayment,
+  type CreatePaymentInput,
+  type PaymentInitiation,
   type ProviderAccount,
   type ProviderBalance,
   type ProviderTransaction,
   type StartConnectionInput,
   type TokenSet,
   type TransactionWindow,
+  type VerifiedWebhook,
+  type WebhookRequest,
 } from '../port';
 import {
   AccountsDto,
@@ -31,7 +36,9 @@ import {
   throwDataApiError,
   throwTokenError,
 } from '../shared/data-api';
-import type { ProviderHttp } from '../transport';
+import type { PaymentUpdate } from '../../domain/payment-state';
+import type { ProviderHttp, Transport } from '../transport';
+import { TrueLayerPayments } from './payments';
 import { TRUELAYER_INSTITUTION_ID, truelayerInstitutions } from './institutions';
 import { TRUELAYER_API_ORIGIN, TRUELAYER_AUTH_ORIGIN, TRUELAYER_DATA_SCOPES } from './urls';
 
@@ -39,6 +46,9 @@ export interface TrueLayerDeps {
   http: ProviderHttp;
   config: TrueLayerConfig;
   clock: Clock;
+  /** The raw network, for fetching TrueLayer's public webhook keys. */
+  transport: Transport;
+  webhookMaxAgeSeconds: number;
 }
 
 /** Errors on the redirect back that mean "the bank was not reachable" rather than "the customer said no". */
@@ -51,16 +61,20 @@ const UNAVAILABLE_ERRORS = new Set([
 ]);
 
 /**
- * TrueLayer Data API adapter (sandbox). Account information only here; payments are layered on in `payments.ts`.
+ * TrueLayer adapter (sandbox): the Data API for account information here, Payments v3 in `payments.ts`.
  * The customer signs in on TrueLayer's hosted auth dialog and at their bank, we get an authorisation code on our
  * redirect URI and swap it for tokens server-side with PKCE.
  */
-export class TrueLayerProvider implements BankingProvider {
+export class TrueLayerProvider implements BankingProvider, PaymentInitiation {
   readonly id = 'truelayer' as const;
   readonly mode = 'sandbox' as const;
   readonly label = 'TrueLayer sandbox';
 
-  constructor(protected readonly deps: TrueLayerDeps) {}
+  private readonly payments: TrueLayerPayments;
+
+  constructor(protected readonly deps: TrueLayerDeps) {
+    this.payments = new TrueLayerPayments(deps);
+  }
 
   get config(): TrueLayerConfig {
     return this.deps.config;
@@ -287,6 +301,24 @@ export class TrueLayerProvider implements BankingProvider {
     return rows.filter((t) =>
       seen.has(t.providerTxnId) ? false : (seen.add(t.providerTxnId), true),
     );
+  }
+
+  // ------------------------------------------------------------------------------------ payment initiation
+
+  fixedPayee(institutionId: string, currency: string): { name: string; identifier: string } | null {
+    return this.payments.fixedPayee(institutionId, currency);
+  }
+
+  createPayment(input: CreatePaymentInput, ctx: CallContext): Promise<CreatedPayment> {
+    return this.payments.createPayment(input, ctx);
+  }
+
+  getPayment(providerPaymentId: string, ctx: CallContext): Promise<PaymentUpdate> {
+    return this.payments.getPayment(providerPaymentId, ctx);
+  }
+
+  verifyWebhook(request: WebhookRequest): Promise<VerifiedWebhook> {
+    return this.payments.verifyWebhook(request);
   }
 
   async revoke(tokens: TokenSet, ctx: CallContext): Promise<void> {

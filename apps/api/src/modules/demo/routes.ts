@@ -20,6 +20,41 @@ export function registerDemoRoutes(api: App, ctx: AppContext): void {
 
       const mock = ctx.providers.mock();
       if (!mock) throw new AppError('provider_not_available', 404, 'The mock bank is not enabled.');
+
+      if (action === 'replay_last_webhook') {
+        if (!request.body.paymentId) {
+          throw new AppError('validation_failed', 400, 'Choose a payment first.');
+        }
+        const payment = ctx.payments.get(session.id, request.body.paymentId);
+        if (payment.provider !== 'mock' || !payment.providerPaymentId) {
+          throw new AppError(
+            'validation_failed',
+            400,
+            'Webhook replay only works on the mock bank.',
+          );
+        }
+        const replay = await mock.demo.replayLastWebhook(payment.providerPaymentId);
+        if (!replay) {
+          return {
+            ok: true as const,
+            message: 'The bank has not sent a webhook for this payment yet.',
+          };
+        }
+        if (replay.status === 401) {
+          return {
+            ok: true as const,
+            message: `Sent ${replay.type} (event ${replay.eventId}) again, and the signature check refused it.`,
+          };
+        }
+        return {
+          ok: true as const,
+          message:
+            replay.ack === 'duplicate'
+              ? `Sent ${replay.type} (event ${replay.eventId}) again. The app recognised it as a duplicate and left the payment unchanged.`
+              : `Sent ${replay.type} (event ${replay.eventId}) again. The app answered ${replay.ack ?? replay.status}.`,
+        };
+      }
+
       if (!connectionId) throw new AppError('validation_failed', 400, 'Choose a connection first.');
 
       const connection = ctx.connections.get(session.id, connectionId);
@@ -75,12 +110,6 @@ export function registerDemoRoutes(api: App, ctx: AppContext): void {
                 : 'The consent now ends in 2 days.',
           };
         }
-        case 'replay_last_webhook':
-          throw new AppError(
-            'validation_failed',
-            400,
-            'Webhook replay is available once payments are enabled.',
-          );
       }
     },
   );

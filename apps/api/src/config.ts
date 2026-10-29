@@ -62,6 +62,8 @@ export interface AppConfig {
   paymentApprovalMinutes: number;
   /** A webhook claiming to be older than this is rejected. TrueLayer retries for up to 72 hours. */
   webhookMaxAgeSeconds: number;
+  /** How long the fake bank takes between the steps of a payment (authorised, executed, settled). */
+  mockBankStepSeconds: number;
   providers: {
     mock: { enabled: boolean };
     /** Null when TrueLayer is not listed in PROVIDERS or has no credentials. */
@@ -110,6 +112,7 @@ const EnvSchema = z.object({
     .int()
     .min(60)
     .default(72 * 3600 + 600),
+  MOCK_BANK_STEP_SECONDS: z.coerce.number().int().min(0).max(120).default(3),
   PROVIDERS: z.string().default('mock'),
 
   TRUELAYER_CLIENT_ID: optionalText,
@@ -321,6 +324,7 @@ export function loadConfig(
     rateLimitPerMinute: e.RATE_LIMIT_PER_MINUTE,
     paymentApprovalMinutes: e.PAYMENT_APPROVAL_MINUTES,
     webhookMaxAgeSeconds: e.WEBHOOK_MAX_AGE_SECONDS,
+    mockBankStepSeconds: e.MOCK_BANK_STEP_SECONDS,
     providers: {
       mock: { enabled: providerIds.has('mock') },
       truelayer: loadTrueLayer(e, providerIds, options.baseDir ?? process.cwd(), providerWarnings),

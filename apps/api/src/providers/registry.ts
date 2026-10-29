@@ -3,6 +3,10 @@ import { AppError } from '../errors';
 import type { App, CoreContext } from '../types';
 import { MockProvider } from './mock/adapter';
 import { registerMockBank } from './mock/bank';
+import { MockDatasets } from './mock/datasets';
+import { MockPaymentsEngine } from './mock/payments';
+import { MockPaymentsStore } from './mock/payments-store';
+import { MOCK_SIGNATURE_HEADER, mockWebhookSecret } from './mock/signature';
 import { MockBankStore } from './mock/store';
 import { createMockTransport } from './mock/transport';
 import type { BankingProvider } from './port';
@@ -67,7 +71,37 @@ export async function buildRegistry({
 
   if (ctx.config.providers.mock.enabled) {
     const store = new MockBankStore(ctx.db, ctx.clock);
-    await registerMockBank(app, ctx, store);
+    const paymentsStore = new MockPaymentsStore(ctx.db);
+    const datasets = new MockDatasets(paymentsStore, ctx.clock);
+    const webhookSecret = mockWebhookSecret(ctx.config.sessionSecret);
+    const engine = new MockPaymentsEngine({
+      store: paymentsStore,
+      clock: ctx.clock,
+      stepSeconds: ctx.config.mockBankStepSeconds,
+      approvalMinutes: ctx.config.paymentApprovalMinutes,
+      webhookSecret,
+      allowedReturnUri: `${ctx.config.publicUrl}/api/payments/return`,
+      availableMinor: (institution, persona, customerRef) =>
+        datasets.availableMinor(institution, persona, customerRef),
+      // The bank delivers webhooks the way a real one does: an HTTP POST to our public endpoint, signed, raw JSON body.
+      deliver: async (body, signature) => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/webhooks/mock',
+          headers: { 'content-type': 'application/json', [MOCK_SIGNATURE_HEADER]: signature },
+          payload: body,
+        });
+        let ack: string | null = null;
+        try {
+          const answer = response.json<{ status?: unknown }>();
+          ack = typeof answer.status === 'string' ? answer.status : null;
+        } catch {
+          // Not JSON (an error page): there is no acknowledgement to read.
+        }
+        return { status: response.statusCode, ack };
+      },
+    });
+    await registerMockBank(app, ctx, store, datasets, { engine, store: paymentsStore });
     providers.set(
       'mock',
       new MockProvider({
@@ -81,6 +115,7 @@ export async function buildRegistry({
         publicUrl: ctx.config.publicUrl,
         clock: ctx.clock,
         store,
+        payments: { engine, webhookSecret },
       }),
     );
   }
@@ -99,6 +134,8 @@ export async function buildRegistry({
         }),
         config: truelayer,
         clock: ctx.clock,
+        transport: transports.truelayer ?? fetchTransport,
+        webhookMaxAgeSeconds: ctx.config.webhookMaxAgeSeconds,
       }),
     );
   }

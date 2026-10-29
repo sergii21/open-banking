@@ -15,6 +15,7 @@ import type { ConnectionAccess } from './modules/connections/access';
 import type { ConnectionService } from './modules/connections/service';
 import type { EventBus } from './modules/events/event-bus';
 import type { InspectorStore } from './modules/inspector/inspector-store';
+import type { PaymentService } from './modules/payments/service';
 import type { SessionService } from './modules/session/service';
 import type { SyncService } from './modules/sync/service';
 import type { ProviderRegistry } from './providers/registry';
@@ -47,4 +48,5 @@ export interface AppContext extends CoreContext {
   sync: SyncService;
   connections: ConnectionService;
   sessions: SessionService;
+  payments: PaymentService;
 }

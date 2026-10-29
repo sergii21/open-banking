@@ -1,5 +1,7 @@
 import type { Institution, InstitutionQuery, Permission } from '@ledger-lens/contracts';
 import type { Clock } from '../../clock';
+import type { PaymentUpdate } from '../../domain/payment-state';
+import { redactJson } from '../../domain/redact';
 import { AppError } from '../../errors';
 import {
   InvalidGrantError,
@@ -9,12 +11,17 @@ import {
   type CallContext,
   type CompleteConnectionInput,
   type ConnectionGrant,
+  type CreatedPayment,
+  type CreatePaymentInput,
+  type PaymentInitiation,
   type ProviderAccount,
   type ProviderBalance,
   type ProviderTransaction,
   type StartConnectionInput,
   type TokenSet,
   type TransactionWindow,
+  type VerifiedWebhook,
+  type WebhookRequest,
 } from '../port';
 import {
   AccountsDto,
@@ -30,9 +37,27 @@ import {
   throwDataApiError,
   throwTokenError,
 } from '../shared/data-api';
+import {
+  CreatePaymentResponseDto,
+  PaymentDto,
+  PaymentsTokenCache,
+  PaymentsTokenDto,
+  WebhookEventDto,
+  mapPayment,
+  mapWebhookEvent,
+  throwPaymentError,
+} from '../shared/payments-api';
 import type { ProviderHttp } from '../transport';
 import { MOCK_API_ORIGIN, MOCK_AUTH_ORIGIN } from './transport';
-import { MOCK_INSTITUTIONS, findMockInstitution } from './institutions';
+import {
+  MOCK_INSTITUTIONS,
+  findMockInstitution,
+  paymentProviderId,
+  paymentsNote,
+  settlesPayments,
+} from './institutions';
+import type { DeliveryResult, MockPaymentsEngine } from './payments';
+import { MOCK_SIGNATURE_HEADER, verifyMockSignature } from './signature';
 import { MOCK_CLIENT_ID, MOCK_CLIENT_SECRET, type MockBankStore } from './store';
 
 const MAX_TRANSACTION_PAGES = 40;
@@ -42,6 +67,7 @@ export interface MockProviderDeps {
   publicUrl: string;
   clock: Clock;
   store: MockBankStore;
+  payments: { engine: MockPaymentsEngine; webhookSecret: string };
 }
 
 export type FailNextKind = 'unavailable' | 'rate_limit';
@@ -51,6 +77,10 @@ export interface MockDemoHooks {
   failNext(tokens: TokenSet, kind: FailNextKind): boolean;
   revokeAtBank(tokens: TokenSet): boolean;
   expireConsent(tokens: TokenSet, when: 'now' | 'soon'): boolean;
+  /** Sends the bank's last webhook for a payment again; null when it has not sent one yet. */
+  replayLastWebhook(
+    providerPaymentId: string,
+  ): Promise<({ type: string; eventId: string } & DeliveryResult) | null>;
 }
 
 const slugOf = (institutionId: string): string | null =>
@@ -60,12 +90,13 @@ const slugOf = (institutionId: string): string | null =>
  * Adapter for the in-process fake bank. It talks to the bank over (in-process) HTTP exactly as the TrueLayer
  * adapter talks to TrueLayer, so every call shows up in the Inspector and every failure mode is a real status code.
  */
-export class MockProvider implements BankingProvider {
+export class MockProvider implements BankingProvider, PaymentInitiation {
   readonly id = 'mock' as const;
   readonly mode = 'mock' as const;
   readonly label = 'Mock bank';
 
   readonly demo: MockDemoHooks;
+  private readonly paymentsToken: PaymentsTokenCache;
 
   constructor(private readonly deps: MockProviderDeps) {
     const { store, clock } = deps;
@@ -90,7 +121,26 @@ export class MockProvider implements BankingProvider {
         store.setExpiry(consent.id, at.toISOString());
         return true;
       },
+      replayLastWebhook: (providerPaymentId) => deps.payments.engine.replayLast(providerPaymentId),
     };
+    this.paymentsToken = new PaymentsTokenCache(clock, async (ctx) => {
+      const response = await deps.http.request(ctx, {
+        label: 'Get payments token',
+        method: 'POST',
+        url: `${MOCK_AUTH_ORIGIN}/connect/token`,
+        json: {
+          grant_type: 'client_credentials',
+          scope: 'payments',
+          client_id: MOCK_CLIENT_ID,
+          client_secret: MOCK_CLIENT_SECRET,
+        },
+      });
+      if (!response.ok) {
+        throw new AppError('provider_error', 502, 'The bank refused our payments credentials.');
+      }
+      const dto = parseDto(PaymentsTokenDto, response.body, 'payments token');
+      return { token: dto.access_token, expiresInSeconds: dto.expires_in };
+    });
   }
 
   listInstitutions(query: InstitutionQuery): Promise<Institution[]> {
@@ -110,7 +160,7 @@ export class MockProvider implements BankingProvider {
         logoUrl: `/mock-bank/static/logo/${i.slug}.svg`,
         capabilities: { accounts: true, payments: true },
         health: i.healthy ? ('operational' as const) : ('degraded' as const),
-        paymentsNote: null,
+        paymentsNote: paymentsNote(i),
         fixedPayee: false,
         connectMethod: 'redirect' as const,
         tokenHelp: null,
@@ -135,6 +185,7 @@ export class MockProvider implements BankingProvider {
       code_challenge_method: 'S256',
       scope: 'accounts balance transactions',
       provider: slug,
+      ...(input.customerRef ? { customer_ref: input.customerRef } : {}),
     }).toString();
     return Promise.resolve({ authUrl: url.toString() });
   }
@@ -326,6 +377,155 @@ export class MockProvider implements BankingProvider {
       method: 'DELETE',
       url: `${MOCK_AUTH_ORIGIN}/api/delete`,
       headers: { authorization: `Bearer ${tokens.accessToken}` },
+    });
+  }
+
+  // ------------------------------------------------------------------------------------ payment initiation
+
+  fixedPayee(): null {
+    return null;
+  }
+
+  /** Runs the fake bank's clock: due payment steps happen and queued webhooks are delivered. */
+  tick(): Promise<void> {
+    return this.deps.payments.engine.tick();
+  }
+
+  /** Runs a payments API call with the cached client-credentials token, fetching a new one once if the bank refuses it. */
+  private async paymentsRequest(
+    ctx: CallContext,
+    request: Omit<Parameters<ProviderHttp['request']>[1], 'headers'> & {
+      headers?: Record<string, string>;
+    },
+  ) {
+    for (let attempt = 0; ; attempt += 1) {
+      const token = await this.paymentsToken.get(ctx);
+      const response = await this.deps.http.request(ctx, {
+        ...request,
+        headers: { ...request.headers, authorization: `Bearer ${token}` },
+      });
+      if (response.status !== 401 || attempt > 0) return response;
+      this.paymentsToken.forget();
+    }
+  }
+
+  async createPayment(input: CreatePaymentInput, ctx: CallContext): Promise<CreatedPayment> {
+    const slug = slugOf(input.institutionId);
+    const institution = slug ? findMockInstitution(slug) : undefined;
+    if (!institution) {
+      throw new AppError('provider_not_available', 404, 'That bank is not available.');
+    }
+    const { beneficiary } = input;
+    if (!beneficiary) {
+      throw new AppError('validation_failed', 400, 'This bank needs a payee for the payment.');
+    }
+
+    const response = await this.paymentsRequest(ctx, {
+      label: 'Create payment',
+      method: 'POST',
+      url: `${MOCK_API_ORIGIN}/payments/v1/payments`,
+      headers: { 'idempotency-key': input.idempotencyKey },
+      json: {
+        amount_in_minor: input.amount.amountMinor,
+        currency: input.amount.currency,
+        payment_method: {
+          type: 'bank_transfer',
+          provider_selection: {
+            type: 'user_selected',
+            filter: {
+              countries: [institution.country],
+              provider_ids: [paymentProviderId(institution)],
+            },
+          },
+          beneficiary: {
+            type: 'external_account',
+            account_holder_name: beneficiary.name,
+            account_identifier:
+              beneficiary.type === 'iban'
+                ? { type: 'iban', iban: beneficiary.iban }
+                : {
+                    type: 'sort_code_account_number',
+                    sort_code: beneficiary.sortCode,
+                    account_number: beneficiary.accountNumber,
+                  },
+            reference: input.reference,
+          },
+        },
+        user: { name: 'Ledger Lens Demo' },
+        hosted_page: { return_uri: input.returnUri },
+        metadata: { customer_ref: input.customerRef, client_reference: input.clientReference },
+      },
+    });
+    if (!response.ok) throwPaymentError(response);
+    const dto = parseDto(CreatePaymentResponseDto, response.body, 'payment');
+    if (!dto.hosted_page) {
+      throw new AppError(
+        'provider_error',
+        502,
+        'The bank did not return a page to approve the payment.',
+      );
+    }
+    return {
+      providerPaymentId: dto.id,
+      authUrl: dto.hosted_page.uri,
+      status: 'pending',
+      settlementExpected: settlesPayments(institution),
+    };
+  }
+
+  async getPayment(providerPaymentId: string, ctx: CallContext): Promise<PaymentUpdate> {
+    const response = await this.paymentsRequest(ctx, {
+      label: 'Get payment',
+      method: 'GET',
+      url: `${MOCK_API_ORIGIN}/payments/v1/payments/${encodeURIComponent(providerPaymentId)}`,
+    });
+    if (response.status === 404) {
+      throw new AppError('not_found', 404, 'The bank does not know this payment.');
+    }
+    if (!response.ok) throwPaymentError(response);
+    return mapPayment(
+      parseDto(PaymentDto, response.body, 'payment'),
+      this.deps.clock.now().toISOString(),
+    );
+  }
+
+  verifyWebhook(request: WebhookRequest): Promise<VerifiedWebhook> {
+    const header = request.headers[MOCK_SIGNATURE_HEADER];
+    const check = verifyMockSignature(
+      this.deps.payments.webhookSecret,
+      Array.isArray(header) ? header[0] : header,
+      request.rawBody,
+      Math.floor(this.deps.clock.now().getTime() / 1000),
+    );
+    if (!check.ok) {
+      return Promise.reject(
+        new AppError(
+          'invalid_webhook_signature',
+          401,
+          `The webhook signature did not verify (${check.reason}).`,
+        ),
+      );
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(request.rawBody.toString('utf8'));
+    } catch {
+      return Promise.reject(
+        new AppError('validation_failed', 400, 'The webhook body is not JSON.'),
+      );
+    }
+    const parsed = WebhookEventDto.safeParse(json);
+    if (!parsed.success) {
+      return Promise.reject(
+        new AppError('validation_failed', 400, 'The webhook body is not a known event.'),
+      );
+    }
+    return Promise.resolve({
+      eventId: parsed.data.event_id,
+      type: parsed.data.type,
+      providerPaymentId: parsed.data.payment_id ?? '',
+      update: mapWebhookEvent(parsed.data, this.deps.clock.now().toISOString()),
+      payload: redactJson(json, { maskIdentifiers: false }),
     });
   }
 }

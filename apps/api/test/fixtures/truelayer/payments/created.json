@@ -1,0 +1,8 @@
+{
+  "id": "d9c6e3b0-4c1e-4a39-8f3e-2b7f6a1c9e55",
+  "user": {
+    "id": "1f0f6a3c-8a7b-4e2d-9c11-5b0a7e4d2f66"
+  },
+  "resource_token": "fixture-resource-token-not-real",
+  "status": "authorization_required"
+}
