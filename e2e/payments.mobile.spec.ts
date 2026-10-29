@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { EMPTY_STATE, pay, startPayment } from './support';
+import { EMPTY_STATE, expectNothingPastTheEdge, pay, startPayment } from './support';
 
 // Runs in the `mobile` project (Pixel 7) in a session of its own.
 test.use({ storageState: EMPTY_STATE });
@@ -12,6 +12,7 @@ test.describe('payments on a phone', () => {
     await page.goto('/payments/new');
     await expect(page.getByTestId('payment-form')).toBeVisible();
     expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectNothingPastTheEdge(page, 'payment form');
 
     const viewport = page.viewportSize();
     for (const id of ['amount', 'reference', 'payee-name', 'iban', 'pay']) {
@@ -26,6 +27,7 @@ test.describe('payments on a phone', () => {
     await pay(page, { bank: 'Mock Bank UK', amount: '5.00', reference: 'Phone' });
     await expect(page.getByTestId('payment-status')).toContainText('Executed', { timeout: 20_000 });
     expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await expectNothingPastTheEdge(page, 'payment page');
 
     const steps = page.getByTestId('timeline').getByRole('listitem');
     await expect(steps).toHaveCount(3);

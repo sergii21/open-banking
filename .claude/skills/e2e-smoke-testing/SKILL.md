@@ -109,3 +109,10 @@ state with `toContainText('Settled', { timeout: 20_000 })` instead of sleeping. 
   (`.apexcharts-bar-area`), hovering one and reading the readout, and by comparing the table view with the tiles through
   `ll-money`'s `data-amount-minor`. Wait ~1 s before axe: columns grow in, and contrast is measured on the final colours.
 - **`getByLabel('Category')` is a substring match** and now also hits every row's "Change category of ..." button: use `exact: true`.
+- **`scrollWidth` does not see clipped overflow.** The shell clips its own overflow, so a card that is too wide just loses its
+  border off-screen while `document.documentElement.scrollWidth` stays equal to the window. Use `expectNothingPastTheEdge` from
+  `support.ts` (element boxes, not scroll width), and check 320px as well as the Pixel 7's 412px: the insights cards only
+  overflowed on the narrower one. Grid items need `min-w-0` to be allowed to shrink below their content.
+- **`e2e/csp.spec.ts` is what notices a library probing `eval`.** Code splitting changes which chunk a module lands in and so the
+  order things run in; a "configure the library first" call in `main.ts` stopped working when the payments chunk split. Configure at
+  the module every consumer imports (`apps/web/src/zod-jitless.ts`).

@@ -145,3 +145,42 @@ export async function pay(page: Page, payment: PaymentOptions = {}, bank: BankDe
   await startPayment(page, payment);
   await decideAtBank(page, bank);
 }
+
+/**
+ * Fails when anything in the page's main content reaches past the right edge of the screen. `scrollWidth` alone misses this:
+ * the shell clips its own overflow, so a card that is too wide just loses its border off-screen. Content inside a region that
+ * scrolls on purpose (a wide table) is allowed to be wider than the screen.
+ */
+export async function expectNothingPastTheEdge(page: Page, scope = 'page'): Promise<void> {
+  const offenders = await page.evaluate(() => {
+    const limit = window.innerWidth + 1;
+    const scrolls = (el: Element): boolean => {
+      for (
+        let node: Element | null = el.parentElement;
+        node && node.tagName !== 'MAIN';
+        node = node.parentElement
+      ) {
+        const overflow = getComputedStyle(node).overflowX;
+        if (
+          overflow === 'auto' ||
+          overflow === 'scroll' ||
+          overflow === 'hidden' ||
+          overflow === 'clip'
+        )
+          return true;
+      }
+      return false;
+    };
+    return [...document.querySelectorAll('main *')]
+      .filter((el) => {
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.right > limit && !scrolls(el);
+      })
+      .slice(0, 5)
+      .map(
+        (el) =>
+          `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 50)} right=${Math.round(el.getBoundingClientRect().right)}`,
+      );
+  });
+  expect(offenders, `${scope}: elements past the right edge`).toEqual([]);
+}

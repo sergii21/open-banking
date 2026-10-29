@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { accountCard, mainNav } from './support';
+import { accountCard, expectNothingPastTheEdge, mainNav } from './support';
 
 // Runs in the `mobile` project (Pixel 7) against the shared, connected demo session.
 test.describe('phone layout', () => {
   test('the navigation lives in a drawer and nothing scrolls sideways', async ({ page }) => {
     await page.goto('/dashboard');
     await expect(page.getByTestId('account-card')).toHaveCount(3);
+    await expectNothingPastTheEdge(page, 'dashboard');
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
@@ -64,6 +65,8 @@ test.describe('phone layout', () => {
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+    await expect(page.getByTestId('category-row').first()).toBeVisible();
+    await expectNothingPastTheEdge(page, 'insights');
 
     const viewport = page.viewportSize();
     const income = await page.getByTestId('kpi-income').boundingBox();
@@ -78,5 +81,38 @@ test.describe('phone layout', () => {
     await page.getByTestId('chart-view').getByRole('radio', { name: 'Table' }).click();
     const table = await page.getByTestId('monthly-table').boundingBox();
     expect(table && viewport && table.x + table.width <= viewport.width + 1).toBe(true);
+  });
+});
+
+// The Pixel 7 is 412px wide. Layouts that fit there can still push a card past the edge on the smallest phones in use today
+// (320px: an iPhone SE, a split-screen window), and the shell clips what overflows, so nothing scrolls to give it away.
+test.describe('the smallest phones (320px)', () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  for (const [path, ready] of [
+    ['/dashboard', 'account-card'],
+    ['/transactions', 'transaction-list'],
+    ['/insights', 'category-row'],
+    ['/connections', 'connection-card'],
+    ['/connect', 'institution-list'],
+    ['/payments/new', 'payment-form'],
+  ] as const) {
+    test(`${path} keeps everything on the screen`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.getByTestId(ready).first()).toBeVisible();
+      await expectNothingPastTheEdge(page, path);
+    });
+  }
+
+  test('the insights table view and the empty payments list too', async ({ page }) => {
+    await page.goto('/insights');
+    await expect(page.getByTestId('category-row').first()).toBeVisible();
+    await page.getByTestId('chart-view').getByRole('radio', { name: 'Table' }).click();
+    await expect(page.getByTestId('monthly-table')).toBeVisible();
+    await expectNothingPastTheEdge(page, 'insights (table)');
+
+    await page.goto('/payments');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expectNothingPastTheEdge(page, 'payments');
   });
 });

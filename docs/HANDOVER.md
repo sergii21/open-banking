@@ -1,136 +1,87 @@
-# Ledger Lens — hand-over at the M3 checkpoint
+# Ledger Lens: state at the end of the build
 
-Written when the build session ran out of usage. Everything below is decided; do not re-open it. Read `docs/PLAN.md` and
-`CLAUDE.md` first. Node 24 for every command: `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
+Everything in `docs/PLAN.md` is built except the optional Enable Banking adapter. This note says what exists, how it was
+checked, and above all **what was not checked**. Node 24 for every command:
+`export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`. Start with `README.md`, then `CLAUDE.md`.
 
-## State
+## Status
 
-| Milestone                                                     | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M0 foundations                                                | done, committed `9aefde6`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| M1 mock bank + AIS + Inspector                                | done, committed `3e9dfac`; `npm run verify` + 52 Playwright tests green; manual desktop/phone/dark/axe pass done                                                                                                                                                                                                                                                                                                                                                                                             |
-| M2 TrueLayer sandbox AIS                                      | done, committed `5a735bb`; offline fixture tests (28) green; **live sandbox not verified (no credentials)**                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Ukrainian bank: monobank** (requested after the checkpoint) | done and committed: real personal-API adapter (token connect, paced background history, MCC + Ukrainian categorisation, local-only guard), 30 API tests, 4 Playwright tests against a fake of the bank (journey, revoked token, dark and phone views), opt-in live checks (`npm run test:live -w @ledger-lens/api`). **No real account was available: only the public rates endpoint and the 403 error body were checked live.** See `docs/UKRAINE.md`                                                       |
-| M3 payments                                                   | **done**: payment port, idempotent `PaymentService`, webhooks (verify, de-duplicate, out-of-order safe), polling fallback, mock bank payments (hosted page, outcomes, signed webhook outbox), TrueLayer payments (ES512 request signing, create/get, webhook verification, written from the docs: **live sandbox not verified**), Signal Forms payment UI with a live timeline, demo webhook replay; 90 new tests incl. 22 Playwright                                                                        |
-| M4 insights + polish                                          | **done**: `GET /api/insights/summary` (per-currency totals, spending by category, income vs spending by month, standing-payment detection; 23 unit tests on the arithmetic + 15 route tests), category override (`PATCH /api/transactions/:id`, kept across refreshes), CSV export with formula-injection defusing, Insights page (stat tiles, category bar list, ApexCharts column chart with legend, hover and keyboard readout and a table view, standing payments), axe in light and dark on every route |
-| M5 harden / deploy / demo                                     | not started (README is a stub; `docs/PLAN.md` §10 has the scope)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Milestone                                    | Status                                                                                                                                                                                                                        |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0 foundations                               | done (`9aefde6`)                                                                                                                                                                                                              |
+| M1 mock bank, account information, Inspector | done (`3e9dfac`); verified in the browser on desktop, phone, dark mode, axe                                                                                                                                                   |
+| M2 TrueLayer sandbox, account information    | done (`5a735bb`); offline fixture tests; **live sandbox not verified**                                                                                                                                                        |
+| Ukraine: monobank                            | done (`ff6bc7f`, `fc77d8b`): real personal-API adapter, token connect, paced history; fake-bank e2e; **no real account was available** (see `docs/UKRAINE.md`)                                                                |
+| M3 payments                                  | done (`065aea2`, `dbb4d5d`): idempotent payments, webhooks, polling fallback, mock bank journeys with every outcome, TrueLayer payments with ES512 signing and webhook verification (**written from the docs, offline only**) |
+| M4 insights and polish                       | done (`a46037c`): insights API and page (ApexCharts, table views, standing payments), category override, CSV export                                                                                                           |
+| M5 harden, deploy, demo                      | done (`371c851` and the commit after it): session creation cap, `no-store` under `/api`, redaction audit, CSP end-to-end check, README, `docs/DEMO.md`, `render.yaml` (**not deployed**); Enable Banking **not built**        |
 
-## M3 — what to build (in this order)
+## Checks that were run (final state)
 
-1. **Port** (`providers/port.ts`): `PaymentInitiation { fixedPayee(institutionId, currency): {name, identifier} | null;
-createPayment(input, ctx): {providerPaymentId, authUrl, status, settlementExpected}; getPayment(id, ctx): {status,
-failureReason, at}; verifyWebhook({method, path, headers, rawBody}): {eventId, type, providerPaymentId, update | null} }`
-   plus a `supportsPayments()` guard. Input carries `idempotencyKey` (sent to the provider), `returnUri`
-   (`{PUBLIC_URL}/api/payments/return`), `customerRef` (sha256 of the session id).
-2. **Repos**: `PaymentsRepo`, `WebhookEventsRepo` (tables exist). `UNIQUE (session_id, idempotency_key)`,
-   `(provider, provider_payment_id)`, `webhook_events (provider, event_id)`.
-3. **PaymentService** (`modules/payments`): `create` (Idempotency-Key header required → `idempotency_key_required`;
-   same key + same request hash → replay the stored payment; different hash → 422 `idempotency_conflict`; insert the row
-   _before_ calling the provider; on 5xx/network keep the row so a retry with the same key completes; on a definitive
-   4xx delete it), `list/get/sync`, `applyProviderUpdate` (uses `applyUpdate`; publishes SSE `payment.updated`; appends
-   history), `handleReturn` (public `GET /api/payments/return?payment_id=` → look up by provider id, poll once, 302 to
-   `/payments/<id>/result`, add `?abandoned=1` when `error=tl_hpp_abandoned`), `pollDue` (fallback: only payments idle
-   > 20 s, then every 30 s; expire `pending` after `PAYMENT_APPROVAL_MINUTES`), timer in `app.ts` outside `test` env.
-   > Validate server-side: institution supports payments, currency ∈ `institution.currencies`, amount ≤
-   > `config.maxPaymentMinor`, GBP ⇒ `sort_code_account_number`, EUR ⇒ `iban`; ignore the beneficiary when `fixedPayee`.
-   > Expose `authUrl` only while pending (it is sealed in `auth_url_enc`; it carries a resource token).
-4. **Routes**: `GET/POST /api/payments` (per-session rate limit 10/min), `GET /api/payments/:id`, `POST
-/api/payments/:id/sync`, public `GET /api/payments/return`, public `POST /api/webhooks/:provider` (`csrf:false`,
-   per-IP limit; capture the **raw body** with a scoped `application/json` content-type parser; verify, then in one DB
-   transaction insert `webhook_events` (duplicate ⇒ 200 `duplicate`), apply, record an `inbound` Inspector call under the
-   payment's session; unknown payment ⇒ 200 `unknown_payment`; bad signature ⇒ 401 `invalid_webhook_signature`). Prune
-   `webhook_events` older than `webhookMaxAgeSeconds`. Register in `api.ts`; add `payments` to `AppContext`.
-5. **Mock bank payments** (tables exist): client-credentials token (stateless HMAC token; no DB), `POST
-/mock-bank/api/payments/v1/payments` (Idempotency-Key, bearer, return_uri must equal the allowed one), `GET …/:id`,
-   hosted page `GET /mock-bank/pay?payment_id&resource_token` (persona + outcome radios: `test_executed`,
-   `test_authorisation_failed`, `test_execution_rejected`, plus Cancel; degraded bank ⇒ outage page and the payment fails
-   `provider_error`), `POST /mock-bank/pay/decision` ⇒ 302 `return_uri?payment_id=` (`&error=tl_hpp_abandoned` on cancel).
-   Engine: `authorized` at once; `executed` after `MOCK_BANK_STEP_SECONDS` (new config, default 3); `settled` one step later
-   when the institution settles (mock DE/EUR settles, mock UK/GBP ends at `executed`, so both timeline shapes appear);
-   `amount > available` ⇒ `insufficient_funds`; unapproved after 15 min ⇒ `expired`. `tick(now)` runs due transitions and
-   delivers the outbox via `app.inject` to `/api/webhooks/mock` (retry with backoff, 8 attempts); a 1 s timer outside `test`.
-   Webhook = TrueLayer-shaped JSON (`type: payment_authorized|executed|settled|failed`, `event_id`, `payment_id`, …) with
-   `X-Mock-Signature: t=<unix>,v1=<hex hmac-sha256(secret, "t.rawBody")>`; secret = HMAC of `SESSION_SECRET` (not a code
-   constant); reject |now − t| > 5 min. Linkage: add `customer_ref` to the auth URL / consent, pass `executedPayments`
-   (matching institution + persona + customer_ref, status executed|settled) to `buildDataset` — the dataset cache key
-   must include the payment ids. `MockProvider` implements `PaymentInitiation`; `paymentsNote`s: DE "simulated SEPA,
-   settles a few seconds after executing", UK "simulated Faster Payment, ends at Executed".
-6. **TrueLayer payments** (`providers/truelayer/`): payments token via `POST {auth}/connect/token` JSON
-   `{grant_type: client_credentials, scope: payments, client_id, client_secret}` (cache, single-flight). `POST
-{api}/v3/payments`: headers `Authorization`, `Idempotency-Key`, `Tl-Signature`, optional `X-Forwarded-For: psuIp`; body
-   `{amount_in_minor, currency, payment_method: {type: bank_transfer, provider_selection: {type: user_selected, filter:
-{countries: [GB|DE derived from the provider id], provider_ids: [paymentProviders[currency]]}}, beneficiary}, user:
-{name: "Ledger Lens Demo", email: config.userEmail}, hosted_page: {return_uri}, metadata}`. Beneficiary:
-   `merchant_account {merchant_account_id, account_holder_name?, reference (≤100), statement_reference (≤18)}` or
-   `external_account {account_holder_name (≤40), account_identifier: sort_code_account_number | iban, reference (≤18)}`.
-   201 ⇒ `{id, resource_token, hosted_page?.uri}`; HPP link fallback
-   `https://payment.truelayer-sandbox.com/payments#payment_id=…&resource_token=…&return_uri=<encoded>`. `GET /v3/payments/{id}`
-   is unsigned. Errors: 400 ⇒ `payment_rejected` 422 (surface `errors`), 401/403 ⇒ `provider_error` 502 with a hint about the
-   signing key id / external-account entitlement, 409 ⇒ `conflict`, 422 ⇒ `idempotency_conflict`, 429 ⇒ `rate_limited`, 5xx ⇒
-   `bank_unavailable`.
-   **Signing** (verified against TrueLayer's `request-signing-v2.md` and the Node reference library): ES512 over P-521;
-   header `{alg: "ES512", kid, tl_version: "2", tl_headers: "Idempotency-Key"}`; canonical string = `POST /v3/payments\n` +
-   `Idempotency-Key: <value>\n` + raw body (no trailing newline); JWS signing input = `b64url(JSON header) + "." +
-b64url(canonical)`; signature = raw R‖S (`crypto.sign('sha512', input, {key, dsaEncoding: 'ieee-p1363'})`); header value
-   = `b64url(header) + ".." + b64url(signature)`. `ProviderHttp` already has `sign(body)` for this (pass the exact
-   serialised body).
-   **Webhook verification**: header `Tl-Signature` (same format, ES512 only); parse `jku`, require exactly
-   `https://webhooks.truelayer-sandbox.com/.well-known/jwks`, fetch the JWKS (cache ~1 h, refetch once on unknown `kid`),
-   rebuild the canonical string with method `POST`, the request path (retry once with the trailing slash toggled), the headers
-   named in `tl_headers` taken from the received headers (case-insensitive, casing from `tl_headers`, missing ⇒ ""), then the
-   raw body; verify with `createPublicKey({key: jwk, format: 'jwk'})`. If a signed `X-Tl-Webhook-Timestamp`/`Tl-Timestamp`
-   header exists, enforce the age limit. Event types seen in docs: `payment_authorized|executed|settled|failed`; anything else
-   ⇒ ignored. Respond 2xx fast; TrueLayer retries up to 72 h; `event_id` repeats on duplicates.
-   Status map: `authorization_required|authorizing`⇒pending, `authorized`⇒authorised, `executed`, `settled`; `failed` by
-   `failure_reason`: `canceled|user_canceled_at_provider`⇒cancelled; `authorization_failed|not_authorized|invalid_credentials|
-invalid_otp|provider_expired`⇒authorisation_failed; `expired`⇒expired; `insufficient_funds`; `provider_error|
-internal_server_error|unknown_error`⇒provider_error; everything else (rejected, provider_rejected, blocked, invalid_*,
-   payment_limit_exceeded, …)⇒execution_rejected, unknown values ⇒ by `failure_stage`.
-   Sandbox: mock providers `mock-payments-gb-redirect` / `mock-payments-de-redirect`; outcomes are chosen by username
-   `test_executed`, `test_authorisation_failed`, `test_execution_rejected`, or the cancel button; sandbox cap 5,000,000 minor.
-7. **Demo control** `replay_last_webhook` (`modules/demo/routes.ts` currently rejects it): mock only; re-POST the last
-   delivered outbox row (same body and signature) to `/api/webhooks/mock`; return a message naming the event and that it was
-   recognised as a duplicate (status unchanged).
-8. **API tests**: mock flow for all four outcomes + insufficient funds + expiry through the real HTTP journey; idempotency
-   (replay, conflict, retry after unknown outcome); webhook: bad signature 401, stale timestamp, duplicate/replay does not
-   double-apply, out-of-order, unknown payment; poll fallback; TrueLayer: signing (round-trip with a generated P-521 key,
-   exact canonical string and header shape), create/get mapping and error mapping, webhook verification with a generated JWKS,
-   return handler. Put the signing/webhook fixtures in `apps/api/test/fixtures/truelayer/` (documented-shape, not recorded).
-9. **SPA** (`apps/web/src/app/features/payments/`, lazy routes `payments`, `payments/new`, `payments/:id` and
-   `payments/:id/result` → same detail component): Signal Forms payment form (institution select from `/api/institutions`
-   with `capabilities.payments`, currency from the institution, amount, payee fields by currency unless `fixedPayee`,
-   reference; `validateStandardSchema` with the contract schemas; one `crypto.randomUUID()` Idempotency-Key per attempt, reused
-   only for an identical retry after an unknown outcome; then `location.assign(authUrl)`), list with empty state, detail page
-   with a live timeline (Pending → Authorised → Executed → Settled; omit Settled when `settlementExpected` is false; failure
-   states for each `failureReason` with a recovery action, "Resume at your bank" while pending, "Check now" ⇒ `/sync`),
-   updates from SSE `payment.updated` in `core/events`, a "Replay last webhook" demo button, `abandoned=1` hint, nav item,
-   `paymentsNote` display. Add the payments routes to the axe spec (light + dark) and phone layout checks.
-10. **e2e** (`e2e/payments.spec.ts`, mock bank, `MOCK_BANK_STEP_SECONDS=1` in `playwright.config.ts`): all four outcomes plus
-    insufficient funds visible in the UI, the replay demo not double-applying, executed payment appears on the dashboard after
-    Refresh. Then `npm run verify`, `npm run e2e`, browser check (desktop, phone, dark), commit "M3: payments".
+- `npm run verify`: exit 0. Contracts 40, API 305, web 62 unit tests; ESLint (with Angular template accessibility rules), Prettier,
+  strict typecheck, production build with the initial bundle at **898.5 kB of the 900 kB budget**.
+- `npm run e2e`: 106 Playwright tests against the mock bank (every journey and failure state, payments, insights, CSP,
+  phone layout including 320px, axe WCAG 2.2 AA on every route in light and dark).
+- A **clean clone** (`git clone`, `npm ci`, `npm run verify`, `npm run e2e:only`) passed the same, with no `.env`, key or database file.
+- The running app was driven in the in-app browser: desktop (dark and light) for connect, dashboard, payments with live timeline,
+  demo webhook replay, Inspector, insights chart (hover and keyboard readout), table view, category override; phone width for the
+  payment pages and Insights (which is where the card-overflow bug at 375px was found and fixed).
+- Live public monobank endpoints: the rates endpoint and the bad-token answer only.
 
-## Then
+## What was NOT verified
 
-- **monobank follow-ups:** webhook for new transactions (needs a public URL); verify the credit-card balance assumption and jar
-  statements with a real token (`MONOBANK_TOKEN=... npm run test:live -w @ledger-lens/api`); PrivatBank only if a personal API turns up.
+- **TrueLayer, live**: the Data API calls, Payments v3 (create, get, error shapes), ES512 request signing, webhook signature
+  verification, the `uk-cs-mock` versus `mock` provider id, the revoke endpoint (`DELETE /api/delete`), whether the `user` object and
+  the merchant-account beneficiary fields (`reference`, `statement_reference`) are accepted as sent, and `external_account`
+  payments (which need TrueLayer to enable them). Fixtures are written from the docs (`apps/api/test/fixtures/truelayer/README.md`),
+  not recorded. The stub verifies our request signatures like the real API would, and the tests re-check the format with plain
+  `node:crypto`, but only TrueLayer can say it agrees. `npm run e2e:sandbox` is the opt-in suite for the first live run.
+- **monobank, with a real account**: whether a credit card's `balance` includes its `creditLimit` (the adapter assumes it does and
+  shows own funds as `balance - creditLimit`), whether jar ids work in the statement endpoint, the exact 429 body, and webhooks
+  (not built; they need a public URL). `MONOBANK_TOKEN=... npm run test:live -w @ledger-lens/api` runs the opt-in checks.
+- **Render**: `render.yaml` parses but was never deployed. Unchecked: that Render's `generateValue` output is accepted as
+  `TOKEN_ENCRYPTION_KEY` (the app wants 32 bytes in base64 and says so if not), and that Node 24.15 is selectable through `NODE_VERSION`.
+- **Enable Banking**: not built. The plan's section 13 spike (redirect rules for localhost, payments in restricted mode, terms for showing
+  it to others) needs an account and could not be done.
+- Webhooks with a **tunnel**: no tunnel was available. The mock bank delivers real signed HTTP webhooks to the app in-process, and the
+  polling fallback is tested; TrueLayer delivering to a tunnel is untested.
 
-- **M4**: `PATCH /api/transactions/:id` category override (+ UI), `GET /api/insights/summary` (category totals, monthly in/out,
-  recurring detection; never sum across currencies), ng-apexcharts, CSV export, skeletons, responsive/dark/axe on every route,
-  keep the bundle under the 900 kB warn / 1.2 MB error budget (lazy-load the chart library). Unit-test the insight numbers.
-- **M5**: CSP / rate-limit / redaction audit, full README (regulatory model: aggregator licence vs own TPP; why the public
-  instance never uses real accounts; TrueLayer setup incl. redirect URIs `{PUBLIC_URL}/api/connections/callback` and
-  `/api/payments/return`, key generation `npm run keys:truelayer`, webhook tunnel), five-minute demo script (must work on a
-  clean checkout in < 10 min), optional `render.yaml` (sandbox only), Enable Banking only if the §13 spike supports it, update
-  `.claude/skills/provider-adapter` and `e2e-smoke-testing` for payments. `jose` is declared in `apps/api` but unused — remove
-  it or use it.
+## Deviations from the plan
 
-## Final report must say
+No `@faker-js/faker` (a seeded PRNG generates the mock data); a `needs_reauth` connection status was added; custom Material palette
+generated with Material Color Utilities (stock cyan is neon); layouts use CSS container queries rather than viewport breakpoints; the
+Inspector docks at the bottom below 1440px and on the right above; the Inspector's scope switch is a small `ll-segmented` control
+instead of Material's button toggle (the toggle cost 27 kB of initial bundle); TrueLayer's mock users are username/password pairs;
+payments to an arbitrary account are not assumed to be enabled (the default beneficiary is a merchant account, so `fixedPayee`);
+the monobank token field is a plain signal input, while the payment form uses Signal Forms; `jose` was declared but unused and is
+removed; the demo's "replay last webhook" re-signs the same event with a fresh timestamp instead of re-sending the old signature
+(a stale signature would be refused, which is also correct); the web app's `zod` is a wrapper (`src/zod-jitless.ts`) because the
+payments chunk split moved schema creation ahead of `main.ts` and brought back a CSP violation; the category breakdown is a bar list
+rather than a chart (thirteen categories are too many for a pie, and the list is its own table view) and only the monthly view uses
+ApexCharts, whose light-mode orange is below 3:1 contrast against the card, answered by a table view next to the chart.
 
-- Per milestone: status, commands run and results. Unverified: **live TrueLayer** (Data API, signing, payments, webhook
-  verification are written from the docs and tested offline only; fixtures are documented-shape, not recorded), `uk-cs-mock` vs
-  `mock` provider id, `external_account` entitlement, revoke endpoint `DELETE /api/delete`, whether `user` is accepted as sent.
-- Deviations: no `@faker-js/faker` (seeded PRNG), added `needs_reauth` status, Playwright Chromium install, custom Material
-  palette, CSS container queries, Inspector docking, TrueLayer mock users are username/password pairs, `external_account`
-  payments not assumed, `fixedPayee`/merchant-account default for TrueLayer payments.
-- Needed from the user: TrueLayer sandbox credentials + signing key id + merchant account ids in `apps/api/.env` (never in
-  chat), a tunnel URL for webhooks (polling covers it without), the Enable Banking decision.
+## What is needed from you
+
+- **TrueLayer** (to verify what is above): sandbox client id and secret, a signing key id (after `npm run keys:truelayer` and
+  uploading the public key), and the merchant account ids, all in `apps/api/.env` and never in chat; the three redirect and webhook
+  URLs from the README registered in the Console.
+- **A webhook tunnel** (cloudflared or ngrok) if you want TrueLayer to push; polling covers it without.
+- **The Enable Banking decision**: if you want real EU banks beyond Ukraine, say so; the `provider-adapter` skill is the recipe, and
+  the section 13 spike comes first.
+- **monobank**: your own token, pasted into the app, if you want to confirm the unverified items above.
+- Whether to push this anywhere (there is no remote; nothing has ever been pushed).
+
+## Things worth knowing before you change anything
+
+- The initial bundle is within 1.5 kB of its warning budget. Lazy-load what one page needs (the account-filter resolver imports its
+  store on demand for this reason), and run `npm run build` after touching the shell, the routes or global styles.
+- `node:sqlite` is still early-stability in Node 24; it is isolated behind `apps/api/src/db` and `better-sqlite3` is the fallback.
+- Payments are per session; the mock bank's payments token is cached app-wide, so only the first payment shows "Get payments token"
+  in its Inspector.
+- Charts: the two series colours were validated with the data-viz skill's `validate_palette.js` against this app's surfaces; re-run it
+  if the theme changes.
+
+## Follow-ups that are not scope creep
+
+monobank webhooks for new transactions (needs a public URL); PrivatBank only if a personal API appears; a retry button for a history
+load that gave up; a nightly job for the sandbox suite once credentials exist.

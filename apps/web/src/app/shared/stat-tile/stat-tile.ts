@@ -31,7 +31,7 @@ import { Money } from '../money/money';
     }
   `,
   host: {
-    class: 'block rounded-3xl border border-outline-variant bg-surface-container-low p-5',
+    class: 'block min-w-0 rounded-3xl border border-outline-variant bg-surface-container-low p-5',
   },
 })
 export class StatTile {
