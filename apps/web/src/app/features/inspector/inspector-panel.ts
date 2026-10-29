@@ -1,24 +1,16 @@
 import { Component, computed, inject, output, signal } from '@angular/core';
-import { MatButtonToggle, MatButtonToggleGroup } from '@angular/material/button-toggle';
 import { MatIconButton } from '@angular/material/button';
 import { MatIcon } from '@angular/material/icon';
 import { MatTooltip } from '@angular/material/tooltip';
 import { InspectorStore } from '../../core/inspector/inspector';
 import { SessionService } from '../../core/session/session';
+import { Segmented, type SegmentOption } from '../../shared/segmented/segmented';
 import { CallItem } from './call-item';
 import { DemoControls } from './demo-controls';
 
 @Component({
   selector: 'll-inspector-panel',
-  imports: [
-    CallItem,
-    DemoControls,
-    MatButtonToggle,
-    MatButtonToggleGroup,
-    MatIcon,
-    MatIconButton,
-    MatTooltip,
-  ],
+  imports: [CallItem, DemoControls, MatIcon, MatIconButton, MatTooltip, Segmented],
   template: `
     <section class="flex h-full flex-col" aria-labelledby="inspector-title">
       <header
@@ -32,18 +24,13 @@ import { DemoControls } from './demo-controls';
         >
           API Inspector
         </h2>
-        <mat-button-toggle-group
-          aria-label="Which calls to show"
+        <ll-segmented
+          label="Which calls to show"
+          [options]="scopes()"
           [value]="store.scope()"
-          (change)="store.scope.set($event.value)"
-          hideSingleSelectionIndicator
+          (valueChange)="store.scope.set($event)"
           class="max-[639px]:order-last max-[639px]:w-full min-[1440px]:order-last min-[1440px]:w-full"
-        >
-          <mat-button-toggle value="screen" class="flex-1">This screen</mat-button-toggle>
-          <mat-button-toggle value="all" class="flex-1"
-            >All calls ({{ store.all().length }})</mat-button-toggle
-          >
-        </mat-button-toggle-group>
+        />
         <button
           mat-icon-button
           type="button"
@@ -127,6 +114,10 @@ export class InspectorPanel {
 
   protected readonly expandedId = signal<string | null>(null);
   protected readonly calls = computed(() => this.store.visible());
+  protected readonly scopes = computed<SegmentOption<'screen' | 'all'>[]>(() => [
+    { value: 'screen', label: 'This screen' },
+    { value: 'all', label: `All calls (${this.store.all().length})` },
+  ]);
 
   protected toggle(id: string): void {
     this.expandedId.update((current) => (current === id ? null : id));

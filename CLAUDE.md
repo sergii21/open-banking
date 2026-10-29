@@ -106,12 +106,15 @@ Project specifics on top of it (enforced by ESLint where possible):
 - SQL lives only in `db/` repositories. `node:sqlite` is still early-stability: keep it behind that layer.
 - Time comes from the injected `Clock`, never `Date.now()` inside domain code (deterministic tests).
 - No `console.*` in the API (use the request/app logger). No PII in logs; query strings are stripped from logged URLs.
+- Money moves only through `modules/payments/PaymentService`: an `Idempotency-Key` on every create, the attempt stored before the
+  provider is called, provider reports applied through `domain/payment-state.ts` (final states never change, progress only moves
+  forward), webhooks verified over the **raw body** and de-duplicated by event id. Routes never call a provider's payment methods.
 
 ## Testing
 
 - Vitest everywhere (`@angular/build:unit-test` for the SPA). Provider adapters are tested from recorded fixtures with a
   stubbed transport, so they run offline in CI. Live sandbox checks are opt-in (`e2e:sandbox`).
-- Playwright journeys run against the **mock bank** and must stay deterministic: `connect` (journey + every failure state),
+- Playwright journeys run against the **mock bank** and must stay deterministic: `connect` (journey + every failure state), `payments` (every outcome through the bank's own page),
   `dashboard`/`transactions`/`connections` (read-only, shared session), `lifecycle` (refresh, outage, rate limit, revoke,
   consent expiry, privacy; each test uses its own fresh session), `a11y` (axe in light and dark, keyboard basics) and
   `*.mobile.spec.ts` (Pixel 7). See the `e2e-smoke-testing` skill.

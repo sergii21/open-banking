@@ -25,19 +25,18 @@ export const PaymentFailureReason = z.enum([
 ]);
 export type PaymentFailureReason = z.infer<typeof PaymentFailureReason>;
 
-const PayeeName = z.string().trim().min(1, 'Enter the payee name').max(100);
+export const PayeeName = z.string().trim().min(1, 'Enter the payee name').max(100);
+export const IbanInput = z.string().refine(isValidIban, 'Enter a valid IBAN');
+export const SortCodeInput = z.string().regex(/^\d{6}$/, 'Sort code is 6 digits');
+export const AccountNumberInput = z.string().regex(/^\d{8}$/, 'Account number is 8 digits');
 
 export const BeneficiaryInput = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('iban'),
-    name: PayeeName,
-    iban: z.string().refine(isValidIban, 'Enter a valid IBAN'),
-  }),
+  z.object({ type: z.literal('iban'), name: PayeeName, iban: IbanInput }),
   z.object({
     type: z.literal('sort_code_account_number'),
     name: PayeeName,
-    sortCode: z.string().regex(/^\d{6}$/, 'Sort code is 6 digits'),
-    accountNumber: z.string().regex(/^\d{8}$/, 'Account number is 8 digits'),
+    sortCode: SortCodeInput,
+    accountNumber: AccountNumberInput,
   }),
 ]);
 export type BeneficiaryInput = z.infer<typeof BeneficiaryInput>;

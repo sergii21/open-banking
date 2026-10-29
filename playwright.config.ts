@@ -25,6 +25,8 @@ const appEnv = (port: number, publicUrl: string, extra: Record<string, string> =
   RATE_LIMIT_PER_MINUTE: '100000',
   // Short enough that tests do not wait, long enough to see the button's cool-down state.
   REFRESH_COOLDOWN_SECONDS: '3',
+  // The fake bank moves a payment on every second, so a whole payment takes a few seconds to watch.
+  MOCK_BANK_STEP_SECONDS: '1',
   LOG_LEVEL: 'warn',
   ...extra,
 });

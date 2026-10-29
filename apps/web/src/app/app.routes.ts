@@ -22,6 +22,28 @@ export const routes: Routes = [
           import('./features/transactions/transactions').then((m) => m.Transactions),
       },
       {
+        path: 'payments',
+        title: 'Payments',
+        loadComponent: () => import('./features/payments/payments').then((m) => m.Payments),
+      },
+      {
+        path: 'payments/new',
+        title: 'New payment',
+        loadComponent: () => import('./features/payments/payment-form').then((m) => m.PaymentForm),
+      },
+      {
+        path: 'payments/:id',
+        title: 'Payment',
+        loadComponent: () =>
+          import('./features/payments/payment-detail').then((m) => m.PaymentDetail),
+      },
+      {
+        path: 'payments/:id/result',
+        title: 'Payment status',
+        loadComponent: () =>
+          import('./features/payments/payment-detail').then((m) => m.PaymentDetail),
+      },
+      {
         path: 'connections',
         title: 'Connections & privacy',
         loadComponent: () =>

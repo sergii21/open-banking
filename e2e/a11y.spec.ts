@@ -1,20 +1,5 @@
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
-import { mainNav, openInspector, settleAnimations } from './support';
-
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
-
-async function expectNoViolations(page: Page, scope = 'page'): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
-  const summary = results.violations.map(
-    (v) =>
-      `${v.id} (${v.impact}): ${v.help}\n${v.nodes
-        .map((n) => `    ${n.target.join(' ')}`)
-        .slice(0, 4)
-        .join('\n')}`,
-  );
-  expect(summary, `${scope} has accessibility violations`).toEqual([]);
-}
+import { expect, test } from '@playwright/test';
+import { expectNoViolations, mainNav, openInspector, settleAnimations } from './support';
 
 const ROUTES = [
   { path: '/dashboard', ready: 'account-card' },
@@ -22,6 +7,8 @@ const ROUTES = [
   { path: '/connections', ready: 'connection-card' },
   { path: '/connect', ready: 'institution-list' },
   { path: '/connect/review/mock:mock-bank', ready: 'continue-to-bank' },
+  { path: '/payments', ready: 'new-payment' },
+  { path: '/payments/new', ready: 'payment-form' },
 ];
 
 for (const scheme of ['light', 'dark'] as const) {

@@ -67,6 +67,7 @@ export class Shell {
   protected readonly navItems: readonly NavItem[] = [
     { path: '/dashboard', label: 'Dashboard', icon: 'space_dashboard' },
     { path: '/transactions', label: 'Transactions', icon: 'receipt_long' },
+    { path: '/payments', label: 'Payments', icon: 'send' },
     { path: '/connections', label: 'Connections', icon: 'account_balance' },
   ];
 

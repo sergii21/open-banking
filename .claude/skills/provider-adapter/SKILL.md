@@ -55,7 +55,18 @@ apps/api/src/modules/connections/access.ts   the only place tokens are unsealed,
 - `fetchConsent(tokens, ctx)` → `{ expiresAt, permissions }`, called on every user-initiated refresh so reminders stay accurate.
 - `fetchAccounts` / `fetchBalance` / `fetchTransactions` (booked + pending merged and de-duplicated; paginate inside the adapter).
 - `revoke(tokens, ctx)` — best effort; local data is deleted regardless.
-- Payments (M3): `createPayment` / `getPayment` / `verifyWebhook`, advertised through institution `capabilities.payments`.
+- Payments: implement `PaymentInitiation` too (`supportsPayments()` checks for it) and advertise it through institution
+  `capabilities.payments`. `fixedPayee(institutionId, currency)` names the one account a provider pays (or null when the
+  customer chooses); `createPayment(input, ctx)` → `{ providerPaymentId, authUrl, status, settlementExpected }`;
+  `getPayment(id, ctx)` → a `PaymentUpdate`; `verifyWebhook({ method, path, headers, rawBody })` → `{ eventId, type,
+providerPaymentId, update | null, payload }`, throwing `invalid_webhook_signature` for anything that does not verify.
+  The adapter never touches the database: `modules/payments/PaymentService` owns idempotency, the state machine, SSE and polling.
+  Pass the provider `input.idempotencyKey` through as its idempotency header; a timeout or 5xx must surface as
+  `bank_unavailable` (outcome unknown: the service keeps the attempt so a retry completes the same payment), a refusal as
+  `payment_rejected` / `rate_limited` / `idempotency_conflict` (definitive: the service forgets the attempt).
+  `providers/shared/payments-api.ts` holds the Payments-v3-shaped DTOs, the status/failure mapping and the error mapper
+  (TrueLayer and the mock bank both speak it); request signing and webhook verification are per provider (`truelayer/signing.ts`,
+  `truelayer/webhooks.ts`, `mock/signature.ts`).
 
 Typed errors the adapter throws so the core can react: `TokenRejectedError` (401 on a data call: refresh once and retry),
 `InvalidGrantError` (re-auth needed), `ConsentGoneError('expired' | 'revoked')` (403), and `AppError` for the rest
@@ -77,13 +88,18 @@ Data-API-style response in one call.
    consent expired/revoked → `consent_expired` / `consent_revoked`; 429 → `rate_limited` with `retryAfterSeconds`;
    5xx/timeouts → `bank_unavailable`; everything else → `provider_error` (log the provider's request id, not the body).
 6. **Secrets** come from `config.providers.<id>` (Zod-validated env). An adapter without credentials is not registered.
-7. **Webhooks**: verify the signature over the **raw body** with a timestamp tolerance, store `event_id` (unique) before
-   applying, and make processing idempotent. Never trust a webhook's status without an idempotent state-machine check;
-   the polling fallback must reach the same state.
+7. **Webhooks**: verify the signature over the **raw body** (the route has its own `application/json` buffer parser) with a
+   timestamp tolerance, store `event_id` (unique) in the same transaction that applies the update, and make processing
+   idempotent (`domain/payment-state.ts`: final states never change, progress only moves forward). Pin what the sender
+   controls: the algorithm, and where the keys come from (TrueLayer's `jku` must equal the published JWKS URL; it is never
+   fetched from the header). Answer 2xx for duplicates, unknown payments and event types we ignore, 401 for a bad signature,
+   5xx when we could not check (so the provider retries). The polling fallback must reach the same state.
 8. **Tests are fixture-based and offline**: record real sandbox responses (strip secrets), put them in
    `test/fixtures/<id>/`, and drive the adapter through a stub `Transport` that replays them. Cover: happy path, pagination,
    pending→booked, 401→refresh→retry, `invalid_grant`, 429, 5xx, malformed payload, amount edge cases (0.10, 1000000.01,
-   negative), and webhook signature (valid, tampered, stale, replayed).
+   negative), and webhook signature (valid, tampered, stale, replayed). The TrueLayer stub verifies every payment request's
+   `Tl-Signature` against the registered public key, like the real API, and the tests re-check the canonical string and
+   header shape with plain `node:crypto`; webhook keys are generated per run, so no key material is committed.
 9. Live checks are opt-in (`npm run e2e:sandbox`) and must never run in `verify`.
 
 ## Checklist for a new provider

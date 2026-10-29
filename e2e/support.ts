@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page } from '@playwright/test';
 
 export const EMPTY_STATE = { cookies: [], origins: [] };
@@ -63,4 +64,84 @@ export async function settleAnimations(page: Page): Promise<void> {
   await page.evaluate(() =>
     Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))),
   );
+}
+
+const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
+
+/** axe against WCAG 2.2 AA, with the offending elements named so a failure says where to look. */
+export async function expectNoViolations(page: Page, scope = 'page'): Promise<void> {
+  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+  const summary = results.violations.map(
+    (v) =>
+      `${v.id} (${v.impact}): ${v.help}\n${v.nodes
+        .map((n) => `    ${n.target.join(' ')}`)
+        .slice(0, 4)
+        .join('\n')}`,
+  );
+  expect(summary, `${scope} has accessibility violations`).toEqual([]);
+}
+
+export interface PaymentOptions {
+  /** The bank's name as the picker shows it. */
+  bank?: 'Mock Bank' | 'Mock Bank UK' | 'Mock Bank (degraded)';
+  amount?: string;
+  reference?: string;
+  payee?: string;
+  iban?: string;
+  sortCode?: string;
+  accountNumber?: string;
+}
+
+/** Fills in the payment form and presses the button, which sends the browser to the bank's approval page. */
+export async function startPayment(page: Page, options: PaymentOptions = {}): Promise<void> {
+  const {
+    bank = 'Mock Bank',
+    amount = '12.34',
+    reference = 'Rent',
+    payee = 'Erika Mustermann',
+    iban = 'DE89 3704 0044 0532 0130 00',
+    sortCode = '112233',
+    accountNumber = '12345678',
+  } = options;
+
+  await page.goto('/payments/new');
+  await expect(page.getByTestId('payment-form')).toBeVisible();
+  if (bank !== 'Mock Bank') {
+    await page.getByTestId('bank-select').click();
+    await page.getByRole('option', { name: bank }).click();
+  }
+  await page.getByTestId('amount').fill(amount);
+  await page.getByTestId('reference').fill(reference);
+  await page.getByTestId('payee-name').fill(payee);
+  if (bank === 'Mock Bank UK') {
+    await page.getByTestId('sort-code').fill(sortCode);
+    await page.getByTestId('account-number').fill(accountNumber);
+  } else {
+    await page.getByTestId('iban').fill(iban);
+  }
+  await page.getByTestId('pay').click();
+}
+
+export interface BankDecision {
+  persona?: 'anna' | 'ben';
+  outcome?: 'test_executed' | 'test_authorisation_failed' | 'test_execution_rejected';
+  decision?: 'approve' | 'cancel';
+}
+
+/** On the mock bank's approval page: choose who pays and what happens, press the button, and come back to the app. */
+export async function decideAtBank(page: Page, options: BankDecision = {}): Promise<void> {
+  const { persona = 'anna', outcome = 'test_executed', decision = 'approve' } = options;
+  await expect(page).toHaveURL(/\/mock-bank\/pay\?/);
+  await page.locator(`input[name="persona"][value="${persona}"]`).check();
+  await page.locator(`input[name="outcome"][value="${outcome}"]`).check();
+  await page
+    .getByRole('button', { name: decision === 'approve' ? 'Approve payment' : 'Cancel' })
+    .click();
+  await expect(page).toHaveURL(/\/payments\/pay_[^/]+\/result/);
+}
+
+/** The full journey up to the payment page. */
+export async function pay(page: Page, payment: PaymentOptions = {}, bank: BankDecision = {}) {
+  await startPayment(page, payment);
+  await decideAtBank(page, bank);
 }

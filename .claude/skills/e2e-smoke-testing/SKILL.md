@@ -65,17 +65,22 @@ Other useful commands:
 
 ## Specs
 
-| Spec                   | Session            | Covers                                                                                                          |
-| ---------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `smoke.spec.ts`        | shared (connected) | shell, navigation, probes, security headers, no tokens in browser storage                                       |
-| `connect.spec.ts`      | fresh per test     | the full journey, GBP bank, denied, SCA timeout, outage, degraded bank, bad/reused callback, redirect-URI check |
-| `dashboard.spec.ts`    | shared (read-only) | balances, recent transactions, cache-only reads, redacted Inspector detail, filters, paging, privacy copy       |
-| `lifecycle.spec.ts`    | fresh per test     | refresh + Inspector, outage, rate limit, revoke + reconnect, consent countdown/expiry, remove, delete-all       |
-| `a11y.spec.ts`         | shared             | axe (WCAG 2.2 AA) for every route, the Inspector and the dialog, in light and dark; skip link, focus handling   |
-| `phone.mobile.spec.ts` | shared             | drawer navigation, stacked cards, no horizontal overflow, bottom-sheet Inspector                                |
-| `monobank.spec.ts`     | fresh, serial      | token journey for a real bank against a fake of its API: wrong token, history loading banner, revoked token     |
+| Spec                      | Session            | Covers                                                                                                          |
+| ------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `smoke.spec.ts`           | shared (connected) | shell, navigation, probes, security headers, no tokens in browser storage                                       |
+| `connect.spec.ts`         | fresh per test     | the full journey, GBP bank, denied, SCA timeout, outage, degraded bank, bad/reused callback, redirect-URI check |
+| `dashboard.spec.ts`       | shared (read-only) | balances, recent transactions, cache-only reads, redacted Inspector detail, filters, paging, privacy copy       |
+| `lifecycle.spec.ts`       | fresh per test     | refresh + Inspector, outage, rate limit, revoke + reconnect, consent countdown/expiry, remove, delete-all       |
+| `a11y.spec.ts`            | shared             | axe (WCAG 2.2 AA) for every route, the Inspector and the dialog, in light and dark; skip link, focus handling   |
+| `phone.mobile.spec.ts`    | shared             | drawer navigation, stacked cards, no horizontal overflow, bottom-sheet Inspector                                |
+| `monobank.spec.ts`        | fresh, serial      | token journey for a real bank against a fake of its API: wrong token, history loading banner, revoked token     |
+| `payments.spec.ts`        | fresh per test     | every outcome through the real UI and the bank's page, resume, double click, form errors, balance after refresh |
+| `payments.mobile.spec.ts` | fresh per test     | the form, the journey and the timeline on a phone, no sideways scroll                                           |
 
 `REFRESH_COOLDOWN_SECONDS` is 3 in e2e, so Refresh re-enables by itself (assert with `toBeEnabled()`, never sleep).
+`MOCK_BANK_STEP_SECONDS` is 1, so a whole payment (authorised, executed, settled) takes about three seconds: wait for the final
+state with `toContainText('Settled', { timeout: 20_000 })` instead of sleeping. `support.ts` has `startPayment` (form → bank's page),
+`decideAtBank` (persona, outcome, approve or cancel → result page) and `pay` (both).
 
 ## Traps (each cost a debugging round)
 
@@ -96,3 +101,7 @@ Other useful commands:
 - **Background pacing makes states race you.** A Refresh pressed right after a background step is told to wait (the designed rate-limit
   state); retry with `expect(async () => ...).toPass()` rather than sleeping.
 - **`input[value="..."]` matches the HTML attribute, not the live value.** Signal Forms set the property. Use `toHaveValue(...)`.
+- **Payments are per session, and the mock bank's payments token is cached app-wide.** "Get payments token" appears in the Inspector of
+  whichever session happened to pay first, so never assert on it; assert on "Create payment" and the webhooks.
+- **A payment's timeline moves while the test watches.** Intermediate states ("Authorised") can pass in a blink; assert the final state
+  and the step attributes (`data-state`), not that you saw every step.
