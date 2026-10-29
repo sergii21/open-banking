@@ -29,6 +29,16 @@ describe('ThemeService', () => {
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
   });
 
+  it('resolves the scheme on screen: a pinned choice wins, "system" follows the OS', () => {
+    const theme = TestBed.inject(ThemeService);
+    theme.preference.set('dark');
+    expect(theme.scheme()).toBe('dark');
+    theme.preference.set('light');
+    expect(theme.scheme()).toBe('light');
+    theme.preference.set('system');
+    expect(['light', 'dark']).toContain(theme.scheme());
+  });
+
   it('describes the current choice for assistive technology', () => {
     const theme = TestBed.inject(ThemeService);
     expect(theme.label()).toBe('Theme: match system');

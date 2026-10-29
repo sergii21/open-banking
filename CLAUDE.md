@@ -78,6 +78,12 @@ Project specifics on top of it (enforced by ESLint where possible):
   tonal palette (`src/_palette.scss`, generated with Material Color Utilities; stock `$cyan-palette` is neon). Material's
   surface tokens need the extra neutral tones (4, 6, 12, 17, 22, 24, 87, 92, 94, 96): without them dark mode silently falls
   back to white. The axe suite (light + dark) is the guard.
+- **Charts** follow the data-viz rules: one hue for one series (the category list is a bar list, not a rainbow), a legend for two
+  or more series, solid hairline grid, 2px surface gap between columns, and a table view next to every chart (the relief for the one
+  palette contrast WARN). The two series colours are `--ll-series-1/2` in `styles.scss` and `chart-theme.ts`, validated with the
+  data-viz skill's `validate_palette.js` against this app's real surfaces; re-run it if the theme or the colours change. ApexCharts
+  loads lazily with the Insights route (the initial bundle is within 2 kB of its 900 kB budget: check `npm run build` after adding
+  anything to the shell or the routes, and prefer lazy imports over static ones for things only one page needs).
 - Layout adapts to the width a component actually gets: grids use Tailwind **container queries** (`@container` +
   `@2xl:grid-cols-2`), not viewport breakpoints, because the Inspector can take space. The API Inspector is a non-modal
   `<aside>` docked at the bottom below 1440px and on the right above it (content gets padding and `scroll-padding` so a

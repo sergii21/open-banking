@@ -32,5 +32,7 @@
   --color-positive-container: var(--ll-positive-container);
   --color-on-positive-container: var(--ll-on-positive-container);
   --color-warning-container: var(--ll-warning-container);
+  --color-series-1: var(--ll-series-1);
+  --color-series-2: var(--ll-series-2);
   --color-on-warning-container: var(--ll-on-warning-container);
 }

@@ -1,7 +1,11 @@
 import { DOCUMENT } from '@angular/common';
-import { computed, effect, inject, Service, signal } from '@angular/core';
+import { computed, DestroyRef, effect, inject, Service, signal } from '@angular/core';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
+/** What is actually on screen: `system` resolved to whatever the OS asks for. */
+export type Scheme = 'light' | 'dark';
+
+const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 const STORAGE_KEY = 'll-theme';
 const ORDER: readonly ThemePreference[] = ['system', 'light', 'dark'];
@@ -21,6 +25,15 @@ export class ThemeService {
   private readonly document = inject(DOCUMENT);
 
   readonly preference = signal<ThemePreference>(readStored());
+  private readonly systemDark = signal(
+    typeof matchMedia === 'function' && matchMedia(DARK_QUERY).matches,
+  );
+  /** The scheme in effect, for things that cannot read CSS variables (charts draw with concrete colours). */
+  readonly scheme = computed<Scheme>(() => {
+    const preference = this.preference();
+    if (preference !== 'system') return preference;
+    return this.systemDark() ? 'dark' : 'light';
+  });
   readonly icon = computed(
     () =>
       ({ system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' })[this.preference()],
@@ -33,6 +46,16 @@ export class ThemeService {
   );
 
   constructor() {
+    if (typeof matchMedia === 'function') {
+      const query = matchMedia(DARK_QUERY);
+      const onChange = (event: MediaQueryListEvent): void => {
+        this.systemDark.set(event.matches);
+      };
+      query.addEventListener('change', onChange);
+      inject(DestroyRef).onDestroy(() => {
+        query.removeEventListener('change', onChange);
+      });
+    }
     effect(() => {
       const preference = this.preference();
       const root = this.document.documentElement;

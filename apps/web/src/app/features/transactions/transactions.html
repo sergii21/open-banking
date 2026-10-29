@@ -1,8 +1,20 @@
-<header class="mb-4">
-  <h1 class="text-3xl font-semibold tracking-tight">Transactions</h1>
-  <p class="mt-1 text-on-surface-variant">
-    Everything we’ve cached from your banks. Search and filter without calling the bank again.
-  </p>
+<header class="mb-4 flex flex-wrap items-end justify-between gap-3">
+  <div class="max-w-2xl">
+    <h1 class="text-3xl font-semibold tracking-tight">Transactions</h1>
+    <p class="mt-1 text-on-surface-variant">
+      Everything we’ve cached from your banks. Search and filter without calling the bank again.
+    </p>
+  </div>
+  <a
+    mat-stroked-button
+    [href]="exportUrl()"
+    download
+    data-testid="export-csv"
+    matTooltip="Download what the filters match as a spreadsheet"
+  >
+    <mat-icon>download</mat-icon>
+    Export CSV
+  </a>
 </header>
 
 <ll-sync-banner [connections]="data.connections.value()" />
@@ -208,6 +220,8 @@
               <ll-transaction-row
                 [transaction]="transaction"
                 [accountName]="accountNames().get(transaction.accountId) ?? null"
+                [editable]="true"
+                (categoryChange)="changeCategory(transaction, $event)"
               />
             </li>
           }

@@ -7,6 +7,7 @@ const ROUTES = [
   { path: '/connections', ready: 'connection-card' },
   { path: '/connect', ready: 'institution-list' },
   { path: '/connect/review/mock:mock-bank', ready: 'continue-to-bank' },
+  { path: '/insights', ready: 'kpi-income' },
   { path: '/payments', ready: 'new-payment' },
   { path: '/payments/new', ready: 'payment-form' },
 ];

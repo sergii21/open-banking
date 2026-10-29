@@ -105,3 +105,7 @@ state with `toContainText('Settled', { timeout: 20_000 })` instead of sleeping. 
   whichever session happened to pay first, so never assert on it; assert on "Create payment" and the webhooks.
 - **A payment's timeline moves while the test watches.** Intermediate states ("Authorised") can pass in a blink; assert the final state
   and the step attributes (`data-state`), not that you saw every step.
+- **Charts: assert the numbers, not the pixels.** The Insights chart (ApexCharts) is checked by counting its bars
+  (`.apexcharts-bar-area`), hovering one and reading the readout, and by comparing the table view with the tiles through
+  `ll-money`'s `data-amount-minor`. Wait ~1 s before axe: columns grow in, and contrast is measured on the final colours.
+- **`getByLabel('Category')` is a substring match** and now also hits every row's "Change category of ..." button: use `exact: true`.

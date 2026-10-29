@@ -2,6 +2,7 @@ import { registerAccountRoutes } from './modules/accounts/routes';
 import { registerConnectionRoutes } from './modules/connections/routes';
 import { registerDemoRoutes } from './modules/demo/routes';
 import { registerEventRoutes } from './modules/events/routes';
+import { registerInsightRoutes } from './modules/insights/routes';
 import { registerInspectorRoutes } from './modules/inspector/routes';
 import { registerPaymentRoutes } from './modules/payments/routes';
 import { registerSessionRoutes } from './modules/session/routes';
@@ -28,6 +29,7 @@ export async function registerApi(app: App, ctx: AppContext): Promise<void> {
       registerConnectionRoutes(api, ctx);
       registerAccountRoutes(api, ctx);
       registerTransactionRoutes(api, ctx);
+      registerInsightRoutes(api, ctx);
       registerPaymentRoutes(api, ctx);
       registerInspectorRoutes(api, ctx);
       registerEventRoutes(api, ctx);

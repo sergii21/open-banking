@@ -6,14 +6,17 @@ import { MatFormField, MatLabel, MatPrefix } from '@angular/material/form-field'
 import { MatIcon } from '@angular/material/icon';
 import { MatInput } from '@angular/material/input';
 import { MatOption, MatSelect } from '@angular/material/select';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
 import {
   CATEGORIES,
+  Transaction as TransactionSchema,
   TransactionPage,
   type Category,
   type Transaction,
 } from '@ledger-lens/contracts';
 import { firstValueFrom } from 'rxjs';
-import { describeError, type ErrorCopy } from '../../core/api/api-error';
+import { describeError, toApiError, type ErrorCopy } from '../../core/api/api-error';
 import { Ticker } from '../../core/clock/ticker';
 import { Data } from '../../core/data/data';
 import { CATEGORY_INFO } from '../../shared/categories';
@@ -43,6 +46,7 @@ interface DayGroup {
     MatOption,
     MatPrefix,
     MatSelect,
+    MatTooltip,
     Skeleton,
     StateCard,
     SyncBanner,
@@ -55,6 +59,7 @@ export class Transactions {
   protected readonly data = inject(Data);
   private readonly http = inject(HttpClient);
   private readonly ticker = inject(Ticker);
+  private readonly snackBar = inject(MatSnackBar);
 
   protected readonly categories: readonly Category[] = CATEGORIES;
   protected readonly categoryInfo = CATEGORY_INFO;
@@ -94,6 +99,32 @@ export class Transactions {
     const now = this.ticker.now();
     return [...byDay].map(([day, items]) => ({ day, heading: dayHeading(day, now), items }));
   });
+
+  /** The same filters as the list, without paging: the download is everything they match. */
+  protected readonly exportUrl = computed(() => {
+    const { limit: _limit, cursor: _cursor, ...rest } = this.filters.params();
+    return `/api/transactions/export.csv?${new URLSearchParams(rest).toString()}`;
+  });
+
+  /** The customer's own category for one transaction. It is kept when the bank sends the transaction again. */
+  protected async changeCategory(transaction: Transaction, category: Category): Promise<void> {
+    if (category === transaction.category && transaction.categorySource === 'user') return;
+    try {
+      const updated = TransactionSchema.parse(
+        await firstValueFrom(this.http.patch(`/api/transactions/${transaction.id}`, { category })),
+      );
+      const leavesFilter = this.filters.category() !== null && this.filters.category() !== category;
+      this.items.update((items) =>
+        leavesFilter
+          ? items.filter((item) => item.id !== updated.id)
+          : items.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      this.data.recentTransactions.reload();
+      this.snackBar.open(`Filed under ${CATEGORY_INFO[category].label}`, 'OK');
+    } catch (error) {
+      this.snackBar.open(toApiError(error).message, 'OK');
+    }
+  }
 
   protected valueOf(event: Event): string {
     return (event.target as HTMLInputElement).value;

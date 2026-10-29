@@ -40,7 +40,7 @@ test.describe('phone layout', () => {
     expect(amount && viewport && amount.x + amount.width <= viewport.width).toBe(true);
 
     await page.getByRole('button', { name: /Filters/ }).click();
-    await expect(page.getByLabel('Category')).toBeVisible();
+    await expect(page.getByLabel('Category', { exact: true })).toBeVisible();
   });
 
   test('the Inspector is a bottom sheet that leaves the page usable', async ({ page }) => {
@@ -55,5 +55,28 @@ test.describe('phone layout', () => {
     );
     await page.getByRole('button', { name: 'Close API Inspector' }).last().click();
     await expect(page.getByTestId('inspector-toggle')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('insights stack in one column and the chart fits the screen', async ({ page }) => {
+    await page.goto('/insights');
+    await expect(page.getByTestId('kpi-income')).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+
+    const viewport = page.viewportSize();
+    const income = await page.getByTestId('kpi-income').boundingBox();
+    const spending = await page.getByTestId('kpi-spending').boundingBox();
+    expect(income && spending && income.x === spending.x && spending.y > income.y).toBe(true);
+
+    const chart = page.getByTestId('monthly-chart').locator('.apexcharts-canvas');
+    await expect(chart).toBeVisible();
+    const box = await chart.boundingBox();
+    expect(box && viewport && box.x >= 0 && box.x + box.width <= viewport.width).toBe(true);
+
+    await page.getByTestId('chart-view').getByRole('radio', { name: 'Table' }).click();
+    const table = await page.getByTestId('monthly-table').boundingBox();
+    expect(table && viewport && table.x + table.width <= viewport.width + 1).toBe(true);
   });
 });

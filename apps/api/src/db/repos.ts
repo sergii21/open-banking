@@ -660,7 +660,11 @@ export class TransactionsRepo {
       .map(toTransaction);
   }
 
-  list(sessionId: string, query: TransactionQuery): TransactionPageResult {
+  /** The WHERE clause shared by the paged list and the export, so a filter means the same thing in both. */
+  private filter(
+    sessionId: string,
+    query: TransactionQuery,
+  ): { where: string[]; params: SqlParam[] } {
     const where: string[] = ['c.session_id = ?'];
     const params: SqlParam[] = [sessionId];
 
@@ -702,6 +706,12 @@ export class TransactionsRepo {
       params.push(query.maxAmountMinor);
     }
 
+    return { where, params };
+  }
+
+  list(sessionId: string, query: TransactionQuery): TransactionPageResult {
+    const { where, params } = this.filter(sessionId, query);
+
     const from = `FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN connections c ON c.id = a.connection_id`;
     const total =
       this.db.get<{ n: number }>(
@@ -731,6 +741,19 @@ export class TransactionsRepo {
       nextCursor: rows.length > query.limit && last ? encodeCursor(last) : null,
       total,
     };
+  }
+
+  /** Every row matching the filters, newest first, for a CSV download. Capped so one request cannot pull an unbounded table. */
+  exportRows(sessionId: string, query: TransactionQuery, limit: number): TransactionRecord[] {
+    const { where, params } = this.filter(sessionId, query);
+    return this.db
+      .all<TransactionRow>(
+        `SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN connections c ON c.id = a.connection_id
+         WHERE ${where.join(' AND ')} ORDER BY t.booked_at DESC, t.id DESC LIMIT ?`,
+        ...params,
+        limit,
+      )
+      .map(toTransaction);
   }
 }
 
