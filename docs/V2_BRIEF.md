@@ -1,5 +1,7 @@
 # Ledger Lens v2: small, fast, beautiful, on real data
 
+> **History.** This was the brief for the v2 pass, which is finished; it is kept as the record of what was asked. Do not read the lists below as a to-do list: the current state, the measurements and what is left are in [HANDOVER.md](HANDOVER.md), and the steps for using the app are in [START_HERE.md](START_HERE.md).
+
 Brief from the user, written 2026-11-03 by the coordinating session. This file is the source of truth for the v2 pass.
 Read it fully, work through the phases in order, and commit this file with the first phase.
 

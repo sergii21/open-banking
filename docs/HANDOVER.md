@@ -9,12 +9,12 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 The session stopped on a usage limit. Everything below is committed; `npm run verify` exits 0 (contracts 11, API 67, web 4 unit
 tests) and the Playwright suite passes (10 tests).
 
-| Phase                          | State                                                                                                                                                                 |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A baseline and cut             | done                                                                                                                                                                  |
-| B real-data path (API)         | done                                                                                                                                                                  |
-| C new UI                       | done: welcome, Home, Activity, Insights, Settings sheet, Live API drawer; own design system; no Router, Material, Tailwind, zod or chart library in the browser       |
-| D evidence, docs, deliverables | partly: `docs/START_HERE.md`, screenshots (`docs/screenshots`), `start.sh`, `npm run app`, `npm run doctor`, Playwright smoke + axe. **Not done**: see "What is left" |
+| Phase                          | State                                                                                                                                                                                                                                                    |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A baseline and cut             | done                                                                                                                                                                                                                                                     |
+| B real-data path (API)         | done                                                                                                                                                                                                                                                     |
+| C new UI                       | done: welcome, Home, Activity, Insights, Settings sheet, Live API drawer; own design system; no Router, Material, Tailwind, zod or chart library in the browser                                                                                          |
+| D evidence, docs, deliverables | done except two things: `CLAUDE.md` and `.claude/skills/*` still describe v1 (see "What is left"). Docs pass finished: README, UKRAINE.md, render.yaml (demo-only), DEMO.md deleted, PLAN.md and V2_BRIEF.md marked as history, phone screenshots shrunk |
 
 ### Before and after (measured 2026-11-03, same method as the baseline)
 
@@ -48,22 +48,35 @@ tests) and the Playwright suite passes (10 tests).
 Real field shapes on a real account; that `balance` includes `creditLimit` (the spec does not say; `npm run doctor` and the
 diagnostics report where a credit card's balance sits against its limit); that a statement item's `balance` is the balance after
 that item (the spec only says "account balance"; the diagnostics report how many consecutive pairs agree); the real 429 body;
-real latency; the Render blueprint (still v1-shaped, see below).
+real latency; the Render blueprint (now demo-only; reasoned from the code, never deployed).
 
-### What is left, in order
+### What is left
 
-1. `README.md`: the top now points at START_HERE, but everything below it still describes v1 (payments, TrueLayer, mock bank).
-   Trim it to what is true now.
-2. `CLAUDE.md`: update for v2 (no zod, HttpClient, Material, Tailwind or Router in the SPA; `Nav` in `core/nav.ts`; fetch with an
-   XSRF header; CSP `style-src-attr 'unsafe-inline'`; responses are plain types from `packages/contracts`, request bodies are zod
-   in the API; commands `npm run app`, `doctor`, `fake:monobank`, `./start.sh`; Playwright suite is now small).
-3. `.claude/skills/provider-adapter` and `e2e-smoke-testing`, `docs/UKRAINE.md`, `docs/DEMO.md`, `docs/PLAN.md` and
-   `render.yaml` still describe v1 (`PROVIDERS`, TrueLayer, mock bank). The demo-only Render profile is: `PUBLIC_URL` https and
-   nothing else (real accounts switch off by themselves).
-4. Polish noticed: on desktop the hero card on Home does not stretch to the height of the accounts column (empty space under it);
-   the phone screenshots are 2x and about 300 kB each (take them at 1x); the demo's Live API drawer shows `demo.monobank.invalid`
-   as the host (it says so in its note).
-5. Optional, not started: "Enable live updates" (monobank webhook; needs a public HTTPS URL, see the spec notes above).
+Finished in the docs pass: `README.md` (rewritten for v2), `docs/UKRAINE.md` (cut to what is true), `render.yaml` (demo-only; `HOST=0.0.0.0`
+added, the rest of the v1 settings removed), `docs/DEMO.md` (deleted: it was the v1 tour), banners on `docs/PLAN.md` and `docs/V2_BRIEF.md`,
+phone and 320 px screenshots reduced to 1x.
+
+1. **`CLAUDE.md` and `.claude/skills/*` still describe v1 and were deliberately not changed.** A peer session asked for those edits;
+   instruction and configuration files only change on the user's own say-so. When the user agrees, what has to change:
+   - `CLAUDE.md`: no Material, Tailwind, ngrx, zod, HttpClient, CDK or Router in the SPA (own CSS tokens in `apps/web/src/styles`,
+     native `<dialog>`, hand-drawn SVG, `core/nav.ts`, `fetch` with the XSRF header in `core/api.ts`); contracts are plain types and
+     pure helpers; the API validates requests with zod and does not schema-validate responses; bundle budget 215 kB warn / 250 kB
+     error for initial JS + CSS; commands `./start.sh`, `npm run app|doctor|dev|verify|e2e|fake:monobank`; keep: integer minor
+     units, live providers localhost-only, token sealed (key in `data/secret.key`) and never logged, statement reads paced from the
+     port's `limits`, all provider HTTP through `ProviderHttp`, time from the injected `Clock` and days from `Calendar`. Remove:
+     the payments rule, charts rule, `zod-jitless`, Material/Tailwind rules, the 106-test matrix, TrueLayer and mock-bank
+     commands (`e2e:sandbox`, `keys:truelayer`, `test:live`).
+   - `e2e-smoke-testing`: the suite is `e2e/demo`, `monobank`, `a11y` and `phone.mobile` specs (10 tests); the demo app is on :4300 and the
+     real-token flow on :4301 against the paced fake on :4310; `npm run e2e` builds first; `scripts/screenshots.mjs` retakes the pictures.
+   - `provider-adapter`: the port is now `connect`, `fetchAccounts`, `fetchTransactions`, `fetchRates`, `revoke` plus `limits`
+     (statement and account-list intervals, window days, row cap, history months); no redirect or payment parts; one adapter class
+     serves `monobank` and `demo`; the fake bank is in `providers/monobank/demo`; DTOs are tolerant (per-row parse, diagnostics
+     collector). The v1 text is in the `v1-full-featured` tag.
+2. Home on desktop: the hero card does not stretch to the height of the accounts column.
+3. Noticed, not changed (it is code): `npm run dev` serves the SPA on :4200, but `PUBLIC_URL` now defaults to `http://localhost:<PORT>`,
+   so the CSRF origin check rejects writes unless `PUBLIC_URL=http://localhost:4200` is set (the README says so; the default could
+   follow `NODE_ENV=development`). Not verified.
+4. Optional, not started: "Enable live updates" (monobank webhook; needs a public HTTPS address).
 
 ### Observation, not a bug
 
@@ -75,12 +88,12 @@ running against the same fake, a new session's first statement gets a 429 and wa
 
 ## Where we were after phases A and B
 
-| Phase                          | State                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------- |
-| A baseline and cut             | done: v1 tagged, baseline measured, payments / TrueLayer / mock bank / old UI / old tests removed |
-| B real-data path (API)         | done and committed: see "What the API does now". 67 API tests, 11 contracts tests                 |
-| C new UI                       | **next**: `apps/web` is empty on purpose (v1 UI deleted); build it from section 4 of the brief    |
-| D evidence, docs, deliverables | not started (`npm run doctor`, `start.sh`, `docs/START_HERE.md`, README, skills, screenshots)     |
+| Phase                          | State                                                                                                                                                                                                                                                    |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A baseline and cut             | done: v1 tagged, baseline measured, payments / TrueLayer / mock bank / old UI / old tests removed                                                                                                                                                        |
+| B real-data path (API)         | done and committed: see "What the API does now". 67 API tests, 11 contracts tests                                                                                                                                                                        |
+| C new UI                       | **next**: `apps/web` is empty on purpose (v1 UI deleted); build it from section 4 of the brief                                                                                                                                                           |
+| D evidence, docs, deliverables | done except two things: `CLAUDE.md` and `.claude/skills/*` still describe v1 (see "What is left"). Docs pass finished: README, UKRAINE.md, render.yaml (demo-only), DEMO.md deleted, PLAN.md and V2_BRIEF.md marked as history, phone screenshots shrunk |
 
 **Right now `npm run verify` cannot pass** until `apps/web` has an app again; the API workspace is green on its own
 (`npx tsc --noEmit -p apps/api/tsconfig.json`, `npm test -w @ledger-lens/api`, `npx eslint apps/api packages/contracts`).

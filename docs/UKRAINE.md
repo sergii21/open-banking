@@ -1,115 +1,62 @@
-# Real Ukrainian banks
+# monobank and other Ukrainian banks: what is real here
 
-Ledger Lens reads one real Ukrainian bank today: **monobank**, through its personal API. This page says what that is,
-how to use it, what it cannot do, and what the alternatives are. Facts were checked on 2026-10-28; where a fact comes from
-a document and was not exercised against a real account, it says so.
+Ledger Lens reads one Ukrainian bank, **monobank**, through its personal API with a token you issue yourself. This page says what
+has been checked against the real service, what only your own token can check, and what is not possible. How to use it is in
+[START_HERE.md](START_HERE.md).
 
-## What is actually possible
+## The rules that come with the token
 
-| Route                                         | Who can use it                                                                                                                              | Status here                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| **monobank personal API** (`api.monobank.ua`) | One person, for their own accounts, with a token they issue in the monobank app                                                             | **Built.** Read-only: cards, jars, balances, statements      |
-| monobank corporate API                        | A company with the bank's approval that serves other people's accounts                                                                      | Not built: needs an application to monobank and signing keys |
-| NBU open banking (PSD2-style)                 | Third-party providers authorised by the National Bank of Ukraine                                                                            | Not built, see below                                         |
-| PrivatBank                                    | Business customers (AutoClient, token from the business portal). I found nothing confirming a personal-token API for individual cardholders | Not built                                                    |
-| An aggregator with Ukrainian coverage         | Anyone the aggregator onboards                                                                                                              | None confirmed (see below)                                   |
+- monobank's personal API is for your own and your family's accounts, is not available under 16, and a service that passes other
+  people's data through its servers needs monobank's corporate API. So the real-bank provider is registered only while
+  `PUBLIC_URL` is a localhost address (`ALLOW_LIVE_PROVIDERS=true` overrides that; do not use it for anything others can reach).
+  A public instance runs demo data only.
+- The token is read-only and stays valid at api.monobank.ua until you issue a new one there. The app has no way to revoke it.
 
-### The regulated route (NBU open banking)
+## Checked against api.monobank.ua (2026-11-03)
 
-Ukraine's open banking regime started on **1 August 2025** (Law "On Payment Services", chapter 4, with NBU Board Resolution
-No. 80 of 25 July 2025). Banks must give API access to account data and payment initiation to **third-party providers
-authorised by the NBU**, with strong customer authentication. Industry commentary expects the market to become active
-around the end of 2026. Two consequences for this project:
+From the OpenAPI document published inside https://api.monobank.ua/docs/ (version v250818):
 
-- A proof of concept cannot simply "use the banks' PSD2 APIs" the way TrueLayer's sandbox suggests. Doing that for other
-  people means becoming an authorised AISP/PISP (or working through one) and integrating bank by bank. I found no public
-  sandbox or specification for the large banks, so I did not guess one.
-- Nothing in the app prevents adding such a bank later: it would be one more adapter behind the `BankingProvider` port, with
-  the redirect-and-consent flow the TrueLayer adapter already uses.
+- `client-info` and `statement` are each limited to one request per 60 seconds. The spec does not say whether the two limits
+  share one budget, so the scheduler treats them as separate and switches to one shared gate if a 429 shows otherwise.
+- The statement endpoint accepts a jar id as well as a card id (`0` is the default account). Window: at most 31 days and one
+  hour. The app treats a response of 500 rows as possibly cut short and asks for the rest of the window.
+- `/bank/currency` is cached by the bank and refreshed at most every five minutes. A pair has a buy and sell rate, a cross
+  rate, or both.
+- Amounts are integer minor units. `commissionRate` and `cashbackAmount` are amounts in minor units, despite the first name.
+- A webhook (`POST /personal/webhook`) is validated with a GET that must answer 200, then receives `StatementItem` events,
+  retried after 60 s and 600 s and then disabled; it carries no signature. Not built here (it needs a public HTTPS address).
 
-Sources: [Asters](https://www.asterslaw.com/press_center/legal_alerts/open_banking_to_launch_in_ukraine_on_1_august_2025/),
-[Lexology](https://www.lexology.com/library/detail.aspx?g=bdf1714f-322f-4079-b773-2ee01a3b3b9e),
-[Salt Edge on NBU compliance](https://blog.saltedge.com/open-banking-compliance-in-ukraine-salt-edge-cs/),
-[Open Banking Tracker: Ukraine](https://www.openbankingtracker.com/regulation/ukraine-open-banking).
+Against the live service, without any token (through the running app):
 
-### Aggregators
+- The exchange rates the demo shows are the real ones from `/bank/currency`.
+- A made-up token gets the real 403 from `client-info`; the app says "monobank does not recognise this token" and stores nothing.
+  (The same 403 body was seen on 2026-10-28: `{"errorDescription":"Unknown 'X-Token'"}`.)
 
-TrueLayer (used for the UK sandbox) does not cover Ukraine. Salt Edge, which works with Ukrainian banks on the compliance
-side, appears in aggregator directories, but I could not confirm that it offers account-information access to Ukrainian
-banks for third parties, so no adapter was written for it.
+## Only your own token can check
 
-## Using monobank
+- The field shapes of a real account. Unknown fields are ignored and optional ones may be missing; Copy diagnostics lists the
+  field names and types that actually arrive, and any row that could not be read.
+- That `balance` includes `creditLimit`. The spec is silent. The app assumes it (own funds = balance minus limit);
+  `npm run doctor` and the diagnostics say where a credit card's balance sits against its limit, which you can compare with the
+  monobank app.
+- That a statement item's `balance` is the balance after that item (the spec only says "account balance"). The doctor and the
+  diagnostics count how many consecutive items agree.
+- The real body of a 429 (the app reacts to the status and waits `Retry-After` or 60 s), whether the two limits are shared,
+  real latency, and how well the categoriser knows your merchants (it uses the merchant code first, then Ukrainian and Latin
+  names).
+- Foreign-currency purchases: `operationAmount` has no currency in the spec, so the app shows the amount in the account's
+  currency.
 
-monobank's own terms limit the personal API to **personal and family use**; a service that passes other people's data
-through its servers needs the corporate API. So this provider is local only:
+How: START_HERE steps 4 to 6, and `MONOBANK_TOKEN=... npm run doctor` in your own terminal.
 
-- It is off unless `PROVIDERS` lists `monobank`.
-- It refuses to start while `PUBLIC_URL` is not `localhost` (override: `ALLOW_LIVE_PROVIDERS=true`, which you should not do for
-  anything other people can reach). The startup log says why when it stays off.
+## PrivatBank
 
-```bash
-# apps/api/.env
-PROVIDERS=mock,monobank
-# MONOBANK_HISTORY_MONTHS=3          # how far back the background loader goes (1-13)
-```
+I found no personal API for PrivatBank cardholders: its APIs (AutoClient and merchant APIs) are for business customers. No Privat
+importer was built. What one would need: a sample statement export from Privat24 (whatever format it offers, with anything
+private edited out) so the column layout can be read, and then a file import in the app instead of a live connection.
 
-1. `npm run dev`, open http://localhost:4200, **Connect a bank**, choose **monobank**.
-2. Open https://api.monobank.ua/, sign in with the QR code in the monobank app, copy the token.
-3. Paste it into the field and connect. The token is checked with a real call, encrypted at rest (AES-256-GCM, bound to the
-   connection), and never returned to the browser, logged, or shown in the API Inspector (`X-Token` is redacted and account
-   identifiers are masked for live providers).
+## Other routes, not built
 
-You never type the token anywhere else, and nobody needs to send it to anyone: in particular, do not paste it into a chat.
-
-### What it does
-
-- **Accounts:** cards (black, white, platinum, iron, kids, FOP, eSupport) and jars. Jars appear as savings accounts.
-- **Balances:** `balance` from monobank includes the credit limit, so the app shows own funds as `balance - creditLimit` and
-  "available" as `balance`. _This follows monobank's documentation as I understand it and is not yet checked against a credit
-  card: look at one before trusting it._
-- **Transactions:** a statement row with `hold: true` is shown as pending. Amounts are in the account currency. The merchant
-  category code (`mcc`) feeds the categoriser, which also reads Ukrainian merchant names (Сільпо, АТБ, Київстар, Uklon, ...).
-- **Pacing:** monobank allows **one statement request per minute per token**. Connecting reads the account list at once
-  (balances show immediately) and queues one statement read per account and 31-day window. A background worker runs one per
-  minute, newest window of every account first, and the dashboard shows "Loading history from monobank, 3 of 12 steps done".
-  Three accounts and three months take about ten minutes. The queue is stored, so it resumes after a restart.
-  A busy account can return 500 rows, which is the cap; the worker then asks for the rest of that window.
-- **Refresh:** if a background step ran in the last minute, Refresh answers "the bank allows one transaction read per minute" with
-  the seconds to wait, exactly as for any other rate-limited bank.
-- **Token no longer accepted** (replaced or revoked at monobank): the connection moves to _needs a new token_, the queue stops, and
-  Reconnect asks for a new token on the same connection.
-- **Removing the connection** deletes the token and everything cached. monobank has no API to withdraw a token: it stays valid at
-  api.monobank.ua until you issue a new one, and the app says so.
-
-### What it cannot do
-
-- Move money. The personal API has no payment initiation, so payments stay with the mock and TrueLayer providers.
-- Push updates. monobank can call a webhook for new transactions, but that needs a public URL; use Refresh.
-- Read more than 31 days per request, or faster than one request a minute. These are the bank's limits.
-
-## Checking it against the real service
-
-Offline tests use made-up data shaped like monobank's documentation. Two things were also checked against the live service on
-2026-10-28 with no account: `GET /bank/currency` (public rates) and `GET /personal/client-info` with a dummy token, which answers
-`403` with `{"errorDescription":"Unknown 'X-Token'"}`, the body the adapter treats as "token not accepted". Run them any time:
-
-```bash
-npm run test:live -w @ledger-lens/api
-```
-
-To check your own account (read-only, two requests, prints counts only), export the token in the same shell. It is read from
-the environment and never written anywhere:
-
-```bash
-export MONOBANK_TOKEN=...            # your own token, typed by you
-npm run test:live -w @ledger-lens/api
-```
-
-If that passes, the response shapes the adapter expects match your real data.
-
-## Not verified
-
-- Any real account: no token was available while this was built.
-- That `balance` includes `creditLimit` for credit cards (see above).
-- That the statement endpoint accepts a jar's id as the account (the adapter assumes it does).
-- The exact 429 body: the adapter treats the status code as the signal and waits a minute.
+Ukraine's open-banking regime (NBU, since 1 August 2025) is for authorised third-party providers, so a personal project cannot
+use it; monobank's corporate API needs an application to the bank. A second bank is a new adapter behind the `BankingProvider`
+port in `apps/api/src/providers`.

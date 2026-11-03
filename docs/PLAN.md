@@ -1,3 +1,5 @@
+> v1 history: this was the plan for v1. For the app as it is now see [START_HERE.md](START_HERE.md) and [HANDOVER.md](HANDOVER.md).
+
 # Open Banking POC — build plan
 
 Prepared 2026-10-28 · Status: **draft for your approval. Nothing has been created yet.**
