@@ -1,6 +1,6 @@
 import type { Category, Insights, RegularPayment } from '@ledger-lens/contracts';
 import type { SessionRecord } from '../../db/repos';
-import { type Calendar, addMonths } from '../../domain/calendar';
+import { type Calendar, addMonths, daysInMonth } from '../../domain/calendar';
 import { detectRecurring, merchantKey, summarise } from '../../domain/insights';
 import { toUahRows } from '../../domain/uah-rows';
 import { notFound } from '../../errors';
