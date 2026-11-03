@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import type { InspectorCall } from '@ledger-lens/contracts';
 import { Live } from '../../core/live';
+import { Session } from '../../core/session';
 import { Ui } from '../../core/ui';
 import { Icon } from '../../shared/icon';
 
@@ -70,6 +71,7 @@ import { Icon } from '../../shared/icon';
 export class LiveApi {
   protected readonly ui = inject(Ui);
   protected readonly live = inject(Live);
+  protected readonly session = inject(Session);
   protected readonly open = signal<string | null>(null);
 
   protected path(call: InspectorCall): string {

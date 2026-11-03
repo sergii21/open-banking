@@ -4,7 +4,76 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 (`git checkout v1-full-featured`; its own hand-over is in that tag's `docs/HANDOVER.md`). Node 24 for every command:
 `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
 
-## Where we are
+## Latest state (read this first; it supersedes the older sections below where they differ)
+
+The session stopped on a usage limit. Everything below is committed; `npm run verify` exits 0 (contracts 11, API 67, web 4 unit
+tests) and the Playwright suite passes (10 tests).
+
+| Phase                          | State                                                                                                                                                                 |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A baseline and cut             | done                                                                                                                                                                  |
+| B real-data path (API)         | done                                                                                                                                                                  |
+| C new UI                       | done: welcome, Home, Activity, Insights, Settings sheet, Live API drawer; own design system; no Router, Material, Tailwind, zod or chart library in the browser       |
+| D evidence, docs, deliverables | partly: `docs/START_HERE.md`, screenshots (`docs/screenshots`), `start.sh`, `npm run app`, `npm run doctor`, Playwright smoke + axe. **Not done**: see "What is left" |
+
+### Before and after (measured 2026-11-03, same method as the baseline)
+
+| Measure                              | v1                     | v2                                                                                      |
+| ------------------------------------ | ---------------------- | --------------------------------------------------------------------------------------- |
+| Initial JS, raw                      | 857.1 kB               | 170.2 kB (main 27.1 + framework chunk 143.1)                                            |
+| Initial JS + CSS, estimated transfer | 207.5 kB               | 57.7 kB (CSS 27.0 kB raw, 6.0 kB brotli)                                                |
+| Lighthouse mobile, Home              | 75 (LCP 8.10 s)        | **100** (FCP 0.90 s, LCP 0.90 s, TBT 0 ms, CLS 0)                                       |
+| Lighthouse desktop, Home             | 95 (LCP 1.49 s)        | **100** (FCP 0.24 s, LCP 0.24 s, TBT 0 ms, CLS 0)                                       |
+| Page weight on Home                  | 1181 kB (uncompressed) | 101 kB (brotli, pre-compressed assets, all lazy chunks prefetched)                      |
+| Keystroke to filtered list           | n/a                    | about one frame: 26 to 33 ms for two frames on 5,892 rows (Activity first paint 138 ms) |
+| Source lines (app code, no tests)    | 19,589                 | 13141                                                                                   |
+| Test lines                           | 7,294 unit + 1,890 e2e | 1870 (82 unit tests, 10 Playwright)                                                     |
+
+### Verified
+
+- In a browser and in Playwright, on the demo bank: first run, demo, every tab, instant search, detail sheet, category change,
+  blur, disconnect, Settings, Live API; axe WCAG 2.2 AA on every screen and sheet in light and dark; phone and 320 px layouts
+  (nothing past the edge); no Content-Security-Policy violations.
+- The real-token flow against a paced fake monobank (`npm run fake:monobank`, enforces one read per interval): wrong token
+  explained, balances in seconds, history one step per interval with an honest chip, a 429 waits, outage and rate-limit screens.
+  Screenshots in `docs/screenshots` (`scripts/screenshots.mjs` regenerates them).
+- Against the real service without a token: real exchange rates shown through the app (the demo asks api.monobank.ua for them);
+  a made-up token gets the real 403, becomes "monobank does not recognise this token" and nothing is stored.
+- From monobank's published spec (v250818): jar ids work in the statement endpoint; one read a minute per endpoint (the spec
+  does not say whether the two limits are shared, so the scheduler learns it from a 429); 31 days + 1 hour per statement;
+  `/bank/currency` refreshes at most every 5 minutes; webhook contract (GET check, then POSTs, no signature).
+
+### Not verified (needs the user's real token)
+
+Real field shapes on a real account; that `balance` includes `creditLimit` (the spec does not say; `npm run doctor` and the
+diagnostics report where a credit card's balance sits against its limit); that a statement item's `balance` is the balance after
+that item (the spec only says "account balance"; the diagnostics report how many consecutive pairs agree); the real 429 body;
+real latency; the Render blueprint (still v1-shaped, see below).
+
+### What is left, in order
+
+1. `README.md`: the top now points at START_HERE, but everything below it still describes v1 (payments, TrueLayer, mock bank).
+   Trim it to what is true now.
+2. `CLAUDE.md`: update for v2 (no zod, HttpClient, Material, Tailwind or Router in the SPA; `Nav` in `core/nav.ts`; fetch with an
+   XSRF header; CSP `style-src-attr 'unsafe-inline'`; responses are plain types from `packages/contracts`, request bodies are zod
+   in the API; commands `npm run app`, `doctor`, `fake:monobank`, `./start.sh`; Playwright suite is now small).
+3. `.claude/skills/provider-adapter` and `e2e-smoke-testing`, `docs/UKRAINE.md`, `docs/DEMO.md`, `docs/PLAN.md` and
+   `render.yaml` still describe v1 (`PROVIDERS`, TrueLayer, mock bank). The demo-only Render profile is: `PUBLIC_URL` https and
+   nothing else (real accounts switch off by themselves).
+4. Polish noticed: on desktop the hero card on Home does not stretch to the height of the accounts column (empty space under it);
+   the phone screenshots are 2x and about 300 kB each (take them at 1x); the demo's Live API drawer shows `demo.monobank.invalid`
+   as the host (it says so in its note).
+5. Optional, not started: "Enable live updates" (monobank webhook; needs a public HTTPS URL, see the spec notes above).
+
+### Observation, not a bug
+
+`npm run fake:monobank` keeps one limit for everything that talks to it. If an earlier session's background loader is still
+running against the same fake, a new session's first statement gets a 429 and waits 60 s ("Next step in 59 s" in
+`docs/screenshots/15-paced-home-loading.png`). A real token has its own limit.
+
+---
+
+## Where we were after phases A and B
 
 | Phase                          | State                                                                                             |
 | ------------------------------ | ------------------------------------------------------------------------------------------------- |

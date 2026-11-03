@@ -1,5 +1,14 @@
 # Ledger Lens
 
+Your monobank, instantly: a small, fast personal-finance app on your own real monobank data. Read-only, on your own computer.
+
+**Start:** `./start.sh`, click **Try with demo data**, and when you want your own accounts get a token at https://api.monobank.ua/
+(scan the QR code in the monobank app) and paste it into the app. The numbered steps, with what you should see at each one, are
+in [docs/START_HERE.md](docs/START_HERE.md).
+
+> The rest of this README still describes v1 (payments, TrueLayer, mock bank) and is being rewritten. v1 is the git tag
+> `v1-full-featured`. The current state is in [docs/HANDOVER.md](docs/HANDOVER.md).
+
 An Open Banking proof of concept: a personal-finance app that connects your bank (**account information**), shows what
 you own and where it goes, and sends a payment you approve inside your own bank (**payment initiation**). An **API
 Inspector** beside every screen shows the real provider calls behind it, so you can watch Open Banking happen.
