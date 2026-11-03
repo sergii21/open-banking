@@ -40,12 +40,20 @@ test('importing a Privat24 statement: two cards appear, importing it again count
   await expect(page.locator('.hero > .amt')).toContainText('₴');
   // Both cards have a balance in the file, so both are in the total: 15 230,55 + 5 100,00.
   await expect(page.locator('.hero > .amt')).toContainText('20 330');
+  // The statement ends on 30.09 and today is later: the screen says the newer days are missing, and offers the way forward.
+  await expect(page.getByText(/A statement ends 30\.09/)).toBeVisible();
+  await expect(page.locator('.hero ll-sparkline')).toHaveCount(0);
   await expect(page.locator('.sync-chip')).toContainText(/Updated/);
   await settle(page);
   await expectNoViolations(page);
   await page.emulateMedia({ colorScheme: 'dark' });
   await expectNoViolations(page);
   await page.emulateMedia({ colorScheme: 'light' });
+
+  await page.getByRole('button', { name: 'Import a newer one' }).click();
+  await expect(page).toHaveURL(/\/connect\?source=privat24/);
+  await expect(page.getByRole('heading', { name: 'Add a bank' })).toBeVisible();
+  await page.getByRole('link', { name: 'Home', exact: true }).click();
 
   await page.getByRole('link', { name: 'Activity' }).click();
   await expect(page.locator('.row')).toHaveCount(ROWS);

@@ -304,6 +304,8 @@ describe('importing a statement', () => {
       imported: { from: '2026-09-01', to: '2026-09-30' },
     });
     expect(home.hero.ownUahMinor).toBe(1_523_055 + 510_000);
+    // The statement ends on 30 September and "today" is 3 November: a line drawn from it would claim nothing happened since.
+    expect(home.trend).toBeNull();
     expect(home.sync).toMatchObject({ phase: 'idle', total: 0 });
     expect(home.demo).toBe(false);
 

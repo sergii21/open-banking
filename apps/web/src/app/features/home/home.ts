@@ -27,6 +27,7 @@ export class Home {
   protected readonly ui = inject(Ui);
   protected readonly nav = inject(Nav);
 
+  protected readonly ddmm = ddmm;
   protected readonly home = this.stores.home.data;
   /** The loader as the server last said it (live), so a bank going quiet shows at once and not on the next reload of Home. */
   protected readonly sync = computed(() => this.live.sync() ?? this.home()?.sync ?? null);
@@ -71,7 +72,7 @@ export class Home {
     const home = this.home();
     if (!home) return '';
     const parts: string[] = [];
-    if (home.rates.asOf) {
+    if (home.rates.asOf && this.foreign().length > 0) {
       const at = new Intl.DateTimeFormat('en-GB', {
         timeZone: timeZone(),
         hour: '2-digit',
@@ -103,6 +104,19 @@ export class Home {
     if (banks < 2 && this.credit() !== null) return '';
     return `Across ${home.accounts.length} accounts${banks > 1 ? ` at ${banks} banks` : ''}, in hryvnias`;
   });
+
+  /** The earliest end among imported statements that stop before yesterday: the days since are not here. */
+  protected readonly staleStatement = computed(() => {
+    const yesterday = dayKey(Date.now() - 86_400_000);
+    const ends = (this.home()?.accounts ?? []).flatMap((a) =>
+      a.imported && a.imported.to < yesterday ? [a.imported.to] : [],
+    );
+    return ends.length > 0 ? ends.reduce((a, b) => (a < b ? a : b)) : null;
+  });
+
+  protected importNewer(): void {
+    void this.nav.go('/connect?source=privat24');
+  }
 
   protected readonly monthTitle = computed(() => monthLabel(this.home()?.month.label ?? '2000-01'));
   protected readonly delta = computed(() => {

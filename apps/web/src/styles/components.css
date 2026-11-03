@@ -385,6 +385,7 @@
 
 /* Three or more choices that must fit a 320 px screen: the segments share the width and may wrap their text. */
 .seg-wide {
+  margin-bottom: 16px;
   display: grid;
   grid-auto-flow: row;
   grid-template-columns: repeat(3, minmax(0, 1fr));

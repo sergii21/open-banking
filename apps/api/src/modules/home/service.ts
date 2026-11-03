@@ -147,9 +147,17 @@ export class HomeService {
             ? (flowsByAccount.get(account.id) ?? [])
             : null,
       }));
-    // With no account whose balance is known there is nothing to draw.
+    // A statement that stops before yesterday leaves the days since unknown: a flat line would claim nothing happened. With no
+    // account whose balance is known there is nothing to draw either.
+    const staleStatement = accounts.some(
+      (a) =>
+        a.balanceKnown &&
+        connectionsById.get(a.connectionId)?.kind === 'file' &&
+        a.coveredTo !== null &&
+        a.coveredTo < addDays(today, -1),
+    );
     const trend =
-      trendAccounts.length > 0
+      trendAccounts.length > 0 && !staleStatement
         ? balanceTrend(trendAccounts, days, (day) => this.calendar.dayEnd(day), table)
         : null;
 

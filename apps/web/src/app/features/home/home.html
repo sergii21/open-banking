@@ -34,6 +34,18 @@
         }
       </p>
     }
+    @if (staleStatement(); as ends) {
+      <p class="banner a-banner" style="grid-column: 1 / -1">
+        <ll-icon name="clock" [size]="18" />
+        <span
+          >A statement ends {{ ddmm(ends) }}, so newer days are not here yet and the 30-day line is
+          hidden.</span
+        >
+        <button class="btn btn-sm btn-quiet" type="button" (click)="importNewer()">
+          Import a newer one
+        </button>
+      </p>
+    }
     @if (ui.imported(); as imported) {
       <p class="banner a-banner" role="status" style="grid-column: 1 / -1">
         <ll-icon name="check" [size]="18" />
@@ -221,7 +233,10 @@
           <span class="badge" data-cat="subscriptions"><ll-icon name="repeat" /></span>
           <span style="flex: 1">
             @if (h.regular.count > 0) {
-              <strong>{{ h.regular.count }} regular payments</strong>
+              <strong
+                >{{ h.regular.count }}
+                {{ h.regular.count === 1 ? 'regular payment' : 'regular payments' }}</strong
+              >
               <span
                 ><ll-amount [minor]="h.regular.monthlyMinor" currency="UAH" [fraction]="false" /> a
                 month</span
