@@ -11,9 +11,11 @@ tools: Read, Bash, Edit, Write
 # Changing or adding a provider adapter
 
 Everything outside `apps/api/src/providers/<id>/` is bank-agnostic: an adapter owns its provider's wire format, hands the core the
-normalised types from `port.ts`, and never touches the database. v2 has one real adapter, monobank's personal API, and it is also the
+normalised types from `port.ts`, and never touches the database. There are two real adapters. monobank's personal API is also the
 demo: the `demo` provider is the same class with its transport pointed at an in-process fake bank, so everything the demo shows has gone
-through the code a real connection uses. The v1 adapters (TrueLayer, the mock bank) are in the git tag `v1-full-featured`.
+through the code a real connection uses. PrivatBank's Autoclient API (business and ФОП accounts) is the worked example of a paged,
+rate-limited bank with a header token and no OAuth. Personal Privat cards have no API: they come from a Privat24 statement file through
+`modules/imports`, which is not an adapter. The v1 adapters (TrueLayer, the mock bank) are in the git tag `v1-full-featured`.
 
 ```
 apps/api/src/providers/
@@ -21,11 +23,19 @@ apps/api/src/providers/
   registry.ts              builds `monobank` (only when live) and `demo`: transport, diagnostics collector, rate sources
   transport.ts             ProviderHttp: every call timed, redacted and filed with the Live API drawer; a network failure
                            becomes bank_unavailable; non-2xx answers are returned, not thrown
-  monobank/adapter.ts      MonobankProvider (one class for both providers), normaliseToken, status → error mapping
+  token.ts                 normaliseToken: strips whitespace and quotes from what the person pasted
+  monobank/adapter.ts      MonobankProvider (one class for both providers), status → error mapping
   monobank/dto.ts          tolerant DTOs, the known-field lists, parseRows (one bad row never hides the others)
   monobank/currency.ts     ISO 4217 numeric → alphabetic
   monobank/demo/           FakeMonobank (in process), dataset.ts (a made-up Ukrainian dataset), server.ts (the same fake over HTTP,
                            with a 429 for a second read inside the interval: `npm run fake:monobank`)
+  privatbank/adapter.ts    PrivatBankProvider: pages of 100, its own pacing between pages, the daily-routine window, outage wording
+  privatbank/dto.ts        tolerant DTOs for balances and transactions, the known-field lists
+  privatbank/demo/         dataset.ts, fake.ts (in process: 1 request a second, paging, routine switch), server.ts (`npm run fake:privatbank`)
+apps/api/src/modules/imports/               the Privat24 statement import route and service (no token, no sync)
+apps/api/src/domain/privat24-statement.ts   finds the columns by title (Ukrainian, Russian, English) and maps rows
+apps/api/src/domain/files/{zip,xlsx,csv}.ts small readers on node:zlib, no dependency
+apps/api/src/domain/decimal.ts              decimal strings to integer minor units, never through a float
 apps/api/src/domain/diagnostics.ts          DiagnosticsCollector: field names, types, counts; never values
 apps/api/src/domain/redact.ts               masks tokens and, for live providers, card numbers and IBANs
 apps/api/src/modules/connection/access.ts   the one place a token is unsealed and a provider call is run with it
@@ -53,12 +63,17 @@ worker paces itself from it and asks for the rest of a window when a response re
    `diagnostics.warn` takes field names and codes only, never data.
 4. **Map statuses to the states the screens know.** 401 and 403 → `TokenRejectedError` (the loader stops and the app asks for a new
    token); 429 → `AppError('rate_limited', 429, …, { retryAfterSeconds })` (the worker waits as long as the bank says, else 60 s);
-   5xx and network failures → `bank_unavailable`; anything else → `provider_error` with the status.
+   5xx and network failures → `bank_unavailable`; anything else → `provider_error` with the status. PrivatBank also maps 400 `VE014`
+   (bad token format) to `TokenRejectedError`, and a `settings` answer with `phase` ≠ `WRK` or `work_balance` `Y` to `bank_unavailable`
+   with the daily-routine message.
 5. **No caching, no retries in the adapter.** The sync worker owns pacing; an adapter that retries on its own can burn the one read a
-   minute. If an endpoint is cheap to share (the account list is the balance call), the worker shares it.
-6. **The token stays out of everything.** It is sent only as the `X-Token` header, through `ProviderHttp`; `connect` strips whitespace and
-   quotes from what the person pasted (`normaliseToken`) and refuses anything that does not look like a token before calling the bank.
-   `domain/redact.ts` masks `xtoken`, and for a live provider card numbers and IBANs: add any new secret header or field name there.
+   minute. If an endpoint is cheap to share (the account list is the balance call), the worker shares it. The one exception: when a
+   window needs several requests (PrivatBank's pages), the adapter paces itself between them, and the worker measures its wait from the
+   end of the step. A bank with one limit for every endpoint sets `limits.sharedLimit`, which joins the gates.
+6. **The token stays out of everything.** It is sent only in the bank's token header (`X-Token` for monobank, `token` for PrivatBank),
+   through `ProviderHttp`; `connect` strips whitespace and quotes from what the person pasted (`providers/token.ts`) and refuses anything
+   that does not look like a token before calling the bank. `domain/redact.ts` masks those headers, and for a live provider card
+   numbers, IBANs (PrivatBank's `acc`, also in the URL), tax ids and every `*_ULTMT_*` field: add any new secret header or field name there.
 7. **Live means localhost.** A provider that reads a real person's account is registered only when `PUBLIC_URL` is localhost
    (`config.live`); a public instance can run the demo only. Mark such an adapter `mode: 'live'`.
 
@@ -73,11 +88,16 @@ yes/no fact for it in `modules/diagnostics/service.ts` (see `domain/checks.ts`),
 
 Implement `BankingProvider` in `providers/<id>/`, add the id to `ProviderId` in the contracts, build it in `registry.ts` behind the live
 rule, and give it a scripted fake next to it so tests and a demo can run offline. A provider with an OAuth redirect needs a connect flow
-the current port does not have: v1's version of that is in the `v1-full-featured` tag. PrivatBank has no personal API (see
-`docs/UKRAINE.md`); a statement-file importer would be its own module, not an adapter, because it has no token and no live reads.
+the current port does not have: v1's version of that is in the `v1-full-featured` tag. `providers/privatbank/` is the worked example
+of a paged, rate-limited bank with a header token. A bank with no API at all is a statement-file import, not an adapter:
+`domain/privat24-statement.ts` and `modules/imports` are the example (PrivatBank closed its personal API on 25.11.2022, see
+`docs/UKRAINE.md`).
 
 ## Tests
 
+- `apps/api/test/privatbank.test.ts` runs the PrivatBank adapter against its fake: paging, pacing, the routine window, VE014, redaction.
+  `privat-domain.test.ts` and `import.test.ts` cover the statement reader and the import (refusals, re-import adds only new rows);
+  `multi.test.ts` two banks in one session; `migrations.test.ts` the 002 rebuild on a v2-shaped database.
 - `apps/api/test/monobank.test.ts` runs the adapter against the scripted `FakeMonobank` through a stubbed `Transport`: mapping of cards,
   credit cards and jars, holds, foreign-currency purchases, transfers with comments, skipped rows, every status → error, token cleaning,
   rates.

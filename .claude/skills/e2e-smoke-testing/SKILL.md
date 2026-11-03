@@ -28,14 +28,17 @@ in-memory databases and nothing touches `data/`.
 
 ## What starts (playwright.config.ts)
 
-| Port  | What                                                                                                        | Used by                          |
-| ----- | ----------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| :4300 | the built app on the demo bank, in-memory database, rate limits lifted                                      | `chromium` and `mobile` projects |
-| :4310 | `FakeMonobank` over HTTP, one read per 4 s and a 429 for a second one (`providers/monobank/demo/server.ts`) | the app on :4301                 |
-| :4301 | a second copy of the app with the real monobank provider pointed at the fake (`MONOBANK_API_URL`)           | the `monobank` project           |
+| Port  | What                                                                                                              | Used by                              |
+| ----- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| :4300 | the built app on the demo bank, in-memory database, rate limits lifted                                            | `chromium` and `mobile` projects     |
+| :4310 | `FakeMonobank` over HTTP, one read per 4 s and a 429 for a second one (`providers/monobank/demo/server.ts`)       | the app on :4301                     |
+| :4311 | the fake PrivatBank Autoclient over HTTP, one request a second (`providers/privatbank/demo/server.ts`)            | the app on :4301                     |
+| :4301 | a second copy of the app with both live providers pointed at the fakes (`MONOBANK_API_URL`, `PRIVATBANK_API_URL`) | the `monobank` and `privat` projects |
 
-The fake is never reused (`reuseExistingServer: false`): another process answering 200 on :4310 would pass for the bank. The fake keeps
-**one** limit for everything that talks to it, so a leftover loader from an earlier run makes a new session's first statement wait out a 429. After a killed run, check for strays: `lsof -nP -iTCP:4300 -iTCP:4301 -iTCP:4310 -sTCP:LISTEN`.
+The fakes are never reused (`reuseExistingServer: false`): another process answering 200 on :4310 or :4311 would pass for the bank. The
+monobank fake keeps **one** limit for everything that talks to it, so a leftover loader from an earlier run makes a new session's first
+statement wait out a 429. For the same reason the `privat` project **depends on `monobank`**: both use the monobank fake and must not run
+side by side. After a killed run, check for strays: `lsof -nP -iTCP:4300 -iTCP:4301 -iTCP:4310 -iTCP:4311 -sTCP:LISTEN`.
 
 ## The specs
 
@@ -45,12 +48,16 @@ The fake is never reused (`reuseExistingServer: false`): another process answeri
   returns to the first-run screen.
 - `monobank.spec.ts`: the real-token flow: a wrong token is explained in words, the right one shows balances at once, history loads at
   the bank's pace with an honest progress chip, and "Disconnect and delete my data" returns to the first-run screen.
+- `privat.spec.ts` (serial): the PrivatBank key flow with the Live API drawer's redaction, the daily routine explained in words, two
+  banks at once, and axe plus 320 px on each connect pane.
+- `import.spec.ts` (`chromium`, on :4300): uploads `fixtures/privat24/unverified-statement.{csv,xlsx}`: a bad file is refused with its
+  column titles, a statement imports, the same rows again as xlsx add nothing, and removal works; 320 px.
 - `a11y.spec.ts`: axe (WCAG 2.0 A/AA, 2.1 A/AA, 2.2 AA) on the first-run screen, Home, Activity, Insights and every sheet, in light and dark.
 - `phone.mobile.spec.ts`: a Pixel 7 and a 320 px screen: every tab fits, nothing sticks out past the right edge, axe passes.
 
 `e2e/support.ts` has the helpers: `connectDemo(page)` (first-run screen → Home on the demo), `settle(page)` (waits out entry animations,
 because contrast and positions are only meaningful afterwards), `expectNoViolations(page)`, `expectNothingPastTheEdge(page)`,
-`watchCsp(page)` and `DEMO_TOKEN` (the fake's own constant, not a credential).
+`watchCsp(page)`, `DEMO_TOKEN`, `FAKE_PRIVAT_TOKEN` (the fakes' own constants, not credentials) and `FAKE_PRIVAT_URL`.
 
 ## Conventions
 
