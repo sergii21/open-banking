@@ -2,8 +2,8 @@ import type { SessionInfo } from '@ledger-lens/contracts';
 import type { SessionRecord } from '../../db/repos';
 import { hmacBase64Url, randomToken, sha256Hex } from '../../domain/crypto';
 import type { CoreContext } from '../../types';
-import type { ConnectionService } from '../connections/service';
-import type { ProviderRegistry } from '../../providers/registry';
+import type { ConnectionService } from '../connection/service';
+import { APP_VERSION } from '../../version';
 
 const DAY_MS = 86_400_000;
 /** Do not write on every request: refresh `last_seen_at` at most this often. */
@@ -23,7 +23,6 @@ export class SessionService {
 
   constructor(
     private readonly core: CoreContext,
-    private readonly providers: ProviderRegistry,
     private readonly connections: ConnectionService,
   ) {}
 
@@ -93,27 +92,18 @@ export class SessionService {
   }
 
   toInfo(record: SessionRecord): SessionInfo {
-    const { config } = this.core;
     return {
       id: record.id.slice(0, 8),
       createdAt: record.createdAt,
-      environment: config.env,
-      demoControls: config.demoControls,
-      providers: this.providers.all().map((provider) => ({
-        id: provider.id,
-        mode: provider.mode,
-        label: provider.label,
-      })),
-      limits: {
-        maxPaymentMinor: config.maxPaymentMinor,
-        refreshCooldownSeconds: config.refreshCooldownSeconds,
-      },
+      version: APP_VERSION,
+      live: this.core.config.live,
+      connection: this.connections.info(record.id),
     };
   }
 
-  /** GDPR "delete my data": withdraw consents at the banks (best effort), then erase the session and everything under it. */
+  /** "Delete all my data": forget the bank, then erase the session and everything under it. */
   async deleteAll(record: SessionRecord): Promise<void> {
-    await this.connections.revokeAll(record.id);
+    await this.connections.disconnect(record.id);
     this.core.repos.sessions.delete(record.id);
     this.core.inspector.clear(record.id);
   }

@@ -1,17 +1,6 @@
-import type {
-  AccountType,
-  Category,
-  ConnectionStatus,
-  PaymentFailureReason,
-  PaymentHistoryEntry,
-  PaymentStatus,
-  Permission,
-  ProviderId,
-  TransactionQuery,
-  TransactionStatus,
-} from '@ledger-lens/contracts';
+import type { Category, ProviderId } from '@ledger-lens/contracts';
 import { newId } from '../domain/crypto';
-import type { Db, SqlParam } from './database';
+import type { Db } from './database';
 
 // ================================================================================================= sessions
 
@@ -48,7 +37,7 @@ export class SessionsRepo {
     this.db.run('UPDATE sessions SET last_seen_at = ? WHERE id = ?', now, id);
   }
 
-  /** Deletes the session and, through ON DELETE CASCADE, every connection, account and transaction under it. */
+  /** Deletes the session and, through ON DELETE CASCADE, its connection, accounts, transactions and queued reads. */
   delete(id: string): void {
     this.db.run('DELETE FROM sessions WHERE id = ?', id);
   }
@@ -60,22 +49,16 @@ export class SessionsRepo {
 
 // ============================================================================================= connections
 
+export type ConnectionStatus = 'active' | 'needs_reauth' | 'error';
+
 export interface ConnectionRecord {
   id: string;
   sessionId: string;
   provider: ProviderId;
-  institutionId: string;
-  institutionName: string;
-  institutionLogoUrl: string | null;
   status: ConnectionStatus;
-  state: string | null;
-  stateExpiresAt: string | null;
-  codeVerifierEnc: string | null;
   tokensEnc: string | null;
-  tokenExpiresAt: string | null;
-  permissions: Permission[];
-  consentExpiresAt: string | null;
   lastRefreshedAt: string | null;
+  historyMonths: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,18 +67,10 @@ interface ConnectionRow {
   id: string;
   session_id: string;
   provider: string;
-  institution_id: string;
-  institution_name: string;
-  institution_logo_url: string | null;
   status: string;
-  state: string | null;
-  state_expires_at: string | null;
-  code_verifier_enc: string | null;
   tokens_enc: string | null;
-  token_expires_at: string | null;
-  permissions: string;
-  consent_expires_at: string | null;
   last_refreshed_at: string | null;
+  history_months: number;
   created_at: string;
   updated_at: string;
 }
@@ -104,116 +79,47 @@ const toConnection = (row: ConnectionRow): ConnectionRecord => ({
   id: row.id,
   sessionId: row.session_id,
   provider: row.provider as ProviderId,
-  institutionId: row.institution_id,
-  institutionName: row.institution_name,
-  institutionLogoUrl: row.institution_logo_url,
   status: row.status as ConnectionStatus,
-  state: row.state,
-  stateExpiresAt: row.state_expires_at,
-  codeVerifierEnc: row.code_verifier_enc,
   tokensEnc: row.tokens_enc,
-  tokenExpiresAt: row.token_expires_at,
-  permissions: JSON.parse(row.permissions) as Permission[],
-  consentExpiresAt: row.consent_expires_at,
   lastRefreshedAt: row.last_refreshed_at,
+  historyMonths: row.history_months,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
-export type ConnectionPatch = Partial<
-  Pick<
-    ConnectionRecord,
-    | 'status'
-    | 'state'
-    | 'stateExpiresAt'
-    | 'codeVerifierEnc'
-    | 'tokensEnc'
-    | 'tokenExpiresAt'
-    | 'permissions'
-    | 'consentExpiresAt'
-    | 'lastRefreshedAt'
-    | 'institutionName'
-    | 'institutionLogoUrl'
-  >
->;
+export interface ConnectionPatch {
+  status?: ConnectionStatus;
+  tokensEnc?: string | null;
+  lastRefreshedAt?: string;
+  historyMonths?: number;
+}
 
 const CONNECTION_COLUMNS: Record<keyof ConnectionPatch, string> = {
   status: 'status',
-  state: 'state',
-  stateExpiresAt: 'state_expires_at',
-  codeVerifierEnc: 'code_verifier_enc',
   tokensEnc: 'tokens_enc',
-  tokenExpiresAt: 'token_expires_at',
-  permissions: 'permissions',
-  consentExpiresAt: 'consent_expires_at',
   lastRefreshedAt: 'last_refreshed_at',
-  institutionName: 'institution_name',
-  institutionLogoUrl: 'institution_logo_url',
+  historyMonths: 'history_months',
 };
-
-export interface NewPendingConnection {
-  id: string;
-  sessionId: string;
-  provider: ProviderId;
-  institutionId: string;
-  institutionName: string;
-  institutionLogoUrl: string | null;
-  state: string;
-  stateExpiresAt: string;
-  codeVerifierEnc: string;
-  now: string;
-}
 
 export class ConnectionsRepo {
   constructor(private readonly db: Db) {}
 
-  insertPending(input: NewPendingConnection): void {
-    this.db.run(
-      `INSERT INTO connections (id, session_id, provider, institution_id, institution_name, institution_logo_url, status,
-         state, state_expires_at, code_verifier_enc, permissions, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, '[]', ?, ?)`,
-      input.id,
-      input.sessionId,
-      input.provider,
-      input.institutionId,
-      input.institutionName,
-      input.institutionLogoUrl,
-      input.state,
-      input.stateExpiresAt,
-      input.codeVerifierEnc,
-      input.now,
-      input.now,
-    );
-  }
-
-  /** Token-based banks have no consent redirect: the connection is active as soon as the token has been checked. */
-  insertActive(input: {
+  insert(input: {
     id: string;
     sessionId: string;
     provider: ProviderId;
-    institutionId: string;
-    institutionName: string;
-    institutionLogoUrl: string | null;
     tokensEnc: string;
-    tokenExpiresAt: string;
-    permissions: Permission[];
-    consentExpiresAt: string | null;
+    historyMonths: number;
     now: string;
   }): void {
     this.db.run(
-      `INSERT INTO connections (id, session_id, provider, institution_id, institution_name, institution_logo_url, status,
-         tokens_enc, token_expires_at, permissions, consent_expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO connections (id, session_id, provider, status, tokens_enc, history_months, created_at, updated_at)
+       VALUES (?, ?, ?, 'active', ?, ?, ?, ?)`,
       input.id,
       input.sessionId,
       input.provider,
-      input.institutionId,
-      input.institutionName,
-      input.institutionLogoUrl,
       input.tokensEnc,
-      input.tokenExpiresAt,
-      JSON.stringify(input.permissions),
-      input.consentExpiresAt,
+      input.historyMonths,
       input.now,
       input.now,
     );
@@ -224,35 +130,29 @@ export class ConnectionsRepo {
     return row ? toConnection(row) : undefined;
   }
 
-  findForSession(sessionId: string, id: string): ConnectionRecord | undefined {
+  findBySession(sessionId: string): ConnectionRecord | undefined {
     const row = this.db.get<ConnectionRow>(
-      'SELECT * FROM connections WHERE id = ? AND session_id = ?',
-      id,
+      'SELECT * FROM connections WHERE session_id = ?',
       sessionId,
     );
     return row ? toConnection(row) : undefined;
   }
 
-  findByState(state: string): ConnectionRecord | undefined {
-    const row = this.db.get<ConnectionRow>('SELECT * FROM connections WHERE state = ?', state);
-    return row ? toConnection(row) : undefined;
-  }
-
-  listBySession(sessionId: string): ConnectionRecord[] {
+  /** Connections the background loader should look at. */
+  listActive(): ConnectionRecord[] {
     return this.db
-      .all<ConnectionRow>(
-        `SELECT * FROM connections WHERE session_id = ? AND NOT (status = 'pending' AND state IS NOT NULL) ORDER BY created_at ASC`,
-        sessionId,
-      )
+      .all<ConnectionRow>(`SELECT * FROM connections WHERE status = 'active'`)
       .map(toConnection);
   }
 
   update(id: string, patch: ConnectionPatch, now: string): void {
     const sets: string[] = [];
-    const params: SqlParam[] = [];
-    for (const [key, value] of Object.entries(patch) as [keyof ConnectionPatch, unknown][]) {
+    const params: (string | number | null)[] = [];
+    for (const key of Object.keys(patch) as (keyof ConnectionPatch)[]) {
+      const value = patch[key];
+      if (value === undefined) continue;
       sets.push(`${CONNECTION_COLUMNS[key]} = ?`);
-      params.push((key === 'permissions' ? JSON.stringify(value) : (value ?? null)) as SqlParam);
+      params.push(value);
     }
     if (sets.length === 0) return;
     this.db.run(
@@ -266,24 +166,6 @@ export class ConnectionsRepo {
   delete(id: string): void {
     this.db.run('DELETE FROM connections WHERE id = ?', id);
   }
-
-  /** Abandoned consent redirects (the user never came back) are not worth keeping. */
-  deleteAbandoned(sessionId: string, before: string): number {
-    return this.db.run(
-      `DELETE FROM connections WHERE session_id = ? AND status = 'pending' AND state_expires_at < ?`,
-      sessionId,
-      before,
-    ).changes;
-  }
-
-  accountCount(connectionId: string): number {
-    return (
-      this.db.get<{ n: number }>(
-        'SELECT COUNT(*) AS n FROM accounts WHERE connection_id = ?',
-        connectionId,
-      )?.n ?? 0
-    );
-  }
 }
 
 // ================================================================================================= accounts
@@ -292,154 +174,116 @@ export interface AccountRecord {
   id: string;
   connectionId: string;
   providerAccountId: string;
+  kind: 'card' | 'jar';
+  cardType: string;
   name: string;
-  type: AccountType;
   currency: string;
-  maskedIdentifier: string | null;
+  last4: string | null;
+  creditLimitMinor: number;
+  /** As the bank reports it: includes the credit limit. */
   balanceMinor: number;
-  availableMinor: number | null;
+  goalMinor: number | null;
+  sort: number;
   balanceAt: string;
-  lastRefreshedAt: string;
-}
-
-export interface AccountWithConnection extends AccountRecord {
-  sessionId: string;
-  institutionId: string;
-  institutionName: string;
+  coveredFrom: string | null;
+  coveredTo: string | null;
+  lastStatementAt: string | null;
 }
 
 interface AccountRow {
   id: string;
   connection_id: string;
   provider_account_id: string;
+  kind: string;
+  card_type: string;
   name: string;
-  type: string;
   currency: string;
-  masked_identifier: string | null;
+  last4: string | null;
+  credit_limit_minor: number;
   balance_minor: number;
-  available_minor: number | null;
+  goal_minor: number | null;
+  sort: number;
   balance_at: string;
-  last_refreshed_at: string;
-}
-
-interface AccountJoinRow extends AccountRow {
-  session_id: string;
-  institution_id: string;
-  institution_name: string;
+  covered_from: string | null;
+  covered_to: string | null;
+  last_statement_at: string | null;
 }
 
 const toAccount = (row: AccountRow): AccountRecord => ({
   id: row.id,
   connectionId: row.connection_id,
   providerAccountId: row.provider_account_id,
+  kind: row.kind as 'card' | 'jar',
+  cardType: row.card_type,
   name: row.name,
-  type: row.type as AccountType,
   currency: row.currency,
-  maskedIdentifier: row.masked_identifier,
+  last4: row.last4,
+  creditLimitMinor: row.credit_limit_minor,
   balanceMinor: row.balance_minor,
-  availableMinor: row.available_minor,
+  goalMinor: row.goal_minor,
+  sort: row.sort,
   balanceAt: row.balance_at,
-  lastRefreshedAt: row.last_refreshed_at,
-});
-
-const toAccountJoin = (row: AccountJoinRow): AccountWithConnection => ({
-  ...toAccount(row),
-  sessionId: row.session_id,
-  institutionId: row.institution_id,
-  institutionName: row.institution_name,
+  coveredFrom: row.covered_from,
+  coveredTo: row.covered_to,
+  lastStatementAt: row.last_statement_at,
 });
 
 export interface AccountUpsert {
   providerAccountId: string;
+  kind: 'card' | 'jar';
+  cardType: string;
   name: string;
-  type: AccountType;
   currency: string;
-  maskedIdentifier: string | null;
+  last4: string | null;
+  creditLimitMinor: number;
   balanceMinor: number;
-  availableMinor: number | null;
+  goalMinor: number | null;
+  sort: number;
   balanceAt: string;
-  now: string;
 }
-
-const ACCOUNT_JOIN = `SELECT a.*, c.session_id, c.institution_id, c.institution_name
-  FROM accounts a JOIN connections c ON c.id = a.connection_id`;
 
 export class AccountsRepo {
   constructor(private readonly db: Db) {}
 
   upsert(connectionId: string, input: AccountUpsert): AccountRecord {
-    const existing = this.db.get<AccountRow>(
+    this.db.run(
+      `INSERT INTO accounts (id, connection_id, provider_account_id, kind, card_type, name, currency, last4,
+         credit_limit_minor, balance_minor, goal_minor, sort, balance_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (connection_id, provider_account_id) DO UPDATE SET
+         kind = excluded.kind, card_type = excluded.card_type, name = excluded.name, currency = excluded.currency,
+         last4 = excluded.last4, credit_limit_minor = excluded.credit_limit_minor, balance_minor = excluded.balance_minor,
+         goal_minor = excluded.goal_minor, sort = excluded.sort, balance_at = excluded.balance_at`,
+      newId('acc'),
+      connectionId,
+      input.providerAccountId,
+      input.kind,
+      input.cardType,
+      input.name,
+      input.currency,
+      input.last4,
+      input.creditLimitMinor,
+      input.balanceMinor,
+      input.goalMinor,
+      input.sort,
+      input.balanceAt,
+    );
+    const row = this.db.get<AccountRow>(
       'SELECT * FROM accounts WHERE connection_id = ? AND provider_account_id = ?',
       connectionId,
       input.providerAccountId,
     );
-    if (existing) {
-      this.db.run(
-        `UPDATE accounts SET name = ?, type = ?, currency = ?, masked_identifier = ?, balance_minor = ?,
-           available_minor = ?, balance_at = ?, last_refreshed_at = ? WHERE id = ?`,
-        input.name,
-        input.type,
-        input.currency,
-        input.maskedIdentifier,
-        input.balanceMinor,
-        input.availableMinor,
-        input.balanceAt,
-        input.now,
-        existing.id,
-      );
-      return toAccount({
-        ...existing,
-        name: input.name,
-        type: input.type,
-        currency: input.currency,
-        masked_identifier: input.maskedIdentifier,
-        balance_minor: input.balanceMinor,
-        available_minor: input.availableMinor,
-        balance_at: input.balanceAt,
-        last_refreshed_at: input.now,
-      });
-    }
-    const id = newId('acc');
-    this.db.run(
-      `INSERT INTO accounts (id, connection_id, provider_account_id, name, type, currency, masked_identifier,
-         balance_minor, available_minor, balance_at, last_refreshed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id,
-      connectionId,
-      input.providerAccountId,
-      input.name,
-      input.type,
-      input.currency,
-      input.maskedIdentifier,
-      input.balanceMinor,
-      input.availableMinor,
-      input.balanceAt,
-      input.now,
-    );
-    return {
-      id,
-      connectionId,
-      providerAccountId: input.providerAccountId,
-      name: input.name,
-      type: input.type,
-      currency: input.currency,
-      maskedIdentifier: input.maskedIdentifier,
-      balanceMinor: input.balanceMinor,
-      availableMinor: input.availableMinor,
-      balanceAt: input.balanceAt,
-      lastRefreshedAt: input.now,
-    };
+    if (!row) throw new Error('account upsert did not store a row');
+    return toAccount(row);
   }
 
-  /** Accounts the bank no longer shares (closed, or removed from the consent) disappear with their history. */
+  /** Accounts the bank no longer lists are removed with their transactions. */
   deleteMissing(connectionId: string, keepProviderIds: readonly string[]): void {
-    const existing = this.db.all<{ id: string; provider_account_id: string }>(
-      'SELECT id, provider_account_id FROM accounts WHERE connection_id = ?',
-      connectionId,
-    );
-    for (const row of existing) {
-      if (!keepProviderIds.includes(row.provider_account_id))
-        this.db.run('DELETE FROM accounts WHERE id = ?', row.id);
+    const keep = new Set(keepProviderIds);
+    for (const account of this.listByConnection(connectionId)) {
+      if (!keep.has(account.providerAccountId)) {
+        this.db.run('DELETE FROM accounts WHERE id = ?', account.id);
+      }
     }
   }
 
@@ -448,52 +292,80 @@ export class AccountsRepo {
     return row ? toAccount(row) : undefined;
   }
 
-  listBySession(sessionId: string): AccountWithConnection[] {
-    return this.db
-      .all<AccountJoinRow>(
-        `${ACCOUNT_JOIN} WHERE c.session_id = ? ORDER BY c.created_at, a.name`,
-        sessionId,
-      )
-      .map(toAccountJoin);
-  }
-
   listByConnection(connectionId: string): AccountRecord[] {
     return this.db
-      .all<AccountRow>('SELECT * FROM accounts WHERE connection_id = ? ORDER BY name', connectionId)
+      .all<AccountRow>(
+        'SELECT * FROM accounts WHERE connection_id = ? ORDER BY sort, id',
+        connectionId,
+      )
       .map(toAccount);
   }
 
-  findForSession(sessionId: string, accountId: string): AccountWithConnection | undefined {
-    const row = this.db.get<AccountJoinRow>(
-      `${ACCOUNT_JOIN} WHERE c.session_id = ? AND a.id = ?`,
+  listBySession(sessionId: string): AccountRecord[] {
+    return this.db
+      .all<AccountRow>(
+        `SELECT a.* FROM accounts a JOIN connections c ON c.id = a.connection_id
+         WHERE c.session_id = ? ORDER BY a.sort, a.id`,
+        sessionId,
+      )
+      .map(toAccount);
+  }
+
+  findForSession(sessionId: string, id: string): AccountRecord | undefined {
+    const row = this.db.get<AccountRow>(
+      `SELECT a.* FROM accounts a JOIN connections c ON c.id = a.connection_id
+       WHERE c.session_id = ? AND a.id = ?`,
       sessionId,
-      accountId,
+      id,
     );
-    return row ? toAccountJoin(row) : undefined;
+    return row ? toAccount(row) : undefined;
+  }
+
+  /** A statement window arrived: the loaded span grows to include it. */
+  extendCoverage(id: string, from: string, to: string, at: string): void {
+    this.db.run(
+      `UPDATE accounts SET
+         covered_from = CASE WHEN covered_from IS NULL OR ? < covered_from THEN ? ELSE covered_from END,
+         covered_to = CASE WHEN covered_to IS NULL OR ? > covered_to THEN ? ELSE covered_to END,
+         last_statement_at = ?
+       WHERE id = ?`,
+      from,
+      from,
+      to,
+      to,
+      at,
+      id,
+    );
   }
 }
 
-// ============================================================================================ transactions
+// ================================================================================================ transactions
 
 export interface TransactionRecord {
   id: string;
   accountId: string;
   providerTxnId: string;
-  bookedAt: string;
-  status: TransactionStatus;
+  ts: number;
+  status: 'pending' | 'booked';
   amountMinor: number;
   currency: string;
   description: string;
   counterparty: string | null;
   category: Category;
   categorySource: 'auto' | 'user';
+  mcc: number | null;
+  cashbackMinor: number;
+  commissionMinor: number;
+  comment: string | null;
+  receiptId: string | null;
+  balanceAfterMinor: number | null;
 }
 
 interface TransactionRow {
   id: string;
   account_id: string;
   provider_txn_id: string;
-  booked_at: string;
+  ts: number;
   status: string;
   amount_minor: number;
   currency: string;
@@ -501,116 +373,123 @@ interface TransactionRow {
   counterparty: string | null;
   category: string;
   category_source: string;
+  mcc: number | null;
+  cashback_minor: number;
+  commission_minor: number;
+  comment: string | null;
+  receipt_id: string | null;
+  balance_after_minor: number | null;
 }
 
 const toTransaction = (row: TransactionRow): TransactionRecord => ({
   id: row.id,
   accountId: row.account_id,
   providerTxnId: row.provider_txn_id,
-  bookedAt: row.booked_at,
-  status: row.status as TransactionStatus,
+  ts: row.ts,
+  status: row.status as 'pending' | 'booked',
   amountMinor: row.amount_minor,
   currency: row.currency,
   description: row.description,
   counterparty: row.counterparty,
   category: row.category as Category,
   categorySource: row.category_source as 'auto' | 'user',
+  mcc: row.mcc,
+  cashbackMinor: row.cashback_minor,
+  commissionMinor: row.commission_minor,
+  comment: row.comment,
+  receiptId: row.receipt_id,
+  balanceAfterMinor: row.balance_after_minor,
 });
 
 export interface NewTransaction {
   providerTxnId: string;
-  bookedAt: string;
+  ts: number;
+  status: 'pending' | 'booked';
   amountMinor: number;
   currency: string;
   description: string;
   counterparty: string | null;
   category: Category;
+  mcc: number | null;
+  cashbackMinor: number;
+  commissionMinor: number;
+  comment: string | null;
+  receiptId: string | null;
+  balanceAfterMinor: number | null;
 }
-
-export interface TransactionPageResult {
-  items: TransactionRecord[];
-  nextCursor: string | null;
-  total: number;
-}
-
-const encodeCursor = (record: Pick<TransactionRecord, 'bookedAt' | 'id'>): string =>
-  Buffer.from(JSON.stringify([record.bookedAt, record.id]), 'utf8').toString('base64url');
-
-function decodeCursor(cursor: string): [string, string] | null {
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (Array.isArray(parsed) && typeof parsed[0] === 'string' && typeof parsed[1] === 'string') {
-      return [parsed[0], parsed[1]];
-    }
-  } catch {
-    // fall through
-  }
-  return null;
-}
-
-const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 export class TransactionsRepo {
   constructor(private readonly db: Db) {}
 
   /**
-   * Inserts new booked rows and updates existing ones in place. A category the user chose is never overwritten.
-   * Returns how many rows were new.
+   * Inserts new rows and updates existing ones in place (a hold becoming a booked item keeps its id). A category the person
+   * chose is never overwritten. Returns how many rows were new.
    */
-  upsertBooked(accountId: string, rows: readonly NewTransaction[]): number {
-    const countBefore = this.countForAccount(accountId);
+  upsertMany(accountId: string, rows: readonly NewTransaction[]): number {
+    if (rows.length === 0) return 0;
+    const before = this.count(accountId);
     this.db.transaction(() => {
       for (const row of rows) {
         this.db.run(
-          `INSERT INTO transactions (id, account_id, provider_txn_id, booked_at, status, amount_minor, currency,
-             description, counterparty, category, category_source)
-           VALUES (?, ?, ?, ?, 'booked', ?, ?, ?, ?, ?, 'auto')
+          `INSERT INTO transactions (id, account_id, provider_txn_id, ts, status, amount_minor, currency, description,
+             counterparty, category, category_source, mcc, cashback_minor, commission_minor, comment, receipt_id,
+             balance_after_minor)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto', ?, ?, ?, ?, ?, ?)
            ON CONFLICT (account_id, provider_txn_id) DO UPDATE SET
-             booked_at = excluded.booked_at, status = 'booked', amount_minor = excluded.amount_minor,
+             ts = excluded.ts, status = excluded.status, amount_minor = excluded.amount_minor,
              description = excluded.description, counterparty = excluded.counterparty,
+             mcc = excluded.mcc, cashback_minor = excluded.cashback_minor, commission_minor = excluded.commission_minor,
+             comment = excluded.comment, receipt_id = excluded.receipt_id, balance_after_minor = excluded.balance_after_minor,
              category = CASE WHEN transactions.category_source = 'user' THEN transactions.category ELSE excluded.category END`,
           newId('txn'),
           accountId,
           row.providerTxnId,
-          row.bookedAt,
+          row.ts,
+          row.status,
           row.amountMinor,
           row.currency,
           row.description,
           row.counterparty,
           row.category,
+          row.mcc,
+          row.cashbackMinor,
+          row.commissionMinor,
+          row.comment,
+          row.receiptId,
+          row.balanceAfterMinor,
         );
       }
     });
-    return this.countForAccount(accountId) - countBefore;
+    return this.count(accountId) - before;
   }
 
-  /** The pending set from the bank is authoritative: drop what we had and store what it reports now. */
-  replacePending(accountId: string, rows: readonly NewTransaction[]): void {
-    this.db.transaction(() => {
-      this.db.run(
-        `DELETE FROM transactions WHERE account_id = ? AND status = 'pending'`,
-        accountId,
-      );
-      for (const row of rows) {
-        this.db.run(
-          `INSERT OR IGNORE INTO transactions (id, account_id, provider_txn_id, booked_at, status, amount_minor, currency,
-             description, counterparty, category, category_source)
-           VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, 'auto')`,
-          newId('txn'),
-          accountId,
-          row.providerTxnId,
-          row.bookedAt,
-          row.amountMinor,
-          row.currency,
-          row.description,
-          row.counterparty,
-          row.category,
-        );
-      }
-    });
+  /**
+   * After a window was read: holds the bank no longer reports inside it have settled under another id or been released,
+   * so they go. Holds outside the window are left alone.
+   */
+  dropStalePending(
+    accountId: string,
+    fromTs: number,
+    toTs: number,
+    seenProviderIds: ReadonlySet<string>,
+  ): number {
+    const pending = this.db.all<{ id: string; provider_txn_id: string }>(
+      `SELECT id, provider_txn_id FROM transactions
+       WHERE account_id = ? AND status = 'pending' AND ts >= ? AND ts <= ?`,
+      accountId,
+      fromTs,
+      toTs,
+    );
+    let removed = 0;
+    for (const row of pending) {
+      if (seenProviderIds.has(row.provider_txn_id)) continue;
+      this.db.run('DELETE FROM transactions WHERE id = ?', row.id);
+      removed += 1;
+    }
+    return removed;
   }
 
-  countForAccount(accountId: string): number {
+  count(accountId: string): number {
     return (
       this.db.get<{ n: number }>(
         'SELECT COUNT(*) AS n FROM transactions WHERE account_id = ?',
@@ -619,18 +498,35 @@ export class TransactionsRepo {
     );
   }
 
-  latestBookedAt(accountId: string): string | undefined {
+  latestTs(accountId: string): number | undefined {
     return (
-      this.db.get<{ booked_at: string | null }>(
-        `SELECT MAX(booked_at) AS booked_at FROM transactions WHERE account_id = ? AND status = 'booked'`,
+      this.db.get<{ ts: number | null }>(
+        `SELECT MAX(ts) AS ts FROM transactions WHERE account_id = ? AND status = 'booked'`,
         accountId,
-      )?.booked_at ?? undefined
+      )?.ts ?? undefined
     );
+  }
+
+  /** Every transaction of the session since `sinceTs`, newest first. Screens filter and group these in memory. */
+  listForSession(sessionId: string, sinceTs = 0): TransactionRecord[] {
+    return this.db
+      .all<TransactionRow>(
+        `SELECT t.* FROM transactions t
+           JOIN accounts a ON a.id = t.account_id
+           JOIN connections c ON c.id = a.connection_id
+         WHERE c.session_id = ? AND t.ts >= ?
+         ORDER BY t.ts DESC, t.id DESC`,
+        sessionId,
+        sinceTs,
+      )
+      .map(toTransaction);
   }
 
   findForSession(sessionId: string, id: string): TransactionRecord | undefined {
     const row = this.db.get<TransactionRow>(
-      `SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN connections c ON c.id = a.connection_id
+      `SELECT t.* FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
+         JOIN connections c ON c.id = a.connection_id
        WHERE c.session_id = ? AND t.id = ?`,
       sessionId,
       id,
@@ -645,127 +541,18 @@ export class TransactionsRepo {
       id,
     );
   }
-
-  /** Every transaction in the window for a session; insights are computed from this in memory. */
-  listForInsights(sessionId: string, fromIso: string, toIso: string): TransactionRecord[] {
-    return this.db
-      .all<TransactionRow>(
-        `SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN connections c ON c.id = a.connection_id
-         WHERE c.session_id = ? AND t.booked_at >= ? AND t.booked_at <= ? AND t.status = 'booked'
-         ORDER BY t.booked_at ASC, t.id ASC`,
-        sessionId,
-        fromIso,
-        toIso,
-      )
-      .map(toTransaction);
-  }
-
-  /** The WHERE clause shared by the paged list and the export, so a filter means the same thing in both. */
-  private filter(
-    sessionId: string,
-    query: TransactionQuery,
-  ): { where: string[]; params: SqlParam[] } {
-    const where: string[] = ['c.session_id = ?'];
-    const params: SqlParam[] = [sessionId];
-
-    if (query.accountId) {
-      where.push('t.account_id = ?');
-      params.push(query.accountId);
-    }
-    if (query.from) {
-      where.push('t.booked_at >= ?');
-      params.push(`${query.from}T00:00:00.000Z`);
-    }
-    if (query.to) {
-      where.push('t.booked_at <= ?');
-      params.push(`${query.to}T23:59:59.999Z`);
-    }
-    if (query.q) {
-      const like = `%${escapeLike(query.q.toLowerCase())}%`;
-      where.push(
-        `(LOWER(t.description) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(t.counterparty, '')) LIKE ? ESCAPE '\\')`,
-      );
-      params.push(like, like);
-    }
-    if (query.category) {
-      where.push('t.category = ?');
-      params.push(query.category);
-    }
-    if (query.status) {
-      where.push('t.status = ?');
-      params.push(query.status);
-    }
-    if (query.direction === 'in') where.push('t.amount_minor > 0');
-    if (query.direction === 'out') where.push('t.amount_minor < 0');
-    if (query.minAmountMinor !== undefined) {
-      where.push('ABS(t.amount_minor) >= ?');
-      params.push(query.minAmountMinor);
-    }
-    if (query.maxAmountMinor !== undefined) {
-      where.push('ABS(t.amount_minor) <= ?');
-      params.push(query.maxAmountMinor);
-    }
-
-    return { where, params };
-  }
-
-  list(sessionId: string, query: TransactionQuery): TransactionPageResult {
-    const { where, params } = this.filter(sessionId, query);
-
-    const from = `FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN connections c ON c.id = a.connection_id`;
-    const total =
-      this.db.get<{ n: number }>(
-        `SELECT COUNT(*) AS n ${from} WHERE ${where.join(' AND ')}`,
-        ...params,
-      )?.n ?? 0;
-
-    const cursor = query.cursor ? decodeCursor(query.cursor) : null;
-    const pageWhere = [...where];
-    const pageParams = [...params];
-    if (cursor) {
-      pageWhere.push('(t.booked_at < ? OR (t.booked_at = ? AND t.id < ?))');
-      pageParams.push(cursor[0], cursor[0], cursor[1]);
-    }
-    const rows = this.db
-      .all<TransactionRow>(
-        `SELECT t.* ${from} WHERE ${pageWhere.join(' AND ')} ORDER BY t.booked_at DESC, t.id DESC LIMIT ?`,
-        ...pageParams,
-        query.limit + 1,
-      )
-      .map(toTransaction);
-
-    const items = rows.slice(0, query.limit);
-    const last = items[items.length - 1];
-    return {
-      items,
-      nextCursor: rows.length > query.limit && last ? encodeCursor(last) : null,
-      total,
-    };
-  }
-
-  /** Every row matching the filters, newest first, for a CSV download. Capped so one request cannot pull an unbounded table. */
-  exportRows(sessionId: string, query: TransactionQuery, limit: number): TransactionRecord[] {
-    const { where, params } = this.filter(sessionId, query);
-    return this.db
-      .all<TransactionRow>(
-        `SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id JOIN connections c ON c.id = a.connection_id
-         WHERE ${where.join(' AND ')} ORDER BY t.booked_at DESC, t.id DESC LIMIT ?`,
-        ...params,
-        limit,
-      )
-      .map(toTransaction);
-  }
 }
 
-// ============================================================================================== sync jobs
+// ================================================================================================== sync jobs
 
 export interface SyncJobRecord {
   id: string;
   connectionId: string;
   accountId: string;
+  kind: 'history' | 'topup';
   from: string;
   to: string;
-  seq: number;
+  priority: number;
   attempts: number;
 }
 
@@ -773,29 +560,49 @@ interface SyncJobRow {
   id: string;
   connection_id: string;
   account_id: string;
+  kind: string;
   window_from: string;
   window_to: string;
-  seq: number;
+  priority: number;
   attempts: number;
 }
 
-/** Queue of paced transaction reads. Rows survive a restart, so a long history load resumes where it stopped. */
+const toJob = (row: SyncJobRow): SyncJobRecord => ({
+  id: row.id,
+  connectionId: row.connection_id,
+  accountId: row.account_id,
+  kind: row.kind as 'history' | 'topup',
+  from: row.window_from,
+  to: row.window_to,
+  priority: row.priority,
+  attempts: row.attempts,
+});
+
+/** Queue of paced statement reads. Rows survive a restart, so a long history load resumes where it stopped. */
 export class SyncJobsRepo {
   constructor(private readonly db: Db) {}
 
   enqueue(
-    input: { connectionId: string; accountId: string; from: string; to: string; seq: number },
+    input: {
+      connectionId: string;
+      accountId: string;
+      kind: 'history' | 'topup';
+      from: string;
+      to: string;
+      priority: number;
+    },
     now: string,
   ): void {
     this.db.run(
-      `INSERT INTO sync_jobs (id, connection_id, account_id, window_from, window_to, seq, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      `INSERT INTO sync_jobs (id, connection_id, account_id, kind, window_from, window_to, priority, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
       newId('job'),
       input.connectionId,
       input.accountId,
+      input.kind,
       input.from,
       input.to,
-      input.seq,
+      input.priority,
       now,
       now,
     );
@@ -803,21 +610,11 @@ export class SyncJobsRepo {
 
   next(connectionId: string): SyncJobRecord | undefined {
     const row = this.db.get<SyncJobRow>(
-      `SELECT id, connection_id, account_id, window_from, window_to, seq, attempts FROM sync_jobs
-       WHERE connection_id = ? AND status = 'pending' ORDER BY seq ASC, created_at ASC, id ASC LIMIT 1`,
+      `SELECT id, connection_id, account_id, kind, window_from, window_to, priority, attempts FROM sync_jobs
+       WHERE connection_id = ? AND status = 'pending' ORDER BY priority ASC, created_at ASC, id ASC LIMIT 1`,
       connectionId,
     );
-    return row
-      ? {
-          id: row.id,
-          connectionId: row.connection_id,
-          accountId: row.account_id,
-          from: row.window_from,
-          to: row.window_to,
-          seq: row.seq,
-          attempts: row.attempts,
-        }
-      : undefined;
+    return row ? toJob(row) : undefined;
   }
 
   connectionsWithPending(): string[] {
@@ -832,7 +629,7 @@ export class SyncJobsRepo {
     this.db.run(`UPDATE sync_jobs SET status = 'done', updated_at = ? WHERE id = ?`, now, id);
   }
 
-  /** A failed attempt: stays pending until `maxAttempts`, then gives up so the queue cannot stall forever. */
+  /** A failed attempt stays pending until `maxAttempts`, then gives up so the queue cannot stall for ever. */
   recordFailure(id: string, error: string, maxAttempts: number, now: string): void {
     this.db.run(
       `UPDATE sync_jobs SET attempts = attempts + 1, last_error = ?, updated_at = ?,
@@ -853,14 +650,50 @@ export class SyncJobsRepo {
     );
   }
 
-  /** Null when nothing is left to load, so the UI shows a banner only while there is something to wait for. */
-  progress(connectionId: string): { done: number; total: number } | null {
-    const row = this.db.get<{ total: number; done: number }>(
-      `SELECT COUNT(*) AS total, COALESCE(SUM(status <> 'pending'), 0) AS done FROM sync_jobs WHERE connection_id = ?`,
+  progress(connectionId: string): { done: number; total: number; pending: number; failed: number } {
+    const row = this.db.get<{ total: number; done: number; pending: number; failed: number }>(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(status = 'done'), 0) AS done,
+              COALESCE(SUM(status = 'pending'), 0) AS pending,
+              COALESCE(SUM(status = 'failed'), 0) AS failed
+       FROM sync_jobs WHERE connection_id = ?`,
       connectionId,
     );
-    if (!row || row.total === 0 || row.done >= row.total) return null;
-    return { done: row.done, total: row.total };
+    return {
+      total: row?.total ?? 0,
+      done: row?.done ?? 0,
+      pending: row?.pending ?? 0,
+      failed: row?.failed ?? 0,
+    };
+  }
+
+  /** Per account: how many reads are still queued (`pending`) and how many finished, for the "loading" marks on tiles. */
+  accountStates(connectionId: string): Map<string, { pending: number; done: number }> {
+    const rows = this.db.all<{ account_id: string; pending: number; done: number }>(
+      `SELECT account_id, COALESCE(SUM(status = 'pending'), 0) AS pending, COALESCE(SUM(status = 'done'), 0) AS done
+       FROM sync_jobs WHERE connection_id = ? GROUP BY account_id`,
+      connectionId,
+    );
+    return new Map(rows.map((r) => [r.account_id, { pending: r.pending, done: r.done }]));
+  }
+
+  hasPending(accountId: string, kind: 'history' | 'topup'): boolean {
+    return (
+      (this.db.get<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM sync_jobs WHERE account_id = ? AND kind = ? AND status = 'pending'`,
+        accountId,
+        kind,
+      )?.n ?? 0) > 0
+    );
+  }
+
+  /** Moves every queued history read of one account to the front ("load this card first"). */
+  prioritise(accountId: string, priority: number): void {
+    this.db.run(
+      `UPDATE sync_jobs SET priority = ? + (priority / 1000000.0) WHERE account_id = ? AND status = 'pending' AND kind = 'history'`,
+      priority,
+      accountId,
+    );
   }
 
   /** Once a batch has finished, forget it so the next one reports its own progress from zero. */
@@ -875,310 +708,29 @@ export class SyncJobsRepo {
   }
 }
 
-// ================================================================================================= payments
+// ======================================================================================================= rates
 
-export interface PaymentRecord {
-  id: string;
-  sessionId: string;
-  provider: ProviderId;
-  institutionId: string;
-  institutionName: string;
-  idempotencyKey: string;
-  requestHash: string;
-  providerIdempotencyKey: string;
-  /** Null until the provider has accepted the payment; such a row is invisible to the customer. */
-  providerPaymentId: string | null;
-  amountMinor: number;
-  currency: string;
-  beneficiaryName: string;
-  beneficiaryIdentifier: string;
-  reference: string;
-  status: PaymentStatus;
-  settlementExpected: boolean;
-  failureReason: PaymentFailureReason | null;
-  statusHistory: PaymentHistoryEntry[];
-  authUrlEnc: string | null;
-  createdAt: string;
-  updatedAt: string;
-  lastCheckedAt: string | null;
-}
-
-interface PaymentRow {
-  id: string;
-  session_id: string;
-  provider: string;
-  institution_id: string;
-  institution_name: string;
-  idempotency_key: string;
-  request_hash: string;
-  provider_idempotency_key: string;
-  provider_payment_id: string | null;
-  amount_minor: number;
-  currency: string;
-  beneficiary_name: string;
-  beneficiary_identifier: string;
-  reference: string;
-  status: string;
-  settlement_expected: number;
-  failure_reason: string | null;
-  status_history: string;
-  auth_url_enc: string | null;
-  created_at: string;
-  updated_at: string;
-  last_checked_at: string | null;
-}
-
-const toPayment = (row: PaymentRow): PaymentRecord => ({
-  id: row.id,
-  sessionId: row.session_id,
-  provider: row.provider as ProviderId,
-  institutionId: row.institution_id,
-  institutionName: row.institution_name,
-  idempotencyKey: row.idempotency_key,
-  requestHash: row.request_hash,
-  providerIdempotencyKey: row.provider_idempotency_key,
-  providerPaymentId: row.provider_payment_id,
-  amountMinor: row.amount_minor,
-  currency: row.currency,
-  beneficiaryName: row.beneficiary_name,
-  beneficiaryIdentifier: row.beneficiary_identifier,
-  reference: row.reference,
-  status: row.status as PaymentStatus,
-  settlementExpected: row.settlement_expected === 1,
-  failureReason: row.failure_reason as PaymentFailureReason | null,
-  statusHistory: JSON.parse(row.status_history) as PaymentHistoryEntry[],
-  authUrlEnc: row.auth_url_enc,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-  lastCheckedAt: row.last_checked_at,
-});
-
-export type PaymentPatch = Partial<
-  Pick<
-    PaymentRecord,
-    | 'providerPaymentId'
-    | 'status'
-    | 'settlementExpected'
-    | 'failureReason'
-    | 'statusHistory'
-    | 'authUrlEnc'
-    | 'lastCheckedAt'
-  >
->;
-
-const PAYMENT_COLUMNS: Record<keyof PaymentPatch, string> = {
-  providerPaymentId: 'provider_payment_id',
-  status: 'status',
-  settlementExpected: 'settlement_expected',
-  failureReason: 'failure_reason',
-  statusHistory: 'status_history',
-  authUrlEnc: 'auth_url_enc',
-  lastCheckedAt: 'last_checked_at',
-};
-
-/** A payment with nothing left to wait for: failed, cancelled, settled, or executed where no settlement follows. */
-const NOT_FINAL = `(status IN ('pending','authorised') OR (status = 'executed' AND settlement_expected = 1))`;
-
-export class PaymentsRepo {
+export class RatesRepo {
   constructor(private readonly db: Db) {}
 
-  insert(record: PaymentRecord): void {
+  get(): { payload: string; fetchedAt: string } | undefined {
+    const row = this.db.get<{ payload: string; fetched_at: string }>(
+      'SELECT payload, fetched_at FROM rates WHERE id = 1',
+    );
+    return row ? { payload: row.payload, fetchedAt: row.fetched_at } : undefined;
+  }
+
+  put(payload: string, fetchedAt: string): void {
     this.db.run(
-      `INSERT INTO payments (id, session_id, provider, institution_id, institution_name, idempotency_key, request_hash,
-         provider_idempotency_key, provider_payment_id, amount_minor, currency, beneficiary_name, beneficiary_identifier,
-         reference, status, settlement_expected, failure_reason, status_history, auth_url_enc, created_at, updated_at,
-         last_checked_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      record.id,
-      record.sessionId,
-      record.provider,
-      record.institutionId,
-      record.institutionName,
-      record.idempotencyKey,
-      record.requestHash,
-      record.providerIdempotencyKey,
-      record.providerPaymentId,
-      record.amountMinor,
-      record.currency,
-      record.beneficiaryName,
-      record.beneficiaryIdentifier,
-      record.reference,
-      record.status,
-      record.settlementExpected ? 1 : 0,
-      record.failureReason,
-      JSON.stringify(record.statusHistory),
-      record.authUrlEnc,
-      record.createdAt,
-      record.updatedAt,
-      record.lastCheckedAt,
+      `INSERT INTO rates (id, payload, fetched_at) VALUES (1, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
+      payload,
+      fetchedAt,
     );
-  }
-
-  /** Only payments the provider has accepted: an attempt that never reached it is not a payment yet. */
-  findForSession(sessionId: string, id: string): PaymentRecord | undefined {
-    const row = this.db.get<PaymentRow>(
-      'SELECT * FROM payments WHERE session_id = ? AND id = ? AND provider_payment_id IS NOT NULL',
-      sessionId,
-      id,
-    );
-    return row ? toPayment(row) : undefined;
-  }
-
-  findById(id: string): PaymentRecord | undefined {
-    const row = this.db.get<PaymentRow>('SELECT * FROM payments WHERE id = ?', id);
-    return row ? toPayment(row) : undefined;
-  }
-
-  /** Includes attempts that never reached the provider: a retry with the same key completes them. */
-  findByIdempotencyKey(sessionId: string, key: string): PaymentRecord | undefined {
-    const row = this.db.get<PaymentRow>(
-      'SELECT * FROM payments WHERE session_id = ? AND idempotency_key = ?',
-      sessionId,
-      key,
-    );
-    return row ? toPayment(row) : undefined;
-  }
-
-  findByProviderPaymentId(
-    providerPaymentId: string,
-    provider?: ProviderId,
-  ): PaymentRecord | undefined {
-    const row = provider
-      ? this.db.get<PaymentRow>(
-          'SELECT * FROM payments WHERE provider = ? AND provider_payment_id = ?',
-          provider,
-          providerPaymentId,
-        )
-      : this.db.get<PaymentRow>(
-          'SELECT * FROM payments WHERE provider_payment_id = ? ORDER BY created_at DESC LIMIT 1',
-          providerPaymentId,
-        );
-    return row ? toPayment(row) : undefined;
-  }
-
-  listBySession(sessionId: string): PaymentRecord[] {
-    return this.db
-      .all<PaymentRow>(
-        'SELECT * FROM payments WHERE session_id = ? AND provider_payment_id IS NOT NULL ORDER BY created_at DESC, id DESC',
-        sessionId,
-      )
-      .map(toPayment);
-  }
-
-  update(id: string, patch: PaymentPatch, now: string): void {
-    const sets: string[] = [];
-    const params: SqlParam[] = [];
-    for (const [key, value] of Object.entries(patch) as [keyof PaymentPatch, unknown][]) {
-      sets.push(`${PAYMENT_COLUMNS[key]} = ?`);
-      if (key === 'statusHistory') params.push(JSON.stringify(value));
-      else if (key === 'settlementExpected') params.push(value ? 1 : 0);
-      else params.push((value ?? null) as SqlParam);
-    }
-    if (sets.length === 0) return;
-    this.db.run(
-      `UPDATE payments SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`,
-      ...params,
-      now,
-      id,
-    );
-  }
-
-  /** A poll or webhook looked at the payment and found nothing new: remember that without calling it an update. */
-  touchChecked(id: string, now: string): void {
-    this.db.run('UPDATE payments SET last_checked_at = ? WHERE id = ?', now, id);
-  }
-
-  delete(id: string): void {
-    this.db.run('DELETE FROM payments WHERE id = ?', id);
-  }
-
-  /**
-   * Payments the polling fallback should ask the provider about: not final, accepted by the provider, and not touched by
-   * a webhook or a poll lately. A payment nobody has checked yet is first looked at after `firstCheckBefore`.
-   */
-  listDueForPoll(firstCheckBefore: string, recheckBefore: string): PaymentRecord[] {
-    return this.db
-      .all<PaymentRow>(
-        `SELECT * FROM payments WHERE provider_payment_id IS NOT NULL AND ${NOT_FINAL}
-           AND ((last_checked_at IS NULL AND created_at <= ?) OR last_checked_at <= ?)
-         ORDER BY created_at ASC LIMIT 50`,
-        firstCheckBefore,
-        recheckBefore,
-      )
-      .map(toPayment);
-  }
-
-  /** Still `pending` since before the cut-off: the customer never finished at the bank. */
-  listPendingBefore(before: string): PaymentRecord[] {
-    return this.db
-      .all<PaymentRow>(
-        `SELECT * FROM payments WHERE provider_payment_id IS NOT NULL AND status = 'pending' AND created_at <= ?
-         ORDER BY created_at ASC LIMIT 50`,
-        before,
-      )
-      .map(toPayment);
-  }
-
-  /** Attempts the provider never acknowledged, abandoned long enough ago that a retry can no longer complete them. */
-  deleteUnsentBefore(before: string): number {
-    return this.db.run(
-      'DELETE FROM payments WHERE provider_payment_id IS NULL AND created_at <= ?',
-      before,
-    ).changes;
   }
 }
 
-// ======================================================================================== webhook events
-
-export interface WebhookEventInput {
-  provider: ProviderId;
-  eventId: string;
-  eventType: string;
-  providerPaymentId: string | null;
-  /** Redacted JSON text. */
-  payload: string;
-  receivedAt: string;
-  outcome: string;
-}
-
-/** The record that makes webhook handling idempotent: the provider's event id can be stored once. */
-export class WebhookEventsRepo {
-  constructor(private readonly db: Db) {}
-
-  /** False when this event id was already stored, which means the delivery is a duplicate. */
-  insert(input: WebhookEventInput): boolean {
-    const result = this.db.run(
-      `INSERT OR IGNORE INTO webhook_events (id, provider, event_id, event_type, provider_payment_id, payload, received_at, outcome)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      newId('whe'),
-      input.provider,
-      input.eventId,
-      input.eventType,
-      input.providerPaymentId,
-      input.payload,
-      input.receivedAt,
-      input.outcome,
-    );
-    return result.changes > 0;
-  }
-
-  has(provider: ProviderId, eventId: string): boolean {
-    return (
-      this.db.get<{ n: number }>(
-        'SELECT COUNT(*) AS n FROM webhook_events WHERE provider = ? AND event_id = ?',
-        provider,
-        eventId,
-      )?.n === 1
-    );
-  }
-
-  /** Providers stop retrying after a while, so remembering an event for longer than that buys nothing. */
-  pruneBefore(before: string): number {
-    return this.db.run('DELETE FROM webhook_events WHERE received_at < ?', before).changes;
-  }
-}
-
-// ============================================================================================ repositories
+// ================================================================================================== bundle
 
 export interface Repositories {
   sessions: SessionsRepo;
@@ -1186,8 +738,7 @@ export interface Repositories {
   accounts: AccountsRepo;
   transactions: TransactionsRepo;
   syncJobs: SyncJobsRepo;
-  payments: PaymentsRepo;
-  webhookEvents: WebhookEventsRepo;
+  rates: RatesRepo;
 }
 
 export function createRepositories(db: Db): Repositories {
@@ -1197,7 +748,6 @@ export function createRepositories(db: Db): Repositories {
     accounts: new AccountsRepo(db),
     transactions: new TransactionsRepo(db),
     syncJobs: new SyncJobsRepo(db),
-    payments: new PaymentsRepo(db),
-    webhookEvents: new WebhookEventsRepo(db),
+    rates: new RatesRepo(db),
   };
 }

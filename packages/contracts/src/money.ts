@@ -1,5 +1,3 @@
-import type { Money } from './common';
-
 const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'UGX', 'XAF', 'XOF']);
 const THREE_DECIMAL = new Set(['BHD', 'KWD', 'OMR', 'JOD', 'TND']);
 
@@ -10,45 +8,92 @@ export function currencyExponent(currency: string): number {
   return 2;
 }
 
-/**
- * Parses a user-typed decimal amount ("12.50", "12,5", "1 234.00") into integer minor units.
- * Returns null for anything that is not a positive amount with at most the currency's decimals.
- */
-export function toMinorUnits(input: string, currency: string): number | null {
-  const exponent = currencyExponent(currency);
-  const cleaned = input
-    .trim()
-    .replace(/[\s_']/g, '')
-    .replace(',', '.');
-  if (!/^\d+(\.\d+)?$/.test(cleaned)) return null;
-  const [whole = '0', fraction = ''] = cleaned.split('.');
-  if (fraction.length > exponent) return null;
-  const minor = Number(whole) * 10 ** exponent + Number(fraction.padEnd(exponent, '0') || '0');
-  return Number.isSafeInteger(minor) && minor > 0 ? minor : null;
-}
-
-/** Plain decimal string for an amount, e.g. (1250, EUR) -> "12.50". Used for provider payloads and CSV. */
+/** Plain decimal string for an amount, e.g. (1250, UAH) -> "12.50". Used for CSV and diagnostics-free exports. */
 export function minorToDecimalString(amountMinor: number, currency: string): string {
   const exponent = currencyExponent(currency);
-  const negative = amountMinor < 0;
   const digits = String(Math.abs(amountMinor)).padStart(exponent + 1, '0');
   const whole = digits.slice(0, digits.length - exponent);
   const fraction = exponent > 0 ? `.${digits.slice(digits.length - exponent)}` : '';
-  return `${negative ? '-' : ''}${whole}${fraction}`;
+  return `${amountMinor < 0 ? '-' : ''}${whole}${fraction}`;
 }
 
-export function addMoney(a: Money, b: Money): Money {
-  if (a.currency !== b.currency) {
-    throw new Error(`Cannot add ${a.currency} to ${b.currency}`);
-  }
-  return { amountMinor: a.amountMinor + b.amountMinor, currency: a.currency };
+const SYMBOLS: Readonly<Record<string, string>> = {
+  UAH: '₴',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  PLN: 'zł',
+  CZK: 'Kč',
+};
+
+/** A non-breaking space keeps "12 345,67 ₴" on one line and digit groups together. */
+export const NBSP = ' ';
+const MINUS = '−';
+
+export interface MoneyParts {
+  negative: boolean;
+  /** Digits grouped by thousands with non-breaking spaces. */
+  whole: string;
+  /** Minor digits, empty for currencies without any. */
+  fraction: string;
+  symbol: string;
 }
 
-/** Totals per currency. Amounts in different currencies are never combined. */
-export function sumByCurrency(items: readonly Money[]): Map<string, number> {
-  const totals = new Map<string, number>();
-  for (const item of items) {
-    totals.set(item.currency, (totals.get(item.currency) ?? 0) + item.amountMinor);
+function groupThousands(digits: string): string {
+  let out = '';
+  for (let i = 0; i < digits.length; i += 1) {
+    if (i > 0 && (digits.length - i) % 3 === 0) out += NBSP;
+    out += digits[i];
   }
-  return totals;
+  return out;
+}
+
+/**
+ * The pieces of an amount the way a Ukrainian reader expects them: "12 345,67 ₴". The screens render `whole` large and
+ * `fraction` small and muted, so the parts are separate. Integer arithmetic only.
+ */
+export function moneyParts(amountMinor: number, currency: string, withFraction = true): MoneyParts {
+  const exponent = currencyExponent(currency);
+  const factor = 10 ** exponent;
+  const abs = Math.abs(amountMinor);
+  const symbol = SYMBOLS[currency] ?? currency;
+  if (!withFraction || exponent === 0) {
+    const whole = Math.round(abs / factor);
+    return {
+      negative: amountMinor < 0 && whole !== 0,
+      whole: groupThousands(String(whole)),
+      fraction: '',
+      symbol,
+    };
+  }
+  return {
+    negative: amountMinor < 0,
+    whole: groupThousands(String(Math.floor(abs / factor))),
+    fraction: String(abs % factor).padStart(exponent, '0'),
+    symbol,
+  };
+}
+
+export interface FormatOptions {
+  /** `always` puts a plus on income; `never` drops the sign; the default shows a minus only. */
+  sign?: 'auto' | 'always' | 'never';
+  fraction?: boolean;
+}
+
+export function formatMoney(
+  amountMinor: number,
+  currency: string,
+  options: FormatOptions = {},
+): string {
+  const parts = moneyParts(amountMinor, currency, options.fraction ?? true);
+  const sign =
+    options.sign === 'never'
+      ? ''
+      : parts.negative
+        ? MINUS
+        : options.sign === 'always' && amountMinor > 0
+          ? '+'
+          : '';
+  const number = parts.fraction ? `${parts.whole},${parts.fraction}` : parts.whole;
+  return `${sign}${number}${NBSP}${parts.symbol}`;
 }

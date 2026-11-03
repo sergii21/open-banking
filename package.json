@@ -14,9 +14,12 @@
   },
   "scripts": {
     "check:node": "node scripts/check-node.mjs",
+    "app": "node scripts/app.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "dev": "npm run check:node && concurrently --kill-others-on-fail --names api,web --prefix-colors blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm run dev -w @ledger-lens/api",
     "dev:web": "npm run start -w @ledger-lens/web",
+    "fake:monobank": "tsx apps/api/src/providers/monobank/demo/server.ts",
     "build": "npm run check:node && npm run build -w @ledger-lens/api && npm run build -w @ledger-lens/web",
     "start": "npm run start -w @ledger-lens/api",
     "lint": "eslint .",
@@ -27,9 +30,7 @@
     "verify": "npm run check:node && npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build",
     "e2e": "npm run build && playwright test",
     "e2e:only": "playwright test",
-    "e2e:sandbox": "playwright test --project=sandbox",
-    "e2e:report": "playwright show-report",
-    "keys:truelayer": "node scripts/generate-truelayer-keys.mjs"
+    "e2e:report": "playwright show-report"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

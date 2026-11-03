@@ -1,79 +1,60 @@
 import { describe, expect, it } from 'vitest';
-import {
-  addMoney,
-  currencyExponent,
-  minorToDecimalString,
-  sumByCurrency,
-  toMinorUnits,
-} from './money';
+import { NBSP, currencyExponent, formatMoney, minorToDecimalString, moneyParts } from './money';
 
 describe('currencyExponent', () => {
   it('knows zero and three decimal currencies and defaults to two', () => {
-    expect(currencyExponent('EUR')).toBe(2);
-    expect(currencyExponent('GBP')).toBe(2);
+    expect(currencyExponent('UAH')).toBe(2);
+    expect(currencyExponent('USD')).toBe(2);
     expect(currencyExponent('JPY')).toBe(0);
     expect(currencyExponent('KWD')).toBe(3);
   });
 });
 
-describe('toMinorUnits', () => {
-  it.each([
-    ['12.50', 'EUR', 1250],
-    ['12,5', 'EUR', 1250],
-    ['0.01', 'EUR', 1],
-    ['1 234.00', 'GBP', 123400],
-    ['500', 'JPY', 500],
-    ['1.250', 'KWD', 1250],
-  ])('parses %s %s as %i minor units', (input, currency, expected) => {
-    expect(toMinorUnits(input, currency)).toBe(expected);
-  });
-
-  it.each([
-    ['', 'EUR'],
-    ['abc', 'EUR'],
-    ['-5', 'EUR'],
-    ['0', 'EUR'],
-    ['0.00', 'EUR'],
-    ['1.234', 'EUR'],
-    ['1.5', 'JPY'],
-    ['1e3', 'EUR'],
-  ])('rejects %j for %s', (input, currency) => {
-    expect(toMinorUnits(input, currency)).toBeNull();
-  });
-
-  it('never goes through floating point for typical decimal fractions', () => {
-    // 0.1 + 0.2 style traps: 19.99 * 100 is 1998.9999999999998 in IEEE 754.
-    expect(toMinorUnits('19.99', 'EUR')).toBe(1999);
-    expect(toMinorUnits('1.15', 'EUR')).toBe(115);
-  });
-});
-
 describe('minorToDecimalString', () => {
-  it('formats with the currency exponent and sign', () => {
-    expect(minorToDecimalString(1250, 'EUR')).toBe('12.50');
-    expect(minorToDecimalString(5, 'EUR')).toBe('0.05');
-    expect(minorToDecimalString(-1999, 'GBP')).toBe('-19.99');
-    expect(minorToDecimalString(500, 'JPY')).toBe('500');
-    expect(minorToDecimalString(1250, 'KWD')).toBe('1.250');
+  it.each([
+    [1250, 'UAH', '12.50'],
+    [-5, 'UAH', '-0.05'],
+    [0, 'UAH', '0.00'],
+    [500, 'JPY', '500'],
+    [-1250, 'KWD', '-1.250'],
+  ])('writes %i %s as %s', (minor, currency, expected) => {
+    expect(minorToDecimalString(minor, currency)).toBe(expected);
   });
 });
 
-describe('money arithmetic', () => {
-  it('adds same-currency amounts and refuses to mix currencies', () => {
-    expect(
-      addMoney({ amountMinor: 100, currency: 'EUR' }, { amountMinor: 250, currency: 'EUR' }),
-    ).toEqual({ amountMinor: 350, currency: 'EUR' });
-    expect(() =>
-      addMoney({ amountMinor: 100, currency: 'EUR' }, { amountMinor: 250, currency: 'GBP' }),
-    ).toThrow(/Cannot add/);
+describe('formatMoney', () => {
+  it('groups thousands with non-breaking spaces and puts the symbol after, the Ukrainian way', () => {
+    expect(formatMoney(1_234_567, 'UAH')).toBe(`12${NBSP}345,67${NBSP}₴`);
+    expect(formatMoney(999, 'UAH')).toBe(`9,99${NBSP}₴`);
+    expect(formatMoney(100_000_000, 'USD')).toBe(`1${NBSP}000${NBSP}000,00${NBSP}$`);
   });
 
-  it('totals per currency without combining them', () => {
-    const totals = sumByCurrency([
-      { amountMinor: 100, currency: 'EUR' },
-      { amountMinor: -30, currency: 'EUR' },
-      { amountMinor: 999, currency: 'GBP' },
-    ]);
-    expect(Object.fromEntries(totals)).toEqual({ EUR: 70, GBP: 999 });
+  it('shows money out with a real minus and money in with a plus only on request', () => {
+    expect(formatMoney(-5_000, 'UAH')).toBe(`−50,00${NBSP}₴`);
+    expect(formatMoney(5_000, 'UAH')).toBe(`50,00${NBSP}₴`);
+    expect(formatMoney(5_000, 'UAH', { sign: 'always' })).toBe(`+50,00${NBSP}₴`);
+    expect(formatMoney(-5_000, 'UAH', { sign: 'never' })).toBe(`50,00${NBSP}₴`);
+  });
+
+  it('rounds half away from zero when asked to drop the fraction, and never shows -0', () => {
+    expect(formatMoney(12_350, 'UAH', { fraction: false })).toBe(`124${NBSP}₴`);
+    expect(formatMoney(-12_350, 'UAH', { fraction: false })).toBe(`−124${NBSP}₴`);
+    expect(formatMoney(-20, 'UAH', { fraction: false })).toBe(`0${NBSP}₴`);
+  });
+
+  it('falls back to the currency code and handles currencies without minor units', () => {
+    expect(formatMoney(1_000, 'CHF')).toBe(`10,00${NBSP}CHF`);
+    expect(formatMoney(1_500, 'JPY')).toBe(`1${NBSP}500${NBSP}JPY`);
+  });
+});
+
+describe('moneyParts', () => {
+  it('keeps whole and fraction apart so the screens can set them in different sizes', () => {
+    expect(moneyParts(-123_405, 'UAH')).toEqual({
+      negative: true,
+      whole: `1${NBSP}234`,
+      fraction: '05',
+      symbol: '₴',
+    });
   });
 });

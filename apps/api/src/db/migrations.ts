@@ -6,56 +6,49 @@ export interface Migration {
 }
 
 /**
- * Append-only. Migrations are TypeScript string modules rather than .sql files so they survive the
- * esbuild bundle and `tsx` without a loader. Never edit an applied migration; add a new one.
+ * Append-only. Migrations are TypeScript string modules rather than .sql files so they survive the esbuild bundle and
+ * `tsx` without a loader. Never edit an applied migration; add a new one. (v1's migrations are in the `v1-full-featured` tag.)
  */
 export const migrations: Migration[] = [
   {
-    id: '001_sessions',
+    id: '001_ledger_lens_v2',
     sql: `
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,            -- SHA-256 of the cookie token, never the token itself
         created_at TEXT NOT NULL,
         last_seen_at TEXT NOT NULL
       );
-    `,
-  },
-  {
-    id: '002_account_information',
-    sql: `
+
+      -- One bank connection per session: replacing the token replaces the row.
       CREATE TABLE connections (
         id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-        provider TEXT NOT NULL,
-        institution_id TEXT NOT NULL,            -- '<provider>:<slug>'
-        institution_name TEXT NOT NULL,
-        institution_logo_url TEXT,
-        status TEXT NOT NULL CHECK (status IN ('pending','active','expired','revoked','needs_reauth','error')),
-        state TEXT UNIQUE,                       -- OAuth state, only while a consent redirect is in flight
-        state_expires_at TEXT,
-        code_verifier_enc TEXT,                  -- PKCE verifier, sealed, only while pending
-        tokens_enc TEXT,                         -- sealed JSON token set, never sent to the browser
-        token_expires_at TEXT,
-        permissions TEXT NOT NULL DEFAULT '[]',
-        consent_expires_at TEXT,
+        session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL CHECK (provider IN ('monobank','demo')),
+        status TEXT NOT NULL CHECK (status IN ('active','needs_reauth','error')),
+        tokens_enc TEXT,                         -- sealed JSON, never sent to the browser
         last_refreshed_at TEXT,
+        history_months INTEGER NOT NULL DEFAULT 2,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-      CREATE INDEX idx_connections_session ON connections(session_id);
 
       CREATE TABLE accounts (
         id TEXT PRIMARY KEY,
         connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
         provider_account_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('card','jar')),
+        card_type TEXT NOT NULL,                 -- black, white, platinum, iron, fop, yellow, eAid or jar
         name TEXT NOT NULL,
-        type TEXT NOT NULL,
         currency TEXT NOT NULL,
-        masked_identifier TEXT,                  -- the full IBAN / account number is never stored
-        balance_minor INTEGER NOT NULL,
-        available_minor INTEGER,
+        last4 TEXT,                              -- the full card number and IBAN are never stored
+        credit_limit_minor INTEGER NOT NULL DEFAULT 0,
+        balance_minor INTEGER NOT NULL,          -- as the bank reports it: includes the credit limit
+        goal_minor INTEGER,
+        sort INTEGER NOT NULL DEFAULT 0,
         balance_at TEXT NOT NULL,
-        last_refreshed_at TEXT NOT NULL,
+        covered_from TEXT,                       -- first day of statement history loaded (inclusive)
+        covered_to TEXT,                         -- last day loaded
+        last_statement_at TEXT,
         UNIQUE (connection_id, provider_account_id)
       );
 
@@ -63,163 +56,47 @@ export const migrations: Migration[] = [
         id TEXT PRIMARY KEY,
         account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         provider_txn_id TEXT NOT NULL,
-        booked_at TEXT NOT NULL,
+        ts INTEGER NOT NULL,                     -- Unix milliseconds
         status TEXT NOT NULL CHECK (status IN ('pending','booked')),
-        amount_minor INTEGER NOT NULL,           -- signed integer minor units; no floats anywhere
+        amount_minor INTEGER NOT NULL,           -- in the account's currency; signed; no floats anywhere
         currency TEXT NOT NULL,
         description TEXT NOT NULL,
         counterparty TEXT,
         category TEXT NOT NULL,
         category_source TEXT NOT NULL CHECK (category_source IN ('auto','user')),
+        mcc INTEGER,
+        cashback_minor INTEGER NOT NULL DEFAULT 0,
+        commission_minor INTEGER NOT NULL DEFAULT 0,
+        comment TEXT,
+        receipt_id TEXT,
+        balance_after_minor INTEGER,             -- the statement item's own balance field
         UNIQUE (account_id, provider_txn_id)
       );
-      CREATE INDEX idx_transactions_account_date ON transactions(account_id, booked_at DESC, id DESC);
-    `,
-  },
-  {
-    id: '003_mock_bank',
-    sql: `
-      -- State of the fake bank. It lives in the same database but is only ever touched by providers/mock.
-      CREATE TABLE mock_consents (
-        id TEXT PRIMARY KEY,
-        institution TEXT NOT NULL,
-        persona TEXT NOT NULL,
-        client_id TEXT NOT NULL,
-        seed TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        revoked_at TEXT,
-        fail_next TEXT                           -- demo control: 'unavailable' | 'rate_limit', consumed by one data call
-      );
-      CREATE TABLE mock_auth_codes (
-        code_hash TEXT PRIMARY KEY,
-        consent_id TEXT NOT NULL REFERENCES mock_consents(id) ON DELETE CASCADE,
-        redirect_uri TEXT NOT NULL,
-        code_challenge TEXT,
-        expires_at TEXT NOT NULL,
-        used_at TEXT
-      );
-      CREATE TABLE mock_tokens (
-        token_hash TEXT PRIMARY KEY,
-        kind TEXT NOT NULL CHECK (kind IN ('access','refresh')),
-        consent_id TEXT NOT NULL REFERENCES mock_consents(id) ON DELETE CASCADE,
-        expires_at TEXT NOT NULL,
-        used_at TEXT
-      );
-    `,
-  },
-  {
-    id: '004_payments',
-    sql: `
-      CREATE TABLE payments (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-        provider TEXT NOT NULL,
-        institution_id TEXT NOT NULL,
-        institution_name TEXT NOT NULL,
-        idempotency_key TEXT NOT NULL,           -- the client's key; unique per session
-        request_hash TEXT NOT NULL,              -- same key with a different request is refused, not silently replayed
-        provider_idempotency_key TEXT NOT NULL,  -- sent to the provider, so retrying an unknown outcome cannot pay twice
-        provider_payment_id TEXT,                -- null until the provider has accepted the payment
-        amount_minor INTEGER NOT NULL,
-        currency TEXT NOT NULL,
-        beneficiary_name TEXT NOT NULL,
-        beneficiary_identifier TEXT NOT NULL,    -- masked; the full identifier is never stored
-        reference TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('pending','authorised','executed','settled','failed','cancelled')),
-        settlement_expected INTEGER NOT NULL DEFAULT 1,
-        failure_reason TEXT,
-        status_history TEXT NOT NULL,
-        auth_url_enc TEXT,                       -- sealed: the bank link carries a one-time resource token
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_checked_at TEXT,                    -- last webhook or poll that touched this payment
-        UNIQUE (session_id, idempotency_key)
-      );
-      CREATE UNIQUE INDEX idx_payments_provider_id ON payments(provider, provider_payment_id)
-        WHERE provider_payment_id IS NOT NULL;
-      CREATE INDEX idx_payments_session ON payments(session_id, created_at DESC);
+      CREATE INDEX idx_transactions_account_ts ON transactions(account_id, ts DESC);
 
-      CREATE TABLE webhook_events (
-        id TEXT PRIMARY KEY,
-        provider TEXT NOT NULL,
-        event_id TEXT NOT NULL,                  -- the provider's id: the same event delivered twice shares it
-        event_type TEXT NOT NULL,
-        provider_payment_id TEXT,
-        payload TEXT NOT NULL,
-        received_at TEXT NOT NULL,
-        outcome TEXT NOT NULL,
-        UNIQUE (provider, event_id)
-      );
-    `,
-  },
-  {
-    id: '005_mock_payments',
-    sql: `
-      -- Which Ledger Lens customer a mock consent belongs to, so payments they make show up in their own mock accounts only.
-      ALTER TABLE mock_consents ADD COLUMN customer_ref TEXT;
-
-      CREATE TABLE mock_payments (
-        id TEXT PRIMARY KEY,
-        institution TEXT NOT NULL,
-        idempotency_key TEXT NOT NULL UNIQUE,
-        request_hash TEXT NOT NULL,
-        amount_minor INTEGER NOT NULL,
-        currency TEXT NOT NULL,
-        beneficiary_name TEXT NOT NULL,
-        beneficiary_identifier TEXT NOT NULL,
-        reference TEXT NOT NULL,
-        return_uri TEXT NOT NULL,
-        customer_ref TEXT NOT NULL,
-        settlement_expected INTEGER NOT NULL,
-        resource_token_hash TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('authorization_required','authorizing','authorized','executed','settled','failed')),
-        failure_stage TEXT,
-        failure_reason TEXT,
-        persona TEXT,
-        outcome TEXT,
-        created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        executed_at TEXT,
-        settled_at TEXT,
-        failed_at TEXT,
-        next_status TEXT,                        -- the scheduled transition, applied by the bank's ticker
-        next_at TEXT,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE TABLE mock_outbox (
-        id TEXT PRIMARY KEY,
-        payment_id TEXT NOT NULL REFERENCES mock_payments(id) ON DELETE CASCADE,
-        event_id TEXT NOT NULL,
-        type TEXT NOT NULL,
-        body TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        next_attempt_at TEXT NOT NULL,
-        delivered_at TEXT,
-        last_status INTEGER
-      );
-    `,
-  },
-  {
-    id: '006_sync_jobs',
-    sql: `
-      -- Transaction reads for banks that cap how fast data may be read (monobank: one statement per minute).
+      -- Statement reads for a bank that allows one per minute. Rows survive a restart.
       CREATE TABLE sync_jobs (
         id TEXT PRIMARY KEY,
         connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
         account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('history','topup')),
         window_from TEXT NOT NULL,               -- inclusive calendar dates
         window_to TEXT NOT NULL,
-        seq INTEGER NOT NULL,                    -- fetch order: the newest window of every account comes first
+        priority REAL NOT NULL,                  -- lower runs first
         status TEXT NOT NULL CHECK (status IN ('pending','done','failed')),
         attempts INTEGER NOT NULL DEFAULT 0,
         last_error TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-      CREATE INDEX idx_sync_jobs_pending ON sync_jobs(connection_id, status, seq, created_at);
+      CREATE INDEX idx_sync_jobs_pending ON sync_jobs(connection_id, status, priority, created_at);
+
+      -- Last rates monobank published, so Home still converts when the rates call fails.
+      CREATE TABLE rates (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        payload TEXT NOT NULL,
+        fetched_at TEXT NOT NULL
+      );
     `,
   },
 ];

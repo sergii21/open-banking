@@ -1,7 +1,6 @@
 import type { Category } from '@ledger-lens/contracts';
 import { describe, expect, it } from 'vitest';
 import {
-  defaultWindow,
   detectRecurring,
   merchantKey,
   monthsBetween,
@@ -22,6 +21,7 @@ function tx(
     id: `t${String(counter).padStart(4, '0')}`,
     accountId: 'acc_1',
     bookedAt: `${date}T09:00:00.000Z`,
+    day: date,
     amountMinor,
     currency: 'EUR',
     description,
@@ -46,25 +46,12 @@ describe('monthsBetween', () => {
   });
 });
 
-describe('defaultWindow', () => {
-  it('is the current month and the five before it', () => {
-    expect(defaultWindow(new Date('2026-10-29T10:00:00Z'))).toEqual({
-      from: '2026-05-01',
-      to: '2026-10-29',
-    });
-    expect(defaultWindow(new Date('2026-02-03T10:00:00Z'))).toEqual({
-      from: '2025-09-01',
-      to: '2026-02-03',
-    });
-  });
-});
-
 describe('summarise', () => {
   const rows = [
     tx('2026-08-28', 300_000, 'SALARY', 'income'),
     tx('2026-09-28', 300_000, 'SALARY', 'income'),
-    tx('2026-08-03', -60_000, 'RENT', 'housing'),
-    tx('2026-09-03', -60_000, 'RENT', 'housing'),
+    tx('2026-08-03', -60_000, 'RENT', 'bills'),
+    tx('2026-09-03', -60_000, 'RENT', 'bills'),
     tx('2026-08-10', -4_500, 'REWE', 'groceries'),
     tx('2026-08-17', -3_500, 'LIDL', 'groceries'),
     tx('2026-09-12', -2_000, 'EDEKA', 'groceries'),
@@ -80,7 +67,7 @@ describe('summarise', () => {
       netMinor: 468_701,
     });
     expect(eur?.categories.map((c) => [c.category, c.spentMinor, c.count])).toEqual([
-      ['housing', 120_000, 2],
+      ['bills', 120_000, 2],
       ['groceries', 10_000, 3],
       ['subscriptions', 1_299, 1],
     ]);
@@ -244,14 +231,15 @@ describe('detectRecurring', () => {
 
   it('finds a standing monthly payment and says when the next one is due', () => {
     const [rent] = detectRecurring(
-      monthly('MIETE WOHNUNG MEIER', -60_000, 'housing', SIX_MONTHS),
+      monthly('MIETE WOHNUNG MEIER', -60_000, 'bills', SIX_MONTHS),
       TODAY,
     );
     expect(rent).toMatchObject({
       merchant: 'Miete Wohnung Meier',
-      category: 'housing',
+      category: 'bills',
       cadence: 'monthly',
-      amount: { amountMinor: -60_000, currency: 'EUR' },
+      amountMinor: 60_000,
+      currency: 'EUR',
       occurrences: 6,
       monthlyEquivalentMinor: 60_000,
       lastSeenAt: '2026-10-03T09:00:00.000Z',
@@ -270,7 +258,7 @@ describe('detectRecurring', () => {
     ];
     const [netflix] = detectRecurring(rows, TODAY);
     expect(netflix).toMatchObject({ merchant: 'Netflix', cadence: 'monthly', occurrences: 6 });
-    expect(netflix?.amount.amountMinor).toBe(-1_099); // the typical charge: the median of what was paid
+    expect(netflix?.amountMinor).toBe(1_099); // the typical charge: the median of what was paid
   });
 
   it('does not mistake frequent shopping at one shop for a standing payment', () => {
@@ -295,6 +283,13 @@ describe('detectRecurring', () => {
     expect(
       detectRecurring(monthly('GYM', -2_500, 'health', ['2026-09-03', '2026-10-03']), TODAY),
     ).toEqual([]);
+
+    // With the two months of history loaded by default, a subscription or a utility seen twice a month apart is a pattern.
+    const twice = detectRecurring(
+      monthly('NETFLIX.COM', -19_900, 'subscriptions', ['2026-09-08', '2026-10-08']),
+      TODAY,
+    );
+    expect(twice[0]).toMatchObject({ cadence: 'monthly', monthlyEquivalentMinor: 19_900 });
 
     const insurance = detectRecurring(
       monthly('ALLIANZ HAFTPFLICHT', -9_000, 'bills', ['2026-01-15', '2026-04-15', '2026-07-15']),
@@ -351,10 +346,10 @@ describe('detectRecurring', () => {
         counterparty: 'NETFLIX',
         currency: 'GBP',
       }),
-      ...monthly('MIETE', -80_000, 'housing', SIX_MONTHS),
+      ...monthly('MIETE', -80_000, 'bills', SIX_MONTHS),
     ];
     const found = detectRecurring(rows, TODAY);
-    expect(found.map((r) => [r.key, r.amount.currency])).toEqual([
+    expect(found.map((r) => [r.key, r.currency])).toEqual([
       ['EUR:miete', 'EUR'],
       ['EUR:netflix', 'EUR'],
       ['GBP:netflix', 'GBP'],

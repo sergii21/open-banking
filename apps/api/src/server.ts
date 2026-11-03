@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { buildApp } from './app';
 import { ConfigError, loadConfig } from './config';
 
-// `.env` lives next to the API package (git-ignored); the platform's real environment always wins.
+// Optional `.env` next to the API package (git-ignored); the platform's real environment always wins. Nothing needs to be
+// set for a normal run on your own machine.
 for (const candidate of [resolve(process.cwd(), '.env'), resolve(import.meta.dirname, '../.env')]) {
   if (existsSync(candidate)) {
     process.loadEnvFile(candidate);
@@ -15,7 +16,7 @@ let config;
 try {
   config = loadConfig(process.env, {
     defaultWebDistDir: resolve(import.meta.dirname, '../../web/dist/web/browser'),
-    baseDir: resolve(import.meta.dirname, '..'),
+    defaultDataDir: resolve(import.meta.dirname, '../../../data'),
   });
 } catch (error) {
   if (error instanceof ConfigError) {
@@ -26,7 +27,7 @@ try {
 }
 
 const { app } = await buildApp({ config });
-for (const warning of config.providerWarnings) app.log.warn(warning);
+for (const warning of config.warnings) app.log.warn(warning);
 
 const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, 'shutting down');
@@ -38,6 +39,11 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
 try {
   await app.listen({ host: config.host, port: config.port });
+  process.stdout.write(
+    `\nLedger Lens is running at ${config.publicUrl}\n` +
+      `  your real monobank account: ${config.live ? 'can be connected here' : 'switched off (this is a public instance)'}\n` +
+      `  data: ${config.databasePath}\n\n`,
+  );
 } catch (error) {
   app.log.error({ err: error }, 'failed to start');
   process.exit(1);

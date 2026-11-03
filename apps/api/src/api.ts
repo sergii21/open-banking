@@ -1,12 +1,8 @@
-import { registerAccountRoutes } from './modules/accounts/routes';
-import { registerConnectionRoutes } from './modules/connections/routes';
-import { registerDemoRoutes } from './modules/demo/routes';
+import { registerConnectionRoutes } from './modules/connection/routes';
 import { registerEventRoutes } from './modules/events/routes';
-import { registerInsightRoutes } from './modules/insights/routes';
 import { registerInspectorRoutes } from './modules/inspector/routes';
-import { registerPaymentRoutes } from './modules/payments/routes';
+import { registerAppRoutes } from './modules/routes';
 import { registerSessionRoutes } from './modules/session/routes';
-import { registerTransactionRoutes } from './modules/transactions/routes';
 import { registerSessionHooks } from './plugins/session';
 import type { App, AppContext } from './types';
 import { APP_NAME, APP_VERSION } from './version';
@@ -17,7 +13,7 @@ export async function registerApi(app: App, ctx: AppContext): Promise<void> {
     (api, _options, done) => {
       registerSessionHooks(api, ctx);
 
-      // Everything here is per-customer (or a one-off redirect): no browser or proxy should keep a copy.
+      // Everything here is per-customer: no browser or proxy should keep a copy.
       api.addHook('onSend', (_request, reply, payload, next) => {
         if (!reply.hasHeader('cache-control')) reply.header('cache-control', 'no-store');
         next(null, payload);
@@ -28,18 +24,14 @@ export async function registerApi(app: App, ctx: AppContext): Promise<void> {
         version: APP_VERSION,
         environment: ctx.config.env,
         time: ctx.clock.now().toISOString(),
-        providers: ctx.providers.all().map((provider) => provider.id),
+        live: ctx.config.live,
       }));
 
       registerSessionRoutes(api, ctx);
       registerConnectionRoutes(api, ctx);
-      registerAccountRoutes(api, ctx);
-      registerTransactionRoutes(api, ctx);
-      registerInsightRoutes(api, ctx);
-      registerPaymentRoutes(api, ctx);
+      registerAppRoutes(api, ctx);
       registerInspectorRoutes(api, ctx);
       registerEventRoutes(api, ctx);
-      registerDemoRoutes(api, ctx);
       done();
     },
     { prefix: '/api' },

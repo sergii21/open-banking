@@ -8,6 +8,8 @@ import type { AppConfig } from './config';
 export const REDACT_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
+  'req.headers["x-token"]',
+  'req.headers["x-xsrf-token"]',
   'res.headers["set-cookie"]',
   '*.access_token',
   '*.refresh_token',

@@ -1,22 +1,28 @@
-import { ProviderId } from '@ledger-lens/contracts';
+import type { ProviderId } from '@ledger-lens/contracts';
+import type { Clock } from '../clock';
+import type { AppConfig } from '../config';
+import { type Calendar } from '../domain/calendar';
+import { DiagnosticsCollector } from '../domain/diagnostics';
 import { AppError } from '../errors';
-import type { App, CoreContext } from '../types';
-import { MockProvider } from './mock/adapter';
-import { registerMockBank } from './mock/bank';
-import { MockDatasets } from './mock/datasets';
-import { MockPaymentsEngine } from './mock/payments';
-import { MockPaymentsStore } from './mock/payments-store';
-import { MOCK_SIGNATURE_HEADER, mockWebhookSecret } from './mock/signature';
-import { MockBankStore } from './mock/store';
-import { createMockTransport } from './mock/transport';
+import type { InspectorStore } from '../modules/inspector/inspector-store';
 import type { BankingProvider } from './port';
 import { MonobankProvider } from './monobank/adapter';
-import { TrueLayerProvider } from './truelayer/adapter';
+import { FakeMonobank } from './monobank/demo/fake';
 import { ProviderHttp, fetchTransport, type Transport } from './transport';
 
-/** The enabled adapters, and the lookup from an institution id (`<provider>:<slug>`) to its adapter. */
+/** The real bank's address, for the public rates the demo shows. */
+const REAL_API = 'https://api.monobank.ua';
+
+/** The enabled adapters: `monobank` (the person's own account, local only) and `demo` (the same adapter on a fake bank). */
 export class ProviderRegistry {
-  constructor(private readonly providers: ReadonlyMap<ProviderId, BankingProvider>) {}
+  constructor(
+    private readonly providers: ReadonlyMap<ProviderId, BankingProvider>,
+    /** Where to ask for rates, in order, per provider. The demo asks the real bank first and its own fake second. */
+    private readonly rateSources: ReadonlyMap<ProviderId, readonly BankingProvider[]>,
+    private readonly collectors: ReadonlyMap<ProviderId, DiagnosticsCollector>,
+    /** The in-process fake, when the demo is on: tests and the demo controls reach it here. */
+    readonly fake: FakeMonobank | null,
+  ) {}
 
   all(): BankingProvider[] {
     return [...this.providers.values()];
@@ -28,135 +34,138 @@ export class ProviderRegistry {
 
   get(id: ProviderId): BankingProvider {
     const provider = this.providers.get(id);
-    if (!provider)
-      throw new AppError('provider_not_available', 404, `The ${id} provider is not enabled.`);
+    if (!provider) {
+      throw new AppError('provider_not_available', 404, `${id} is not available here.`);
+    }
     return provider;
   }
 
-  resolveInstitution(institutionId: string): { provider: BankingProvider; slug: string } {
-    const separator = institutionId.indexOf(':');
-    const id = institutionId.slice(0, separator);
-    if (separator < 1 || !ProviderId.safeParse(id).success) {
-      throw new AppError('provider_not_available', 404, 'That bank is not available.');
-    }
-    return { provider: this.get(id as ProviderId), slug: institutionId.slice(separator + 1) };
+  ratesFrom(id: ProviderId): readonly BankingProvider[] {
+    return this.rateSources.get(id) ?? [];
   }
 
-  /** The mock adapter exposes demo hooks; other providers do not. */
-  mock(): MockProvider | null {
-    const provider = this.providers.get('mock');
-    return provider instanceof MockProvider ? provider : null;
+  diagnostics(id: ProviderId): DiagnosticsCollector {
+    return this.collectors.get(id) ?? new DiagnosticsCollector();
   }
 }
 
-/** Tests replace the network with a scripted provider; production uses `fetch`. */
+/** Tests replace the network with a scripted bank; production uses `fetch`. */
 export interface ProviderTransports {
-  truelayer?: Transport;
   monobank?: Transport;
+  demo?: Transport;
 }
 
 export interface RegistryDeps {
-  app: App;
-  ctx: Pick<CoreContext, 'config' | 'clock' | 'db' | 'inspector'>;
+  config: AppConfig;
+  clock: Clock;
+  inspector: InspectorStore;
+  calendar: Calendar;
   transports?: ProviderTransports;
+  /** The demo fake's latency; the server uses a little so loading states are real, tests use none. */
+  demoLatencyMs?: number;
 }
 
-/** Builds the adapters the configuration enables. An adapter without credentials is simply not registered. */
-export async function buildRegistry({
-  app,
-  ctx,
+export function buildRegistry({
+  config,
+  clock,
+  inspector,
+  calendar,
   transports = {},
-}: RegistryDeps): Promise<ProviderRegistry> {
+  demoLatencyMs = 0,
+}: RegistryDeps): ProviderRegistry {
   const providers = new Map<ProviderId, BankingProvider>();
+  const rateSources = new Map<ProviderId, BankingProvider[]>();
+  const collectors = new Map<ProviderId, DiagnosticsCollector>();
 
-  if (ctx.config.providers.mock.enabled) {
-    const store = new MockBankStore(ctx.db, ctx.clock);
-    const paymentsStore = new MockPaymentsStore(ctx.db);
-    const datasets = new MockDatasets(paymentsStore, ctx.clock);
-    const webhookSecret = mockWebhookSecret(ctx.config.sessionSecret);
-    const engine = new MockPaymentsEngine({
-      store: paymentsStore,
-      clock: ctx.clock,
-      stepSeconds: ctx.config.mockBankStepSeconds,
-      approvalMinutes: ctx.config.paymentApprovalMinutes,
-      webhookSecret,
-      allowedReturnUri: `${ctx.config.publicUrl}/api/payments/return`,
-      availableMinor: (institution, persona, customerRef) =>
-        datasets.availableMinor(institution, persona, customerRef),
-      // The bank delivers webhooks the way a real one does: an HTTP POST to our public endpoint, signed, raw JSON body.
-      deliver: async (body, signature) => {
-        const response = await app.inject({
-          method: 'POST',
-          url: '/api/webhooks/mock',
-          headers: { 'content-type': 'application/json', [MOCK_SIGNATURE_HEADER]: signature },
-          payload: body,
-        });
-        let ack: string | null = null;
-        try {
-          const answer = response.json<{ status?: unknown }>();
-          ack = typeof answer.status === 'string' ? answer.status : null;
-        } catch {
-          // Not JSON (an error page): there is no acknowledgement to read.
-        }
-        return { status: response.statusCode, ack };
+  if (config.live) {
+    const diagnostics = new DiagnosticsCollector();
+    collectors.set('monobank', diagnostics);
+    const live = new MonobankProvider({
+      id: 'monobank',
+      mode: 'live',
+      label: 'monobank',
+      http: new ProviderHttp({
+        provider: 'monobank',
+        mode: 'live',
+        transport: transports.monobank ?? fetchTransport,
+        inspector,
+        clock,
+      }),
+      apiUrl: config.monobank.apiUrl,
+      limits: {
+        statementIntervalMs: config.monobank.statementIntervalMs,
+        infoIntervalMs: config.monobank.infoIntervalMs,
+        maxWindowDays: 31,
+        maxItemsPerCall: 500,
+        historyMonths: config.monobank.historyMonths,
       },
+      calendar,
+      clock,
+      diagnostics,
     });
-    await registerMockBank(app, ctx, store, datasets, { engine, store: paymentsStore });
-    providers.set(
-      'mock',
-      new MockProvider({
-        http: new ProviderHttp({
-          provider: 'mock',
-          mode: 'mock',
-          transport: createMockTransport(app),
-          inspector: ctx.inspector,
-          clock: ctx.clock,
-        }),
-        publicUrl: ctx.config.publicUrl,
-        clock: ctx.clock,
-        store,
-        payments: { engine, webhookSecret },
-      }),
-    );
+    providers.set('monobank', live);
+    rateSources.set('monobank', [live]);
   }
 
-  const truelayer = ctx.config.providers.truelayer;
-  if (truelayer) {
-    providers.set(
-      'truelayer',
-      new TrueLayerProvider({
-        http: new ProviderHttp({
-          provider: 'truelayer',
-          mode: 'sandbox',
-          transport: transports.truelayer ?? fetchTransport,
-          inspector: ctx.inspector,
-          clock: ctx.clock,
-        }),
-        config: truelayer,
-        clock: ctx.clock,
-        transport: transports.truelayer ?? fetchTransport,
-        webhookMaxAgeSeconds: ctx.config.webhookMaxAgeSeconds,
-      }),
-    );
-  }
-
-  const monobank = ctx.config.providers.monobank;
-  if (monobank) {
-    providers.set(
-      'monobank',
+  // The demo: the same adapter, its transport pointed at an in-process fake, pacing off.
+  const fake = new FakeMonobank({
+    clock,
+    calendar,
+    latencyMs: demoLatencyMs,
+    limits:
+      config.demo.statementIntervalMs > 0
+        ? { statementMs: config.demo.statementIntervalMs, infoMs: config.demo.infoIntervalMs }
+        : null,
+  });
+  const demoDiagnostics = new DiagnosticsCollector();
+  collectors.set('demo', demoDiagnostics);
+  const demoDeps = {
+    id: 'demo' as const,
+    label: 'Demo bank',
+    calendar,
+    clock,
+    diagnostics: demoDiagnostics,
+    limits: {
+      statementIntervalMs: config.demo.statementIntervalMs,
+      infoIntervalMs: config.demo.infoIntervalMs,
+      maxWindowDays: 31,
+      maxItemsPerCall: 500,
+      historyMonths: config.demo.historyMonths,
+    },
+  };
+  const demo = new MonobankProvider({
+    ...demoDeps,
+    mode: 'demo',
+    http: new ProviderHttp({
+      provider: 'demo',
+      mode: 'demo',
+      transport: transports.demo ?? fake.transport,
+      inspector,
+      clock,
+    }),
+    apiUrl: 'https://demo.monobank.invalid',
+  });
+  providers.set('demo', demo);
+  // Exchange rates are public, so even the demo shows the real ones (and says where they come from in the Live API drawer).
+  const sources: BankingProvider[] = [];
+  if (config.demoRealRates) {
+    sources.push(
       new MonobankProvider({
+        ...demoDeps,
+        mode: 'live',
         http: new ProviderHttp({
-          provider: 'monobank',
+          provider: 'demo',
           mode: 'live',
-          transport: transports.monobank ?? fetchTransport,
-          inspector: ctx.inspector,
-          clock: ctx.clock,
+          transport: fetchTransport,
+          inspector,
+          clock,
         }),
-        config: monobank,
-        clock: ctx.clock,
+        apiUrl: REAL_API,
       }),
     );
   }
+  sources.push(demo);
+  rateSources.set('demo', sources);
 
-  return new ProviderRegistry(providers);
+  return new ProviderRegistry(providers, rateSources, collectors, fake);
 }

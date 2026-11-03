@@ -1,8 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { categorise } from '../src/domain/categoriser';
-import { consentView, EXPIRING_SOON_DAYS, hasConsentExpired } from '../src/domain/consent';
-import { createPkce, safeEqual, TokenVault, VaultError, verifyPkce } from '../src/domain/crypto';
+import { safeEqual, TokenVault, VaultError } from '../src/domain/crypto';
 import {
   INSPECTOR_TRUNCATION,
   redactHeaders,
@@ -52,14 +51,7 @@ describe('TokenVault', () => {
   });
 });
 
-describe('PKCE and comparisons', () => {
-  it('verifies S256 challenges', () => {
-    const { verifier, challenge } = createPkce();
-    expect(verifier.length).toBeGreaterThanOrEqual(43);
-    expect(verifyPkce(verifier, challenge)).toBe(true);
-    expect(verifyPkce('x'.repeat(43), challenge)).toBe(false);
-  });
-
+describe('comparisons', () => {
   it('compares in constant time and handles length mismatches', () => {
     expect(safeEqual('abc', 'abc')).toBe(true);
     expect(safeEqual('abc', 'abd')).toBe(false);
@@ -153,89 +145,70 @@ describe('redaction', () => {
   });
 });
 
-describe('consent view', () => {
-  const now = new Date('2026-10-28T10:00:00.000Z');
-  const inDays = (days: number): string =>
-    new Date(now.getTime() + days * 86_400_000).toISOString();
-
-  it('classifies the consent by days remaining', () => {
-    expect(consentView(inDays(90), 'active', now)).toEqual({ state: 'valid', daysRemaining: 90 });
-    expect(consentView(inDays(EXPIRING_SOON_DAYS), 'active', now).state).toBe('expiring_soon');
-    expect(consentView(inDays(2), 'active', now)).toEqual({
-      state: 'expiring_soon',
-      daysRemaining: 2,
+describe('categorise (how monobank rows are filed)', () => {
+  const cat = (
+    description: string,
+    amountMinor: number,
+    extra: { mcc?: number; comment?: string; counterparty?: string; fop?: boolean } = {},
+  ) =>
+    categorise({
+      description,
+      counterparty: extra.counterparty ?? null,
+      comment: extra.comment ?? null,
+      amountMinor,
+      mcc: extra.mcc ?? null,
+      fop: extra.fop ?? false,
     });
-    expect(consentView(inDays(-1), 'active', now).state).toBe('expired');
-    expect(consentView(null, 'active', now)).toEqual({ state: 'none', daysRemaining: null });
-    expect(consentView(inDays(30), 'expired', now).state).toBe('expired');
+
+  it('trusts the merchant category code first', () => {
+    expect(cat('Сільпо', -31_240, { mcc: 5411 })).toBe('groceries');
+    expect(cat('Aroma Kava', -9_500, { mcc: 5814 })).toBe('dining');
+    expect(cat('Uklon', -14_500, { mcc: 4121 })).toBe('transport');
+    expect(cat('Netflix', -19_900, { mcc: 4899 })).toBe('subscriptions');
+    expect(cat('Київстар', -35_000, { mcc: 4814 })).toBe('bills');
+    expect(cat('Аптека Подорожник', -12_000, { mcc: 5912 })).toBe('health');
+    expect(cat('Банкомат Приватбанк', -501_500, { mcc: 6011 })).toBe('transfers');
   });
 
-  it('knows when a stored consent end has passed', () => {
-    expect(hasConsentExpired(inDays(-0.001), now)).toBe(true);
-    expect(hasConsentExpired(inDays(1), now)).toBe(false);
-    expect(hasConsentExpired(null, now)).toBe(false);
-  });
-});
-
-describe('categorise', () => {
-  const cat = (description: string, amountMinor: number, counterparty: string | null = null) =>
-    categorise({ description, counterparty, amountMinor });
-
-  it.each([
-    ['REWE SAGT DANKE. 4721 BERLIN', -2350, 'groceries'],
-    ['LIDL SAGT DANKE 1234 BERLIN', -1200, 'groceries'],
-    ['TESCO STORES 3141 LONDON', -899, 'groceries'],
-    ['CAFE EINSTEIN 4471 BERLIN', -480, 'dining'],
-    ['UBER *TRIP HELP.UBER.COM', -1290, 'transport'],
-    ['UBER EATS HELP.UBER.COM', -2190, 'dining'],
-    ['DB VERTRIEB GMBH BAHN TICKET', -4990, 'transport'],
-    ['SHELL TANKSTELLE 1111 BERLIN', -5200, 'transport'],
-    ['AMAZON EU SARL LUXEMBOURG', -2999, 'shopping'],
-    ['NETFLIX.COM', -1399, 'subscriptions'],
-    ['APPLE.COM/BILL ICLOUD', -299, 'subscriptions'],
-    ['FITX FITNESSSTUDIO MITGLIEDSBEITRAG', -2990, 'subscriptions'],
-    ['MIETE WOHNUNG HAUSVERWALTUNG MEIER', -115000, 'housing'],
-    ['COUNCIL TAX LB HACKNEY', -14200, 'housing'],
-    ['STADTWERKE STROM ABSCHLAG', -7800, 'bills'],
-    ['VODAFONE MOBILFUNK RECHNUNG', -2499, 'bills'],
-    ['OCTOPUS ENERGY DD', -6400, 'bills'],
-    ['APOTHEKE AM MARKT 9999 BERLIN', -895, 'health'],
-    ['CINEMAXX KINO BERLIN', -1450, 'entertainment'],
-    ['DLH LUFTHANSA FLUG', -18900, 'travel'],
-    ['BOOKING.COM HOTEL AMSTERDAM', -22000, 'travel'],
-    ['SOME UNKNOWN SHOP', -1000, 'other'],
-  ])('%s -> %s', (description, amount, expected) => {
-    expect(cat(description, amount)).toBe(expected);
+  it('knows Ukrainian merchants without a code, in Cyrillic and Latin', () => {
+    expect(cat('АТБ-маркет', -8_800)).toBe('groceries');
+    expect(cat('Сільпо №123', -8_800)).toBe('groceries');
+    expect(cat('Київська кав’ярня Кава', -8_800)).toBe('dining');
+    expect(cat('UKLON', -8_800)).toBe('transport');
+    expect(cat('Нова пошта', -9_000)).toBe('shopping');
+    expect(cat('Rozetka', -150_000)).toBe('shopping');
   });
 
-  it('treats unmatched money in as income and recognises salary', () => {
-    expect(cat('GEHALT ACME GMBH LOHN/GEHALT', 345000)).toBe('income');
-    expect(cat('SALARY ACME LTD BGC', 285000)).toBe('income');
-    expect(cat('Payment from friend', 4000)).toBe('income');
+  it('keeps money moving between people and between own accounts out of spending and income', () => {
+    expect(cat('Кому: Олена К.', -50_000, { mcc: 4829 })).toBe('transfers');
+    expect(cat('Від: Іван П.', 80_000, { mcc: 4829 })).toBe('transfers');
+    expect(cat('Переказ на банку «На відпустку»', -300_000, { mcc: 4829 })).toBe('transfers');
+    expect(cat('Переказ на власну картку', -3_000_000, { mcc: 4829, fop: true })).toBe('transfers');
   });
 
-  it('keeps moves between own accounts out of income and spending', () => {
-    expect(cat('DAUERAUFTRAG UMBUCHUNG TAGESGELD / SAVINGS TRANSFER', -30000)).toBe('transfers');
-    expect(cat('DAUERAUFTRAG VON GIROKONTO / TRANSFER FROM CURRENT', 30000)).toBe('transfers');
-    expect(cat('KREDITKARTENABRECHNUNG VISA GOLD', -41200)).toBe('transfers');
-    expect(cat('ZAHLUNGSEINGANG DANKE', 41200)).toBe('income'); // no transfer keyword: provider hint does the work
+  it('recognises salary and, on a FOP account, any named payer as income', () => {
+    expect(cat('Зарахування заробітної плати', 3_950_000, { mcc: 4829 })).toBe('income');
+    expect(cat('Аванс', 3_650_000, { mcc: 4829 })).toBe('income');
     expect(
-      categorise({
-        description: 'ZAHLUNGSEINGANG DANKE',
-        counterparty: null,
-        amountMinor: 41200,
-        providerCategory: 'TRANSFER',
+      cat('Оплата за послуги згідно договору №12', 4_500_000, {
+        mcc: 4829,
+        fop: true,
+        counterparty: 'ТОВ «Нова Лінія»',
       }),
-    ).toBe('transfers');
+    ).toBe('income');
+  });
+
+  it('lets a transfer note say what it was for', () => {
+    expect(cat('Кому: Марина В.', -1_600_000, { mcc: 4829, comment: 'Оренда' })).toBe('bills');
+  });
+
+  it('files unknown spending as other and unknown money in as income', () => {
+    expect(cat('SOME UNKNOWN SHOP', -1_000)).toBe('other');
+    expect(cat('Payment from friend', 4_000)).toBe('income');
   });
 
   it('files refunds under the merchant, not under income', () => {
-    expect(cat('ERSTATTUNG AMAZON EU SARL LUXEMBOURG', 2500, 'AMAZON')).toBe('shopping');
-  });
-
-  it('matches on the counterparty as well as the description and ignores diacritics', () => {
-    expect(cat('Kartenzahlung 12.10.', -450, 'Bäckerei Müller')).toBe('other');
-    expect(cat('Kartenzahlung', -450, 'Café Roma')).toBe('dining');
+    expect(cat('Rozetka', 250_000, { mcc: 5311 })).toBe('shopping');
   });
 });
 

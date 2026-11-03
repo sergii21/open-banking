@@ -25,7 +25,7 @@ const INCOME = words(
 /** Ordered: first match wins. */
 const RULES: Rule[] = [
   {
-    category: 'housing',
+    category: 'bills',
     pattern: words(
       'MIETE|RENT|HAUSVERWALTUNG|LANDLORD|HYPOTHEK|MORTGAGE|NEBENKOSTEN|LETTINGS|ESTATE AGENT|COUNCIL TAX|WOHNUNG',
     ),
@@ -96,12 +96,17 @@ const cyrillic = (alternatives: string): RegExp =>
 const UA_TRANSFER = cyrillic(
   'ПЕРЕКАЗ З БАНКИ|ПЕРЕКАЗ НА БАНКУ|ПОПОВНЕННЯ БАНКИ|З БАНКИ|НА БАНКУ|НА СВОЮ КАРТКУ|З ВЛАСНОЇ КАРТКИ|НА ВЛАСНУ КАРТКУ|СВОЯ КАРТКА|МІЖ СВОЇМИ РАХУНКАМИ',
 );
+/** `[А-ЯІЇЄҐ]*` stands for the rest of a Ukrainian word: salary is "заробітна плата" but also "заробітної плати". */
+const L = '[А-ЯІЇЄҐ]*';
 const UA_INCOME = cyrillic(
-  'ЗАРПЛАТА|ЗАРОБІТНА ПЛАТА|АВАНС|ПРЕМІЯ|КЕШБЕК|КЕШБЕК|ДИВІДЕНДИ|ПЕНСІЯ|ДОПОМОГА|ВИПЛАТА ВІД|ЄПІДТРИМКА|ЄВІДНОВЛЕННЯ',
+  `ЗАРПЛАТ${L}|ЗАРОБІТН${L} ПЛАТ${L}|АВАНС${L}|ПРЕМІ${L}|КЕШБЕК|ДИВІДЕНД${L}|ПЕНСІ${L}|ДОПОМОГ${L}|ВИПЛАТА ВІД|ЄПІДТРИМКА|ЄВІДНОВЛЕННЯ|ВІДШКОДУВАНН${L}|ПОВЕРНЕННЯ КОШТІВ`,
 );
 
+/** "Оренда" in a transfer's comment says what the money is for, which beats the transfer category code. */
+const RENT = cyrillic(`ОРЕНД${L}|КВАРТПЛАТ${L}|RENT`);
+
 const UA_RULES: Rule[] = [
-  { category: 'housing', pattern: cyrillic('ОРЕНДА|КВАРТПЛАТА|ІПОТЕКА|ОРЕНДА ЖИТЛА') },
+  { category: 'bills', pattern: cyrillic(`ОРЕНД${L}|КВАРТПЛАТ${L}|ІПОТЕК${L}`) },
   { category: 'subscriptions', pattern: cyrillic('ПІДПИСКА|ПЕРЕДПЛАТА') },
   {
     category: 'bills',
@@ -184,8 +189,8 @@ const MCC_RANGES: readonly (readonly [number, number, Category])[] = [
   [5122, 5122, 'health'],
   [5912, 5912, 'health'],
   [8011, 8099, 'health'],
-  [1520, 1799, 'housing'],
-  [6513, 6513, 'housing'],
+  [1520, 1799, 'bills'],
+  [6513, 6513, 'bills'],
   [4829, 4829, 'transfers'],
   [6051, 6051, 'transfers'],
   [6540, 6540, 'transfers'],
@@ -196,7 +201,7 @@ const MCC_RANGES: readonly (readonly [number, number, Category])[] = [
   [5941, 5949, 'shopping'],
   [5964, 5967, 'shopping'],
   [5969, 5999, 'shopping'],
-  [6010, 6012, 'other'],
+  [6010, 6012, 'transfers'],
 ];
 
 export function categoryForMcc(mcc: number): Category | null {
@@ -206,19 +211,17 @@ export function categoryForMcc(mcc: number): Category | null {
   return null;
 }
 
-/** Providers pass an MCC as `MCC:5411` in the coarse-category hint. */
-function mccFrom(hint: string | null | undefined): number | null {
-  const match = hint ? /^MCC:(\d{4})$/i.exec(hint) : null;
-  return match ? Number(match[1]) : null;
-}
-
 export interface CategoriseInput {
   description: string;
   counterparty: string | null;
+  /** The note the person typed on a transfer. It often says more than the description does. */
+  comment?: string | null;
   /** Signed minor units. */
   amountMinor: number;
-  /** Provider-supplied coarse type such as TRANSFER or PURCHASE, when there is one. */
-  providerCategory?: string | null;
+  /** Merchant category code (ISO 18245) when the bank reports one. */
+  mcc?: number | null;
+  /** FOP (sole proprietor) accounts: money in from a named payer is income, not a transfer. */
+  fop?: boolean;
 }
 
 export function normaliseText(text: string): string {
@@ -226,19 +229,17 @@ export function normaliseText(text: string): string {
 }
 
 export function categorise(input: CategoriseInput): Category {
-  const text = normaliseText(`${input.counterparty ?? ''} ${input.description}`);
+  const text = normaliseText(
+    `${input.counterparty ?? ''} ${input.description} ${input.comment ?? ''}`,
+  );
   const incoming = input.amountMinor > 0;
 
-  if (
-    TRANSFER.test(text) ||
-    UA_TRANSFER.test(text) ||
-    input.providerCategory?.toUpperCase() === 'TRANSFER'
-  )
-    return 'transfers';
+  if (TRANSFER.test(text) || UA_TRANSFER.test(text)) return 'transfers';
   if (incoming && (INCOME.test(text) || UA_INCOME.test(text))) return 'income';
+  if (incoming && input.fop && input.counterparty) return 'income';
+  if (!incoming && RENT.test(text)) return 'bills';
 
-  const mcc = mccFrom(input.providerCategory);
-  const byMcc = mcc === null ? null : categoryForMcc(mcc);
+  const byMcc = input.mcc ? categoryForMcc(input.mcc) : null;
   if (byMcc) return byMcc;
 
   for (const rule of RULES) {

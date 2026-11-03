@@ -10,12 +10,16 @@ import type { Clock } from './clock';
 import type { AppConfig } from './config';
 import type { Db } from './db/database';
 import type { Repositories } from './db/repos';
+import type { Calendar } from './domain/calendar';
 import type { TokenVault } from './domain/crypto';
-import type { ConnectionAccess } from './modules/connections/access';
-import type { ConnectionService } from './modules/connections/service';
+import type { ConnectionAccess } from './modules/connection/access';
+import type { ConnectionService } from './modules/connection/service';
+import type { DiagnosticsService } from './modules/diagnostics/service';
 import type { EventBus } from './modules/events/event-bus';
+import type { HomeService } from './modules/home/service';
+import type { InsightsService } from './modules/insights/service';
 import type { InspectorStore } from './modules/inspector/inspector-store';
-import type { PaymentService } from './modules/payments/service';
+import type { RatesService } from './modules/rates/service';
 import type { SessionService } from './modules/session/service';
 import type { SyncService } from './modules/sync/service';
 import type { ProviderRegistry } from './providers/registry';
@@ -29,10 +33,11 @@ export type App = FastifyInstance<
   ZodTypeProvider
 >;
 
-/** Infrastructure every layer may use. Built first, before providers (which need the Fastify instance). */
+/** Infrastructure every layer may use. */
 export interface CoreContext {
   config: AppConfig;
   clock: Clock;
+  calendar: Calendar;
   db: Db;
   log: FastifyBaseLogger;
   vault: TokenVault;
@@ -48,5 +53,8 @@ export interface AppContext extends CoreContext {
   sync: SyncService;
   connections: ConnectionService;
   sessions: SessionService;
-  payments: PaymentService;
+  rates: RatesService;
+  home: HomeService;
+  insights: InsightsService;
+  diagnostics: DiagnosticsService;
 }

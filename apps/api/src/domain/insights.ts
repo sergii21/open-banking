@@ -1,10 +1,43 @@
-import type {
-  Category,
-  CategoryTotal,
-  CurrencyInsights,
-  MonthlyFlow,
-  RecurringPayment,
-} from '@ledger-lens/contracts';
+import type { Category } from '@ledger-lens/contracts';
+
+export interface CategoryTotal {
+  category: Category;
+  spentMinor: number;
+  count: number;
+  /** Share of this currency's total spend, 0..1. */
+  share: number;
+}
+
+export interface MonthlyFlow {
+  month: string;
+  inMinor: number;
+  outMinor: number;
+}
+
+export interface CurrencyInsights {
+  currency: string;
+  totalInMinor: number;
+  totalOutMinor: number;
+  netMinor: number;
+  categories: CategoryTotal[];
+  months: MonthlyFlow[];
+}
+
+export interface DetectedRecurring {
+  key: string;
+  merchant: string;
+  category: Category;
+  cadence: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  /** A typical charge, positive. */
+  amountMinor: number;
+  currency: string;
+  occurrences: number;
+  lastSeenAt: string;
+  nextExpectedAt: string;
+  accountId: string;
+  /** What this costs per month, for ranking and the monthly total. */
+  monthlyEquivalentMinor: number;
+}
 
 /** The part of a transaction the insights need. Amounts are signed minor units: negative is money out. */
 export interface InsightTransaction {
@@ -12,6 +45,8 @@ export interface InsightTransaction {
   accountId: string;
   /** ISO 8601 timestamp (UTC). */
   bookedAt: string;
+  /** The calendar day it belongs to for the person (their time zone), `YYYY-MM-DD`. */
+  day: string;
   amountMinor: number;
   currency: string;
   description: string;
@@ -30,8 +65,8 @@ export interface InsightTransaction {
  */
 const EXCLUDED: ReadonlySet<Category> = new Set<Category>(['transfers']);
 
-const dayOf = (iso: string): string => iso.slice(0, 10);
-const monthOf = (iso: string): string => iso.slice(0, 7);
+const dayOf = (t: Pick<InsightTransaction, 'day'>): string => t.day;
+const monthOf = (t: Pick<InsightTransaction, 'day'>): string => t.day.slice(0, 7);
 
 /** Every `YYYY-MM` from the window's first month to its last, so a month with no activity is a zero rather than a gap. */
 export function monthsBetween(from: string, to: string): string[] {
@@ -63,7 +98,7 @@ export function summarise(
   const months = monthsBetween(window.from, window.to);
   const byCurrency = new Map<string, InsightTransaction[]>();
   for (const transaction of transactions) {
-    const day = dayOf(transaction.bookedAt);
+    const day = dayOf(transaction);
     if (day < window.from || day > window.to || EXCLUDED.has(transaction.category)) continue;
     byCurrency.set(transaction.currency, [
       ...(byCurrency.get(transaction.currency) ?? []),
@@ -78,7 +113,7 @@ export function summarise(
       const spend = new Map<string, number>();
       const outgoing = new Map<Category, number>();
       for (const row of rows) {
-        const month = monthOf(row.bookedAt);
+        const month = monthOf(row);
         if (row.category === 'income') {
           income.set(month, (income.get(month) ?? 0) + row.amountMinor);
           continue;
@@ -127,7 +162,7 @@ export function summarise(
 
 // ================================================================================================= recurring
 
-type Cadence = RecurringPayment['cadence'];
+type Cadence = DetectedRecurring['cadence'];
 
 interface CadenceRule {
   cadence: Cadence;
@@ -207,6 +242,12 @@ const titleCase = (text: string): string =>
     .toLowerCase()
     .replace(/(^|[\s/-])(\p{L})/gu, (_, gap: string, letter: string) => gap + letter.toUpperCase());
 
+/** The bank's own spelling, tidied only when it shouts: "NETFLIX.COM" becomes "Netflix.Com", "Київстар" stays as it is. */
+const displayName = (text: string): string => {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean === clean.toUpperCase() ? titleCase(clean) : clean;
+};
+
 function addCalendar(iso: string, cadence: Cadence): string {
   const date = new Date(iso);
   switch (cadence) {
@@ -252,7 +293,7 @@ function addCalendar(iso: string, cadence: Cadence): string {
 export function detectRecurring(
   transactions: readonly InsightTransaction[],
   today: Date,
-): RecurringPayment[] {
+): DetectedRecurring[] {
   const groups = new Map<string, InsightTransaction[]>();
   for (const transaction of transactions) {
     if (
@@ -267,7 +308,7 @@ export function detectRecurring(
     groups.set(key, [...(groups.get(key) ?? []), transaction]);
   }
 
-  const found: RecurringPayment[] = [];
+  const found: DetectedRecurring[] = [];
   for (const [key, rows] of groups) {
     rows.sort((a, b) => a.bookedAt.localeCompare(b.bookedAt) || a.id.localeCompare(b.id));
     if (rows.length < 2) continue;
@@ -282,7 +323,14 @@ export function detectRecurring(
     const rule = RULES.find(
       (candidate) => typicalGap >= candidate.range[0] && typicalGap <= candidate.range[1],
     );
-    if (!rule || rows.length < rule.minOccurrences) continue;
+    if (!rule) continue;
+    // Two payments a month apart, for the same amount, to a subscription or a utility, are already a pattern: with the
+    // two months of history we load by default a monthly charge cannot have been seen three times yet.
+    const twoIsEnough =
+      rows.length === 2 &&
+      rule.cadence === 'monthly' &&
+      rows.every((row) => row.category === 'subscriptions' || row.category === 'bills');
+    if (rows.length < rule.minOccurrences && !twoIsEnough) continue;
 
     const tolerance = Math.max(3, rule.nominalDays * 0.15);
     const regularGaps = gaps.filter((gap) => Math.abs(gap - rule.nominalDays) <= tolerance).length;
@@ -307,10 +355,11 @@ export function detectRecurring(
 
     found.push({
       key,
-      merchant: last.counterparty ? titleCase(last.counterparty) : titleCase(merchantKey(last)),
+      merchant: displayName(last.counterparty ?? last.description),
       category,
       cadence: rule.cadence,
-      amount: { amountMinor: -amountMinor, currency: last.currency },
+      amountMinor,
+      currency: last.currency,
       occurrences: rows.length,
       lastSeenAt: last.bookedAt,
       nextExpectedAt: addCalendar(last.bookedAt, rule.cadence),
@@ -322,10 +371,4 @@ export function detectRecurring(
   return found.sort(
     (a, b) => b.monthlyEquivalentMinor - a.monthlyEquivalentMinor || a.key.localeCompare(b.key),
   );
-}
-
-/** The default window: the current month and the five before it. */
-export function defaultWindow(today: Date, monthsBack = 5): { from: string; to: string } {
-  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - monthsBack, 1));
-  return { from: start.toISOString().slice(0, 10), to: today.toISOString().slice(0, 10) };
 }

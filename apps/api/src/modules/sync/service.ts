@@ -1,382 +1,676 @@
+import type { SyncState } from '@ledger-lens/contracts';
+import type { AccountRecord, ConnectionRecord } from '../../db/repos';
+import { type Calendar, addDays, planWindows } from '../../domain/calendar';
 import { categorise } from '../../domain/categoriser';
-import { planWindows } from '../../domain/sync-plan';
-import type {
-  AccountWithConnection,
-  ConnectionRecord,
-  NewTransaction,
-  SyncJobRecord,
-} from '../../db/repos';
 import { AppError, notFound } from '../../errors';
-import type { ProviderLimits, ProviderTransaction } from '../../providers/port';
+import type { ProviderAccount, ProviderLimits, ProviderTransaction } from '../../providers/port';
 import type { CoreContext } from '../../types';
-import type { ConnectionAccess } from '../connections/access';
+import type { ConnectionAccess } from '../connection/access';
 
-const DAY_MS = 86_400_000;
-/** Re-read this much recent history on refresh so late-posted items and pending→booked changes are caught. */
-const REFRESH_OVERLAP_DAYS = 14;
-const MAX_JOB_ATTEMPTS = 3;
-/** Background steps that fail are retried no sooner than this. */
-const RETRY_AFTER_MS = 61_000;
-/** Errors after which waiting will not help: the customer has to sign in or issue a token again. */
-const CONNECTION_LOST = new Set([
-  'reauth_required',
-  'consent_expired',
-  'consent_revoked',
-  'connection_not_active',
-]);
+const MAX_ATTEMPTS = 3;
+/** After an outage or an unexpected answer, wait this long before the same step is tried again. */
+const RETRY_MS = 30_000;
+/** While someone is looking, keep what they see this fresh (when the bank's limit leaves room). */
+const TOPUP_EVERY_MS = { main: 120_000, card: 600_000, jar: 1_800_000 };
+const BALANCES_EVERY_MS = 5 * 60_000;
+/** How far back a top-up reads: enough to catch holds that settled and late items. */
+const TOPUP_OVERLAP_DAYS = 3;
+const MAX_MONTHS = 13;
+const MAX_STEPS_PER_TICK = 60;
+
+interface Gate {
+  /** Earliest moment each endpoint may be called again. */
+  nextInfoAt: number;
+  nextStatementAt: number;
+  /** Learned from a 429: this bank counts both endpoints against one limit. */
+  shared: boolean;
+  lastInfoAt: number;
+  lastStatementAt: number;
+  lastUserRefreshAt: number;
+}
+
+interface Problem {
+  message: string;
+  needsToken: boolean;
+}
 
 /**
- * Brings cached data in line with the bank. Reads go to this cache, never to the bank: PSD2 caps unattended access, so a
- * provider is only called on connect (user present), on an explicit Refresh and, for banks that cap how fast data may be
- * read, from a paced background queue that loads history one request at a time.
+ * Brings the cache in line with the bank, inside the bank's limit. monobank allows one read a minute per endpoint, so
+ * nothing here ever waits on the bank for a screen: connecting reads the account list once and Home renders from it,
+ * then a queue of statement windows (the main card's newest month first) is worked off one per minute, each step
+ * announced over SSE so the screens fill in as data arrives. In memory: when each endpoint may be called again (a
+ * restart at worst earns one 429, which re-arms it). In the database: the queue itself.
  */
 export class SyncService {
-  private readonly refreshing = new Set<string>();
-  /** Earliest moment each paced connection may be read again. In memory: after a restart the bank's own 429 re-arms it. */
-  private readonly gate = new Map<string, number>();
-  private readonly working = new Set<string>();
+  private readonly gates = new Map<string, Gate>();
+  private readonly running = new Set<string>();
+  private readonly problems = new Map<string, Problem>();
+  private version = Math.floor(Date.now() / 1000);
 
   constructor(
     private readonly core: CoreContext,
     private readonly access: ConnectionAccess,
+    private readonly calendar: Calendar,
   ) {}
 
-  private isoDate(date: Date): string {
-    return date.toISOString().slice(0, 10);
+  // ------------------------------------------------------------------------------ small helpers
+
+  private gate(connectionId: string): Gate {
+    let gate = this.gates.get(connectionId);
+    if (!gate) {
+      gate = {
+        nextInfoAt: 0,
+        nextStatementAt: 0,
+        shared: false,
+        lastInfoAt: 0,
+        lastStatementAt: 0,
+        lastUserRefreshAt: 0,
+      };
+      this.gates.set(connectionId, gate);
+    }
+    return gate;
   }
 
-  private historyStart(): string {
-    const now = this.core.clock.now();
-    return this.isoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 13, 1)));
+  private statementOpensAt(gate: Gate): number {
+    return gate.shared ? Math.max(gate.nextInfoAt, gate.nextStatementAt) : gate.nextStatementAt;
   }
 
-  private toNew(row: ProviderTransaction): NewTransaction {
+  private infoOpensAt(gate: Gate): number {
+    return gate.shared ? Math.max(gate.nextInfoAt, gate.nextStatementAt) : gate.nextInfoAt;
+  }
+
+  private limitsOf(connection: ConnectionRecord): ProviderLimits {
+    return this.access.limitsFor(connection);
+  }
+
+  private nowMs(): number {
+    return this.core.clock.now().getTime();
+  }
+
+  private bump(connection: ConnectionRecord): void {
+    this.version += 1;
+    this.publish(connection);
+  }
+
+  private publish(connection: ConnectionRecord): void {
+    const fresh = this.core.repos.connections.findById(connection.id) ?? connection;
+    this.core.events.publish(connection.sessionId, {
+      type: 'sync.updated',
+      sync: this.state(fresh),
+    });
+  }
+
+  private mainAccount(accounts: readonly AccountRecord[]): AccountRecord | undefined {
+    return (
+      accounts.find((a) => a.kind === 'card' && a.currency === 'UAH') ??
+      accounts.find((a) => a.kind === 'card') ??
+      accounts[0]
+    );
+  }
+
+  private toNew(row: ProviderTransaction, account: AccountRecord) {
     return {
       providerTxnId: row.providerTxnId,
-      bookedAt: row.bookedAt,
-      amountMinor: row.amount.amountMinor,
-      currency: row.amount.currency,
+      ts: row.ts,
+      status: row.status,
+      amountMinor: row.amountMinor,
+      currency: row.currency,
       description: row.description,
       counterparty: row.counterparty,
       category: categorise({
         description: row.description,
         counterparty: row.counterparty,
-        amountMinor: row.amount.amountMinor,
-        providerCategory: row.providerCategory,
+        comment: row.comment,
+        amountMinor: row.amountMinor,
+        mcc: row.mcc,
+        fop: account.cardType === 'fop',
       }),
+      mcc: row.mcc,
+      cashbackMinor: row.cashbackMinor,
+      commissionMinor: row.commissionMinor,
+      comment: row.comment,
+      receiptId: row.receiptId,
+      balanceAfterMinor: row.balanceAfterMinor,
     };
   }
 
-  /**
-   * Stores one account's transactions; returns how many booked rows were new. The pending set is only replaced when the
-   * rows cover today: an older window has no pending items and must not wipe the ones already stored.
-   */
-  private storeTransactions(
-    accountId: string,
-    rows: readonly ProviderTransaction[],
-    coversToday = true,
-  ): number {
-    const booked = rows.filter((row) => row.status === 'booked').map((row) => this.toNew(row));
-    const pending = rows.filter((row) => row.status === 'pending').map((row) => this.toNew(row));
-    const inserted = this.core.repos.transactions.upsertBooked(accountId, booked);
-    if (coversToday) this.core.repos.transactions.replacePending(accountId, pending);
-    return inserted;
-  }
-
-  /** A response that hit the provider's row cap may have cut the window short: queue the older rest of it. */
-  private enqueueRemainder(
-    connectionId: string,
-    accountId: string,
-    window: { from: string; to: string; seq: number },
-    rows: readonly ProviderTransaction[],
-    limits: ProviderLimits | undefined,
-  ): void {
-    if (!limits || rows.length < limits.maxItemsPerCall) return;
-    const oldest = rows.reduce(
-      (min, row) => (row.bookedAt < min ? row.bookedAt : min),
-      rows[0].bookedAt,
-    );
-    const oldestDate = oldest.slice(0, 10);
-    // Only when it narrows the window: a single day with more rows than the cap cannot be split any further.
-    if (oldestDate > window.from && oldestDate < window.to) {
-      this.core.repos.syncJobs.enqueue(
-        { connectionId, accountId, from: window.from, to: oldestDate, seq: window.seq },
-        this.core.clock.now().toISOString(),
+  /** Stores the account list the bank just sent. Own funds are derived later; the bank's balance is kept as it came. */
+  private storeAccounts(
+    connection: ConnectionRecord,
+    accounts: readonly ProviderAccount[],
+  ): AccountRecord[] {
+    const nowIso = this.core.clock.now().toISOString();
+    const stored = this.core.db.transaction(() => {
+      const rows = accounts.map((account) =>
+        this.core.repos.accounts.upsert(connection.id, {
+          providerAccountId: account.providerAccountId,
+          kind: account.kind,
+          cardType: account.cardType,
+          name: account.name,
+          currency: account.currency,
+          last4: account.last4,
+          creditLimitMinor: account.creditLimitMinor,
+          balanceMinor: account.balanceMinor,
+          goalMinor: account.goalMinor,
+          sort: account.sort,
+          balanceAt: nowIso,
+        }),
       );
-    }
+      this.core.repos.accounts.deleteMissing(
+        connection.id,
+        accounts.map((a) => a.providerAccountId),
+      );
+      return rows;
+    });
+    return stored.sort((a, b) => a.sort - b.sort);
   }
 
-  /**
-   * First sync after consent: every account and balance, then the transactions. Providers without read limits get
-   * ~13 months right away; providers with limits get their history queued and loaded in the background.
-   */
-  async initialSync(connection: ConnectionRecord, psuIp?: string): Promise<void> {
-    await this.access.withTokens(
+  /** Something outside the queue changed what the screens show (new rates): tell them to look again. */
+  touch(sessionId: string): void {
+    const connection = this.core.repos.connections.findBySession(sessionId);
+    if (connection) this.bump(connection);
+  }
+
+  // ------------------------------------------------------------------------------ planning
+
+  private priorityFor(
+    account: AccountRecord,
+    rank: number,
+    windowIndex: number,
+    isMain: boolean,
+  ): number {
+    if (account.kind === 'jar') return 500 + windowIndex * 10 + rank;
+    if (windowIndex === 0) return isMain ? 10 : 20 + rank;
+    return 100 + windowIndex * 10 + (isMain ? 0 : 1 + rank);
+  }
+
+  private planHistory(
+    connection: ConnectionRecord,
+    accounts: readonly AccountRecord[],
+    months: number,
+  ): number {
+    const limits = this.limitsOf(connection);
+    const nowIso = this.core.clock.now().toISOString();
+    const today = this.calendar.today(this.core.clock.now());
+    const windows = planWindows(today, months, limits.maxWindowDays);
+    const main = this.mainAccount(accounts);
+    let queued = 0;
+    accounts.forEach((account, rank) => {
+      windows.forEach((window, index) => {
+        const covered =
+          account.coveredFrom !== null &&
+          account.coveredTo !== null &&
+          account.coveredFrom <= window.from &&
+          account.coveredTo >= window.to;
+        // The newest window is always read again: it holds the holds, and things move in it.
+        if (covered && index > 0) return;
+        this.core.repos.syncJobs.enqueue(
+          {
+            connectionId: connection.id,
+            accountId: account.id,
+            kind: 'history',
+            from: window.from,
+            to: window.to,
+            priority: this.priorityFor(account, rank, index, account.id === main?.id),
+          },
+          nowIso,
+        );
+        queued += 1;
+      });
+    });
+    return queued;
+  }
+
+  private kick(): void {
+    if (this.core.config.env === 'test') return;
+    setTimeout(() => {
+      this.tick().catch((error: unknown) => {
+        this.core.log.error({ err: error }, 'background sync failed');
+      });
+    }, 50).unref();
+  }
+
+  // ------------------------------------------------------------------------------ connect
+
+  /** The bank accepted a token (or the demo started): store the accounts it listed and queue the history behind them. */
+  afterConnect(
+    connection: ConnectionRecord,
+    accounts: readonly ProviderAccount[],
+    keepHistory: boolean,
+  ): void {
+    const { repos } = this.core;
+    const now = this.nowMs();
+    const nowIso = new Date(now).toISOString();
+    const limits = this.limitsOf(connection);
+    const gate = this.gate(connection.id);
+    // The connect call itself was the read of the account list.
+    gate.lastInfoAt = now;
+    gate.nextInfoAt = now + limits.infoIntervalMs;
+    this.problems.delete(connection.id);
+
+    const stored = this.storeAccounts(connection, accounts);
+    repos.syncJobs.cancelPending(connection.id, 'superseded', nowIso);
+    repos.syncJobs.purgeFinished(connection.id);
+    repos.connections.update(connection.id, { lastRefreshedAt: nowIso, status: 'active' }, nowIso);
+    this.planHistory(
       connection,
-      async (tokens, provider, call) => {
-        const accounts = await provider.fetchAccounts(tokens, call);
-        const now = this.core.clock.now();
-        const nowIso = now.toISOString();
-        const limits = provider.limits;
-        const window = { from: this.historyStart(), to: this.isoDate(now) };
-        const windows = limits
-          ? planWindows(this.isoDate(now), limits.historyMonths, limits.maxWindowDays)
-          : [];
-        if (limits) {
-          this.core.repos.syncJobs.cancelPending(connection.id, 'superseded', nowIso);
-          this.core.repos.syncJobs.purgeFinished(connection.id);
-        }
-
-        const keep: string[] = [];
-        for (const [accountIndex, account] of accounts.entries()) {
-          const stored = this.core.repos.accounts.upsert(connection.id, {
-            providerAccountId: account.providerAccountId,
-            name: account.name,
-            type: account.type,
-            currency: account.currency,
-            maskedIdentifier: account.maskedIdentifier,
-            balanceMinor: account.balance.amountMinor,
-            availableMinor: account.availableBalance?.amountMinor ?? null,
-            balanceAt: account.at,
-            now: nowIso,
-          });
-          keep.push(account.providerAccountId);
-
-          if (limits) {
-            for (const [index, slice] of windows.entries()) {
-              this.core.repos.syncJobs.enqueue(
-                {
-                  connectionId: connection.id,
-                  accountId: stored.id,
-                  ...slice,
-                  seq: index * 1000 + accountIndex,
-                },
-                nowIso,
-              );
-            }
-          } else {
-            const rows = await provider.fetchTransactions(
-              tokens,
-              { providerAccountId: account.providerAccountId, currency: account.currency },
-              window,
-              call,
-            );
-            this.storeTransactions(stored.id, rows);
-          }
-        }
-        this.core.repos.accounts.deleteMissing(connection.id, keep);
-        this.core.repos.connections.update(connection.id, { lastRefreshedAt: nowIso }, nowIso);
-      },
-      { psuIp },
+      stored,
+      keepHistory ? connection.historyMonths : limits.historyMonths,
     );
+    this.bump(connection);
+    this.kick();
   }
 
-  // ------------------------------------------------------------------------------ paced background loading
+  // ------------------------------------------------------------------------------ the loop
 
-  /** One step of the background queue for every connection whose rate gate is open. Returns how many steps ran. */
-  async runDue(): Promise<number> {
-    const nowMs = this.core.clock.now().getTime();
+  /** One step for every connection whose gate is open. Returns how many steps ran. */
+  async tick(): Promise<number> {
     let ran = 0;
-    for (const connectionId of this.core.repos.syncJobs.connectionsWithPending()) {
-      if ((this.gate.get(connectionId) ?? 0) > nowMs || this.working.has(connectionId)) continue;
-      this.working.add(connectionId);
+    for (const connection of this.core.repos.connections.listActive()) {
+      if (this.running.has(connection.id)) continue;
+      this.running.add(connection.id);
       try {
-        if (await this.runNext(connectionId)) ran += 1;
+        // Work off every step the bank's limit allows right now: one for monobank, the whole queue for the demo.
+        for (let i = 0; i < MAX_STEPS_PER_TICK && (await this.step(connection)); i += 1) ran += 1;
+      } catch (error) {
+        this.core.log.error({ err: error, connectionId: connection.id }, 'sync step crashed');
       } finally {
-        this.working.delete(connectionId);
+        this.running.delete(connection.id);
       }
     }
     return ran;
   }
 
-  private async runNext(connectionId: string): Promise<boolean> {
+  private async step(connection: ConnectionRecord): Promise<boolean> {
     const { repos } = this.core;
-    const now = this.core.clock.now();
-    const nowIso = now.toISOString();
+    const gate = this.gate(connection.id);
+    const now = this.nowMs();
 
-    const connection = repos.connections.findById(connectionId);
-    if (connection?.status !== 'active') {
-      repos.syncJobs.cancelPending(connectionId, 'connection_not_active', nowIso);
-      return false;
-    }
-    const job = repos.syncJobs.next(connectionId);
-    if (!job) {
-      repos.syncJobs.purgeFinished(connectionId);
-      return false;
-    }
-    const account = repos.accounts.findById(job.accountId);
-    if (!account) {
-      repos.syncJobs.markDone(job.id, nowIso);
+    // Keep balances fresh for someone who is looking, when the account-list endpoint is idle.
+    const watching = this.core.events.subscriberCount(connection.sessionId) > 0;
+    if (
+      watching &&
+      now >= this.infoOpensAt(gate) &&
+      now - gate.lastInfoAt > BALANCES_EVERY_MS &&
+      !repos.syncJobs.next(connection.id)
+    ) {
+      await this.readAccounts(connection);
       return true;
     }
 
-    try {
-      const { rows, limits } = await this.access.withTokens(
-        connection,
-        async (tokens, provider, call) => ({
-          limits: provider.limits,
-          rows: await provider.fetchTransactions(
-            tokens,
-            { providerAccountId: account.providerAccountId, currency: account.currency },
-            { from: job.from, to: job.to },
-            call,
-          ),
-        }),
-      );
-      this.storeTransactions(account.id, rows, job.to >= this.isoDate(now));
-      this.enqueueRemainder(connectionId, account.id, job, rows, limits);
-      repos.syncJobs.markDone(job.id, nowIso);
-      repos.connections.update(connectionId, { lastRefreshedAt: nowIso }, nowIso);
-      this.gate.set(connectionId, now.getTime() + (limits?.minIntervalMs ?? 0));
-    } catch (error) {
-      return this.handleStepFailure(connectionId, job, error, now);
+    let job = repos.syncJobs.next(connection.id);
+    if (!job && watching) {
+      this.queueTopUpIfStale(connection);
+      job = repos.syncJobs.next(connection.id);
     }
-    if (!repos.syncJobs.next(connectionId)) repos.syncJobs.purgeFinished(connectionId);
-    this.access.notify(connectionId);
-    return true;
+    if (!job) {
+      repos.syncJobs.purgeFinished(connection.id);
+      return false;
+    }
+    if (now < this.statementOpensAt(gate)) return false;
+    return this.runJob(connection, job);
   }
 
-  private handleStepFailure(
-    connectionId: string,
-    job: SyncJobRecord,
+  private queueTopUpIfStale(connection: ConnectionRecord): void {
+    const { repos } = this.core;
+    const now = this.nowMs();
+    const accounts = repos.accounts.listByConnection(connection.id);
+    const main = this.mainAccount(accounts);
+    let pick: { account: AccountRecord; age: number } | null = null;
+    for (const account of accounts) {
+      const last = account.lastStatementAt ? Date.parse(account.lastStatementAt) : 0;
+      const every =
+        account.id === main?.id
+          ? TOPUP_EVERY_MS.main
+          : account.kind === 'jar'
+            ? TOPUP_EVERY_MS.jar
+            : TOPUP_EVERY_MS.card;
+      const age = now - last;
+      if (age >= every && (!pick || age / every > pick.age / every)) pick = { account, age };
+    }
+    if (pick && !repos.syncJobs.hasPending(pick.account.id, 'topup'))
+      this.enqueueTopUp(connection, pick.account, 1);
+  }
+
+  private enqueueTopUp(
+    connection: ConnectionRecord,
+    account: AccountRecord,
+    priority: number,
+  ): void {
+    const today = this.calendar.today(this.core.clock.now());
+    const limits = this.limitsOf(connection);
+    const latest = this.core.repos.transactions.latestTs(account.id);
+    const earliest = addDays(today, -(limits.maxWindowDays - 1));
+    const wanted = latest ? addDays(this.calendar.dayKey(latest), -TOPUP_OVERLAP_DAYS) : earliest;
+    this.core.repos.syncJobs.enqueue(
+      {
+        connectionId: connection.id,
+        accountId: account.id,
+        kind: 'topup',
+        from: wanted > earliest ? wanted : earliest,
+        to: today,
+        priority,
+      },
+      this.core.clock.now().toISOString(),
+    );
+  }
+
+  private async runJob(
+    connection: ConnectionRecord,
+    job: {
+      id: string;
+      accountId: string;
+      kind: 'history' | 'topup';
+      from: string;
+      to: string;
+      priority: number;
+      attempts: number;
+    },
+  ): Promise<boolean> {
+    const { repos } = this.core;
+    const account = repos.accounts.findById(job.accountId);
+    if (!account) {
+      repos.syncJobs.markDone(job.id, this.core.clock.now().toISOString());
+      return true;
+    }
+    const gate = this.gate(connection.id);
+    const startedAt = this.nowMs();
+    this.publish(connection);
+    try {
+      const rows = await this.access.withTokens(connection, (tokens, provider, call) =>
+        provider.fetchTransactions(
+          tokens,
+          { providerAccountId: account.providerAccountId, currency: account.currency },
+          { from: job.from, to: job.to },
+          call,
+        ),
+      );
+      const limits = this.limitsOf(connection);
+      gate.lastStatementAt = startedAt;
+      gate.nextStatementAt = startedAt + limits.statementIntervalMs;
+      this.store(connection, account, job, rows, limits);
+      this.problems.delete(connection.id);
+      this.bump(connection);
+      if (!repos.syncJobs.next(connection.id)) repos.syncJobs.purgeFinished(connection.id);
+      this.publish(connection);
+      return true;
+    } catch (error) {
+      this.failed(connection, job, error, startedAt);
+      this.publish(connection);
+      return false;
+    }
+  }
+
+  private store(
+    connection: ConnectionRecord,
+    account: AccountRecord,
+    job: { id: string; from: string; to: string; priority: number; kind: 'history' | 'topup' },
+    rows: readonly ProviderTransaction[],
+    limits: ProviderLimits,
+  ): void {
+    const { repos, clock } = this.core;
+    const nowIso = clock.now().toISOString();
+    const fromTs = this.calendar.dayStart(job.from);
+    const toTs = Math.min(this.calendar.dayEnd(job.to), clock.now().getTime());
+    const capped = rows.length >= limits.maxItemsPerCall;
+    const oldest = rows.reduce((min, row) => Math.min(min, row.ts), Number.POSITIVE_INFINITY);
+    const oldestDay = Number.isFinite(oldest) ? this.calendar.dayKey(oldest) : job.from;
+
+    this.core.db.transaction(() => {
+      repos.transactions.upsertMany(
+        account.id,
+        rows.map((row) => this.toNew(row, account)),
+      );
+      repos.transactions.dropStalePending(
+        account.id,
+        fromTs,
+        toTs,
+        new Set(rows.map((row) => row.providerTxnId)),
+      );
+      // The loaded span only grows when the new window touches it, and a window the bank cut short counts from its oldest row.
+      const today = this.calendar.today(clock.now());
+      const touches =
+        account.coveredFrom === null
+          ? job.to >= addDays(today, -1)
+          : job.to >= addDays(account.coveredFrom, -1);
+      if (touches) {
+        repos.accounts.extendCoverage(account.id, capped ? oldestDay : job.from, job.to, nowIso);
+      } else {
+        repos.accounts.extendCoverage(
+          account.id,
+          account.coveredFrom ?? job.from,
+          account.coveredTo ?? job.to,
+          nowIso,
+        );
+      }
+      repos.syncJobs.markDone(job.id, nowIso);
+      repos.connections.update(connection.id, { lastRefreshedAt: nowIso }, nowIso);
+      // A response at the row cap may have cut the window short: queue the older rest of it right behind this one.
+      if (capped && oldestDay > job.from) {
+        repos.syncJobs.enqueue(
+          {
+            connectionId: connection.id,
+            accountId: account.id,
+            kind: 'history',
+            from: job.from,
+            to: oldestDay,
+            priority: job.priority + 0.001,
+          },
+          nowIso,
+        );
+      }
+    });
+  }
+
+  private failed(
+    connection: ConnectionRecord,
+    job: { id: string; attempts: number },
     error: unknown,
-    now: Date,
-  ): boolean {
-    const nowIso = now.toISOString();
+    startedAt: number,
+  ): void {
+    const { repos } = this.core;
+    const gate = this.gate(connection.id);
+    const nowIso = this.core.clock.now().toISOString();
     if (error instanceof AppError) {
       if (error.code === 'rate_limited') {
-        // The bank is the authority on its own limit; wait as long as it says and try the same step again.
-        this.gate.set(connectionId, now.getTime() + (error.retryAfterSeconds ?? 61) * 1000);
-        return false;
+        // The bank is the authority on its own limit: wait as long as it says and try the same step again.
+        const wait = (error.retryAfterSeconds ?? 60) * 1000;
+        // A 429 so soon after reading the account list means the two endpoints share one limit.
+        if (startedAt - gate.lastInfoAt < this.limitsOf(connection).infoIntervalMs)
+          gate.shared = true;
+        gate.nextStatementAt = startedAt + wait;
+        return;
       }
-      if (CONNECTION_LOST.has(error.code)) {
-        this.core.repos.syncJobs.cancelPending(connectionId, error.code, nowIso);
-        this.access.notify(connectionId);
-        return false;
+      if (error.code === 'reauth_required') {
+        repos.syncJobs.cancelPending(connection.id, 'reauth_required', nowIso);
+        this.problems.set(connection.id, {
+          message: 'monobank no longer accepts your token. Paste a new one.',
+          needsToken: true,
+        });
+        return;
+      }
+      if (error.code === 'bank_unavailable') {
+        gate.nextStatementAt = startedAt + RETRY_MS;
+        this.problems.set(connection.id, {
+          message: 'monobank is not responding. Trying again shortly.',
+          needsToken: false,
+        });
+        return;
       }
     }
     this.core.log.warn(
-      { connectionId, code: error instanceof AppError ? error.code : 'unexpected' },
+      { connectionId: connection.id, code: error instanceof AppError ? error.code : 'unexpected' },
       'background sync step failed',
     );
-    this.core.repos.syncJobs.recordFailure(
+    repos.syncJobs.recordFailure(
       job.id,
-      error instanceof Error ? error.message.slice(0, 200) : 'unknown error',
-      MAX_JOB_ATTEMPTS,
+      error instanceof AppError ? error.code : 'unexpected',
+      MAX_ATTEMPTS,
       nowIso,
     );
-    this.gate.set(connectionId, now.getTime() + RETRY_AFTER_MS);
-    return true;
-  }
-
-  // ------------------------------------------------------------------------------ user-initiated refresh
-
-  /** User-initiated refresh of one account: consent info, balance, and recent transactions. */
-  async refreshAccount(
-    sessionId: string,
-    accountId: string,
-    psuIp?: string,
-  ): Promise<{ account: AccountWithConnection; newTransactions: number }> {
-    const account = this.core.repos.accounts.findForSession(sessionId, accountId);
-    if (!account) throw notFound('Account');
-    const connection = this.core.repos.connections.findForSession(sessionId, account.connectionId);
-    if (!connection) throw notFound('Connection');
-    this.access.assertUsable(connection);
-
-    const now = this.core.clock.now();
-    const sinceLast = (now.getTime() - Date.parse(account.lastRefreshedAt)) / 1000;
-    const cooldown = this.core.config.refreshCooldownSeconds;
-    if (sinceLast < cooldown) {
-      throw new AppError('refresh_cooldown', 429, 'This account was refreshed moments ago.', {
-        retryAfterSeconds: Math.ceil(cooldown - sinceLast),
+    gate.nextStatementAt = startedAt + RETRY_MS;
+    if (job.attempts + 1 >= MAX_ATTEMPTS) {
+      this.problems.set(connection.id, {
+        message: 'Part of the history could not be loaded. Refresh to try again.',
+        needsToken: false,
       });
     }
-    const limits = this.access.limitsFor(connection);
-    const gateWait = (this.gate.get(connection.id) ?? 0) - now.getTime();
-    if (limits && gateWait > 0) {
-      throw new AppError(
-        'rate_limited',
-        429,
-        'The bank allows one transaction read per minute and one is already under way. Try again shortly.',
-        { retryAfterSeconds: Math.ceil(gateWait / 1000) },
-      );
-    }
-    if (this.refreshing.has(account.id)) {
-      throw new AppError(
-        'refresh_cooldown',
-        429,
-        'A refresh is already running for this account.',
-        {
-          retryAfterSeconds: 5,
-        },
-      );
-    }
+  }
 
-    this.refreshing.add(account.id);
+  // ------------------------------------------------------------------------------ account list
+
+  /** Reads the account list now (balances), if monobank's limit allows. */
+  private async readAccounts(connection: ConnectionRecord): Promise<boolean> {
+    const gate = this.gate(connection.id);
+    const startedAt = this.nowMs();
     try {
-      const newTransactions = await this.access.withTokens(
-        connection,
-        async (tokens, provider, call) => {
-          const ref = { providerAccountId: account.providerAccountId, currency: account.currency };
-          const consent = await provider.fetchConsent(tokens, call);
-          const balance = await provider.fetchBalance(tokens, ref, call);
-
-          const latest = this.core.repos.transactions.latestBookedAt(account.id);
-          const overlapStart = latest
-            ? this.isoDate(new Date(Date.parse(latest) - REFRESH_OVERLAP_DAYS * DAY_MS))
-            : null;
-          const earliest = provider.limits
-            ? this.isoDate(new Date(now.getTime() - (provider.limits.maxWindowDays - 1) * DAY_MS))
-            : this.historyStart();
-          const from = overlapStart && overlapStart > earliest ? overlapStart : earliest;
-          const window = { from, to: this.isoDate(now) };
-          const rows = await provider.fetchTransactions(tokens, ref, window, call);
-
-          const nowIso = now.toISOString();
-          const inserted = this.core.db.transaction(() => {
-            this.core.repos.accounts.upsert(connection.id, {
-              providerAccountId: account.providerAccountId,
-              name: account.name,
-              type: account.type,
-              currency: account.currency,
-              maskedIdentifier: account.maskedIdentifier,
-              balanceMinor: balance.balance.amountMinor,
-              availableMinor: balance.availableBalance?.amountMinor ?? null,
-              balanceAt: balance.at,
-              now: nowIso,
-            });
-            const count = this.storeTransactions(account.id, rows);
-            this.core.repos.connections.update(
-              connection.id,
-              {
-                consentExpiresAt: consent.expiresAt,
-                permissions: consent.permissions,
-                lastRefreshedAt: nowIso,
-              },
-              nowIso,
-            );
-            return count;
-          });
-          if (provider.limits) {
-            this.gate.set(connection.id, now.getTime() + provider.limits.minIntervalMs);
-            this.enqueueRemainder(
-              connection.id,
-              account.id,
-              { ...window, seq: 0 },
-              rows,
-              provider.limits,
-            );
-          }
-          return inserted;
-        },
-        { psuIp },
+      const accounts = await this.access.withTokens(connection, (tokens, provider, call) =>
+        provider.fetchAccounts(tokens, call),
       );
-      this.access.notify(connection.id);
-      const refreshed = this.core.repos.accounts.findForSession(sessionId, accountId);
-      if (!refreshed) throw notFound('Account');
-      return { account: refreshed, newTransactions };
-    } finally {
-      this.refreshing.delete(account.id);
+      const limits = this.limitsOf(connection);
+      gate.lastInfoAt = startedAt;
+      gate.nextInfoAt = startedAt + limits.infoIntervalMs;
+      this.storeAccounts(connection, accounts);
+      this.core.repos.connections.update(
+        connection.id,
+        { lastRefreshedAt: new Date(startedAt).toISOString() },
+        new Date(startedAt).toISOString(),
+      );
+      this.problems.delete(connection.id);
+      this.bump(connection);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'rate_limited') {
+        gate.nextInfoAt = startedAt + (error.retryAfterSeconds ?? 60) * 1000;
+        if (startedAt - gate.lastStatementAt < this.limitsOf(connection).statementIntervalMs)
+          gate.shared = true;
+      } else if (error instanceof AppError && error.code === 'reauth_required') {
+        this.problems.set(connection.id, {
+          message: 'monobank no longer accepts your token. Paste a new one.',
+          needsToken: true,
+        });
+      } else if (error instanceof AppError && error.code === 'bank_unavailable') {
+        gate.nextInfoAt = startedAt + RETRY_MS;
+        this.problems.set(connection.id, {
+          message: 'monobank is not responding. Trying again shortly.',
+          needsToken: false,
+        });
+      } else {
+        throw error;
+      }
+      this.publish(connection);
+      return false;
     }
+  }
+
+  // ------------------------------------------------------------------------------ what the person can ask for
+
+  /** Refresh: read balances now if the limit allows, and queue fresh reads of the cards behind whatever is already queued. */
+  async refresh(sessionId: string): Promise<SyncState> {
+    const connection = this.requireConnection(sessionId);
+    this.access.assertUsable(connection);
+    const gate = this.gate(connection.id);
+    const now = this.nowMs();
+    const cooldown = this.core.config.refreshCooldownSeconds * 1000;
+    if (now - gate.lastUserRefreshAt < cooldown) {
+      throw new AppError('refresh_cooldown', 429, 'Refreshed a moment ago.', {
+        retryAfterSeconds: Math.ceil((cooldown - (now - gate.lastUserRefreshAt)) / 1000),
+      });
+    }
+    gate.lastUserRefreshAt = now;
+    this.problems.delete(connection.id);
+
+    const accounts = this.core.repos.accounts.listByConnection(connection.id);
+    accounts.forEach((account, rank) => {
+      if (!this.core.repos.syncJobs.hasPending(account.id, 'topup')) {
+        this.enqueueTopUp(
+          connection,
+          account,
+          account.kind === 'jar' ? 3 : rank === 0 ? 0 : 1 + rank / 100,
+        );
+      }
+    });
+    if (now >= this.infoOpensAt(gate) && !this.running.has(connection.id)) {
+      this.running.add(connection.id);
+      try {
+        await this.readAccounts(connection);
+      } finally {
+        this.running.delete(connection.id);
+      }
+    }
+    this.kick();
+    return this.state(this.core.repos.connections.findById(connection.id) ?? connection);
+  }
+
+  /** "Load earlier months": one more month of history for every account, behind whatever is queued. */
+  loadEarlier(sessionId: string): SyncState {
+    const connection = this.requireConnection(sessionId);
+    this.access.assertUsable(connection);
+    const progress = this.core.repos.syncJobs.progress(connection.id);
+    if (progress.pending > 0 || connection.historyMonths >= MAX_MONTHS)
+      return this.state(connection);
+    const months = connection.historyMonths + 1;
+    this.core.repos.connections.update(
+      connection.id,
+      { historyMonths: months },
+      this.core.clock.now().toISOString(),
+    );
+    const accounts = this.core.repos.accounts.listByConnection(connection.id);
+    this.planHistory({ ...connection, historyMonths: months }, accounts, months);
+    this.bump(connection);
+    this.kick();
+    return this.state(this.core.repos.connections.findById(connection.id) ?? connection);
+  }
+
+  /** "Load this card first": its queued history jumps the queue. */
+  prioritise(sessionId: string, accountId: string): SyncState {
+    const connection = this.requireConnection(sessionId);
+    const account = this.core.repos.accounts.findForSession(sessionId, accountId);
+    if (!account) throw notFound('Account');
+    this.core.repos.syncJobs.prioritise(account.id, 5);
+    this.publish(connection);
+    this.kick();
+    return this.state(connection);
+  }
+
+  private requireConnection(sessionId: string): ConnectionRecord {
+    const connection = this.core.repos.connections.findBySession(sessionId);
+    if (!connection) throw notFound('Connection');
+    return connection;
+  }
+
+  // ------------------------------------------------------------------------------ state for the screens
+
+  accountStates(connection: ConnectionRecord): Map<string, { pending: number; done: number }> {
+    return this.core.repos.syncJobs.accountStates(connection.id);
+  }
+
+  state(connection: ConnectionRecord): SyncState {
+    const now = this.nowMs();
+    const progress = this.core.repos.syncJobs.progress(connection.id);
+    const gate = this.gate(connection.id);
+    const problem = this.problems.get(connection.id);
+    const opensAt = this.statementOpensAt(gate);
+    const needsToken = connection.status === 'needs_reauth' || (problem?.needsToken ?? false);
+
+    let phase: SyncState['phase'] = 'idle';
+    if (needsToken || problem) phase = 'attention';
+    else if (this.running.has(connection.id)) phase = 'loading';
+    else if (progress.pending > 0) phase = now >= opensAt ? 'loading' : 'waiting';
+
+    return {
+      phase,
+      updatedAt: connection.lastRefreshedAt,
+      done: progress.done,
+      total: progress.total,
+      nextAt: progress.pending > 0 ? new Date(Math.max(now, opensAt)).toISOString() : null,
+      balancesNextAt:
+        now < this.infoOpensAt(gate) ? new Date(this.infoOpensAt(gate)).toISOString() : null,
+      needsToken,
+      message: needsToken
+        ? 'monobank no longer accepts your token. Paste a new one.'
+        : (problem?.message ?? null),
+      version: this.version,
+    };
   }
 }

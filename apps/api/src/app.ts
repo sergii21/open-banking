@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
+import { constants as zlib } from 'node:zlib';
+import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -18,14 +20,18 @@ import type { AppConfig } from './config';
 import { Db } from './db/database';
 import { migrate } from './db/migrations';
 import { createRepositories } from './db/repos';
+import { Calendar } from './domain/calendar';
 import { TokenVault } from './domain/crypto';
 import { AppError } from './errors';
 import { loggerOptions, stripQuery } from './logging';
-import { ConnectionAccess } from './modules/connections/access';
-import { ConnectionService } from './modules/connections/service';
+import { ConnectionAccess } from './modules/connection/access';
+import { ConnectionService } from './modules/connection/service';
+import { DiagnosticsService } from './modules/diagnostics/service';
 import { EventBus } from './modules/events/event-bus';
+import { HomeService } from './modules/home/service';
+import { InsightsService } from './modules/insights/service';
 import { InspectorStore } from './modules/inspector/inspector-store';
-import { PaymentService } from './modules/payments/service';
+import { RatesService } from './modules/rates/service';
 import { SessionService } from './modules/session/service';
 import { SyncService } from './modules/sync/service';
 import { registerErrorHandling } from './plugins/errors';
@@ -37,10 +43,12 @@ export interface BuildAppOptions {
   clock?: Clock;
   /** Tests pass their own (in-memory) database; the server lets the app open the configured file. */
   db?: Db;
-  /** Tests script the provider's HTTP instead of reaching the network. */
+  /** Tests script the bank's HTTP instead of reaching the network. */
   transports?: ProviderTransports;
   /** Tests capture what the server logs, to check that nothing sensitive is ever written there. */
   logStream?: { write(line: string): void };
+  /** How long the demo bank pretends the network takes; the server uses a little so loading states are real. */
+  demoLatencyMs?: number;
 }
 
 export interface BuiltApp {
@@ -66,7 +74,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     trustProxy: config.trustProxy,
     requestIdHeader: 'x-request-id',
     genReqId: () => randomUUID(),
-    bodyLimit: 256 * 1024,
+    bodyLimit: 64 * 1024,
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);
@@ -83,10 +91,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     done(null, payload);
   });
 
+  const calendar = new Calendar(config.timeZone);
   const events = new EventBus();
   const core: CoreContext = {
     config,
     clock,
+    calendar,
     db,
     log: app.log,
     vault: new TokenVault({ id: config.tokenKeyId, key: config.tokenEncryptionKey }),
@@ -95,16 +105,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     repos: createRepositories(db),
   };
 
-  // The SPA, the mock bank's own pages and the provider redirects are all served from this origin,
-  // so the policy can stay strict: no inline scripts, no third-party origins.
+  // The SPA and the API share one origin, so the policy can stay strict: no inline scripts, no third-party origins.
   await app.register(fastifyHelmet, {
     contentSecurityPolicy: {
       useDefaults: false,
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        // Angular and Material inject component styles at runtime; scripts stay locked down.
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'"],
         imgSrc: ["'self'", 'data:'],
         fontSrc: ["'self'"],
         connectSrc: ["'self'"],
@@ -120,6 +128,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     hsts: config.secureCookies ? { maxAge: 15_552_000, includeSubDomains: false } : false,
   });
   await app.register(fastifyCookie);
+  // JSON answers are compressed on the fly (brotli at a speed-friendly quality); built assets ship pre-compressed.
+  await app.register(fastifyCompress, {
+    global: true,
+    threshold: 1024,
+    encodings: ['br', 'gzip'],
+    brotliOptions: { params: { [zlib.BROTLI_PARAM_QUALITY]: 4 } },
+    zlibOptions: { level: 6 },
+  });
   await app.register(fastifyRateLimit, {
     global: true,
     max: config.rateLimitPerMinute,
@@ -136,62 +152,57 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     return reply.code(503).send({ status: 'unavailable' });
   });
 
-  const providers = await buildRegistry({
-    app,
-    ctx: core,
+  const providers = buildRegistry({
+    config,
+    clock,
+    inspector: core.inspector,
+    calendar,
     ...(options.transports ? { transports: options.transports } : {}),
+    demoLatencyMs: options.demoLatencyMs ?? (config.env === 'test' ? 0 : 120),
   });
   const access = new ConnectionAccess(core, providers);
-  const sync = new SyncService(core, access);
-  const connections = new ConnectionService(core, providers, access, sync);
-  const sessions = new SessionService(core, providers, connections);
-  const payments = new PaymentService(core, providers);
-  const ctx: AppContext = { ...core, providers, access, sync, connections, sessions, payments };
+  const sync = new SyncService(core, access, calendar);
+  const rates = new RatesService(core, providers);
+  rates.onUpdate = (sessionId) => sync.touch(sessionId);
+  const connections = new ConnectionService(core, providers, access, sync, rates);
+  const sessions = new SessionService(core, connections);
+  const home = new HomeService(core, sync, rates, calendar);
+  const insights = new InsightsService(core, rates, calendar);
+  const diagnostics = new DiagnosticsService(core, providers, sync, rates);
+  const ctx: AppContext = {
+    ...core,
+    providers,
+    access,
+    sync,
+    connections,
+    sessions,
+    rates,
+    home,
+    insights,
+    diagnostics,
+  };
 
   await registerApi(app, ctx);
 
   if (config.env !== 'test') {
-    // Keep a public demo tidy: forget sessions nobody has touched for the configured TTL.
+    // Forget sessions nobody has touched for the configured TTL.
     const purge = (): void => {
       const removed = sessions.purgeIdle();
       if (removed > 0) app.log.info({ removed }, 'purged idle sessions');
     };
     purge();
-    const timer = setInterval(purge, 6 * 60 * 60_000);
-    timer.unref();
-    // Paced history loading (monobank): one step per open rate gate, checked every few seconds.
-    const gaps = providers.all().flatMap((p) => (p.limits ? [p.limits.minIntervalMs] : []));
-    const syncTimer = setInterval(
-      () => {
-        sync.runDue().catch((error: unknown) => {
-          app.log.error({ err: error }, 'background sync failed');
-        });
-      },
-      Math.max(1_000, Math.min(5_000, ...gaps)),
-    );
-    syncTimer.unref();
-    // Payments: look at the ones nobody has heard about (the fallback for webhooks that never arrive), and give the fake
-    // bank its clock so authorised payments execute and settle and its webhooks go out.
-    const paymentTimer = setInterval(() => {
-      payments.pollDue().catch((error: unknown) => {
-        app.log.error({ err: error }, 'polling payments failed');
+    const purgeTimer = setInterval(purge, 6 * 60 * 60_000);
+    purgeTimer.unref();
+    // Paced loading: one step whenever the bank's limit allows, checked every second.
+    const syncTimer = setInterval(() => {
+      sync.tick().catch((error: unknown) => {
+        app.log.error({ err: error }, 'background sync failed');
       });
-    }, 5_000);
-    paymentTimer.unref();
-    const bank = providers.mock();
-    const bankTimer = bank
-      ? setInterval(() => {
-          bank.tick().catch((error: unknown) => {
-            app.log.error({ err: error }, 'the mock bank tick failed');
-          });
-        }, 1_000)
-      : null;
-    bankTimer?.unref();
+    }, 1_000);
+    syncTimer.unref();
     app.addHook('onClose', () => {
-      clearInterval(timer);
+      clearInterval(purgeTimer);
       clearInterval(syncTimer);
-      clearInterval(paymentTimer);
-      if (bankTimer) clearInterval(bankTimer);
     });
   }
 
@@ -201,6 +212,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     await app.register(fastifyStatic, {
       root: config.webDistDir,
       index: ['index.html'],
+      preCompressed: true,
       setHeaders: (reply, path) => {
         const immutable = HASHED_ASSET.test(path) || path.includes('/media/');
         reply.header(
@@ -213,9 +225,16 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
 
   app.setNotFoundHandler(async (request, reply) => {
     const path = stripQuery(request.url);
-    const isBackendPath = path.startsWith('/api') || path.startsWith('/mock-bank');
-    if (spaEnabled && request.method === 'GET' && !isBackendPath && extname(path) === '') {
-      return reply.type('text/html; charset=utf-8').sendFile('index.html');
+    if (
+      spaEnabled &&
+      request.method === 'GET' &&
+      !path.startsWith('/api') &&
+      extname(path) === ''
+    ) {
+      return reply
+        .type('text/html; charset=utf-8')
+        .header('cache-control', 'no-cache')
+        .sendFile('index.html');
     }
     return reply
       .code(404)

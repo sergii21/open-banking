@@ -1,7 +1,0 @@
-{
-  "type": "https://docs.truelayer.com/docs/error-types#idempotency_key_reuse",
-  "title": "Idempotency Key Reuse",
-  "status": 422,
-  "trace_id": "00000000000000000000000000000002",
-  "detail": "The Idempotency-Key was used with a different request body."
-}
