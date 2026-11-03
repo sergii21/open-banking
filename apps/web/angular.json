@@ -9,11 +9,6 @@
   "projects": {
     "web": {
       "projectType": "application",
-      "schematics": {
-        "@schematics/angular:component": {
-          "style": "scss"
-        }
-      },
       "root": "",
       "sourceRoot": "src",
       "prefix": "ll",
@@ -23,7 +18,7 @@
           "options": {
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
-            "inlineStyleLanguage": "scss",
+            "inlineStyleLanguage": "css",
             "assets": [
               {
                 "glob": "**/*",
@@ -31,10 +26,7 @@
               }
             ],
             "styles": [
-              "@fontsource-variable/inter/wght.css",
-              "material-icons/iconfont/outlined.css",
-              "src/tailwind.css",
-              "src/styles.scss"
+              "src/styles/main.css"
             ]
           },
           "configurations": {
@@ -42,13 +34,13 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "900kB",
-                  "maximumError": "1.2MB"
+                  "maximumWarning": "215kB",
+                  "maximumError": "250kB"
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "2kB",
+                  "maximumError": "4kB"
                 }
               ],
               "outputHashing": "all",

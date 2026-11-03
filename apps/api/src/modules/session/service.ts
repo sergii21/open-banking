@@ -97,6 +97,7 @@ export class SessionService {
       createdAt: record.createdAt,
       version: APP_VERSION,
       live: this.core.config.live,
+      timeZone: this.core.config.timeZone,
       connection: this.connections.info(record.id),
     };
   }

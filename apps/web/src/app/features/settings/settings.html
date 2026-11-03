@@ -1,0 +1,86 @@
+<ll-sheet [(open)]="ui.settings" title="Settings">
+  @if (session.connection(); as connection) {
+    <section class="settings-group" aria-label="Connection">
+      <h3>Connection</h3>
+      <div class="setting">
+        <span>
+          <b>{{ connection.label }}</b>
+          <small>
+            @if (connection.status === 'active') { Connected } @else { Needs a new token }
+            · last update {{ lastSync() }} · {{ connection.historyMonths }} months of history
+          </small>
+        </span>
+        <span class="pill" [class.pill-good]="connection.status === 'active'" [class.pill-warn]="connection.status !== 'active'">
+          {{ connection.status === 'active' ? 'OK' : 'Action needed' }}
+        </span>
+      </div>
+      @if (!connection.demo) {
+        @if (replacing()) {
+          <form class="setting" style="display: grid; gap: 8px" (submit)="$event.preventDefault(); replace()">
+            <label class="label" for="new-token">New monobank token</label>
+            <input id="new-token" class="input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste it here" [value]="newToken()" [attr.aria-invalid]="error() ? 'true' : null" (input)="newToken.set($any($event.target).value); error.set(null)" />
+            @if (error()) { <p class="error-text" role="alert">{{ error() }}</p> }
+            <div style="display: flex; gap: 8px; justify-content: flex-end">
+              <button type="button" class="btn btn-sm btn-quiet" (click)="replacing.set(false)">Cancel</button>
+              <button type="submit" class="btn btn-sm btn-primary" [disabled]="!newToken().trim() || busy()">{{ busy() ? 'Checking…' : 'Use this token' }}</button>
+            </div>
+          </form>
+        } @else {
+          <button type="button" class="setting" (click)="replacing.set(true)">
+            <span><b>Replace token</b><small>Issue a new one at api.monobank.ua and paste it here</small></span>
+            <ll-icon name="chevron-right" />
+          </button>
+        }
+      }
+      <button type="button" class="setting" (click)="actions.loadEarlier()" [disabled]="connection.historyMonths >= 13">
+        <span><b>Load an earlier month</b><small>monobank allows one read a minute, so each month takes a few minutes</small></span>
+        <ll-icon name="chevron-right" />
+      </button>
+    </section>
+  }
+
+  <section class="settings-group" aria-label="Appearance">
+    <h3>Appearance</h3>
+    <div class="setting">
+      <span><b>Theme</b></span>
+      <div class="seg" role="radiogroup" aria-label="Theme">
+        @for (t of themes; track t.id) {
+          <button type="button" role="radio" [attr.aria-checked]="prefs.theme() === t.id" (click)="prefs.setTheme(t.id)">{{ t.label }}</button>
+        }
+      </div>
+    </div>
+    <button type="button" class="setting" role="switch" [attr.aria-checked]="prefs.hidden()" (click)="prefs.setHidden(!prefs.hidden())">
+      <span><b>Blur amounts</b><small>For when someone is looking over your shoulder</small></span>
+      <span class="switch" [attr.aria-checked]="prefs.hidden()" aria-hidden="true"></span>
+    </button>
+  </section>
+
+  <section class="settings-group" aria-label="Trust">
+    <h3>See for yourself</h3>
+    <button type="button" class="setting" (click)="openLiveApi()">
+      <span><b>Live API</b><small>The real calls this app makes to the bank, with the token hidden</small></span>
+      <ll-icon name="plug" />
+    </button>
+    <button type="button" class="setting" (click)="copyDiagnostics()">
+      <span><b>Copy diagnostics</b><small>If something looks wrong: no token, names, merchants or amounts inside</small></span>
+      <ll-icon name="copy" />
+    </button>
+  </section>
+
+  @if (session.connection()) {
+    <section class="settings-group" aria-label="Disconnect">
+      <h3>Leave</h3>
+      <button type="button" class="setting" [class.danger]="confirming()" (click)="disconnect()">
+        <span>
+          <b>{{ confirming() ? 'Press again to delete everything' : 'Disconnect and delete my data' }}</b>
+          <small>Deletes the token and everything read from the bank from this computer. The token itself stays valid at monobank until you issue a new one at api.monobank.ua.</small>
+        </span>
+        <ll-icon name="trash" />
+      </button>
+    </section>
+  }
+
+  <p class="hint" style="margin-top: 18px">
+    Shortcuts: <span class="kbd">/</span> search · <span class="kbd">g</span> then <span class="kbd">h</span> <span class="kbd">a</span> <span class="kbd">i</span> switch tabs · version {{ session.info()?.version }}
+  </p>
+</ll-sheet>

@@ -8,8 +8,7 @@
     "target": "ES2022",
     "module": "preserve",
     "paths": {
-      "@ledger-lens/contracts": ["../../packages/contracts/src/index.ts"],
-      "zod": ["./src/zod-jitless.ts"]
+      "@ledger-lens/contracts": ["../../packages/contracts/src/index.ts"]
     }
   },
   "angularCompilerOptions": {

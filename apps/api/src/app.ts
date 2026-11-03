@@ -112,7 +112,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
+        // No <style> elements from anywhere but this origin; style attributes (Angular sets a few) are allowed.
         styleSrc: ["'self'"],
+        styleSrcAttr: ["'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
         fontSrc: ["'self'"],
         connectSrc: ["'self'"],

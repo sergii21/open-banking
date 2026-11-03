@@ -1,0 +1,227 @@
+<h1 class="page-title">Activity</h1>
+
+<div class="toolbar">
+  <div class="search-box">
+    <ll-icon name="search" />
+    <input
+      #search
+      type="search"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="Search merchants, comments, amounts"
+      aria-label="Search transactions"
+      [value]="q()"
+      (input)="q.set($any($event.target).value)"
+    />
+    @if (q()) {
+      <button type="button" class="icon-btn" aria-label="Clear search" (click)="q.set(''); search.focus()">
+        <ll-icon name="x" [size]="18" />
+      </button>
+    } @else {
+      <span class="kbd" aria-hidden="true">/</span>
+    }
+  </div>
+  <div class="chips" role="group" aria-label="Filters">
+    <button type="button" class="chip" [attr.aria-pressed]="scope() === 'all' && !account()" (click)="scope.set('all'); account.set(null)">All</button>
+    <button type="button" class="chip" [attr.aria-pressed]="scope() === 'spending'" (click)="setScope('spending')">Spending</button>
+    <button type="button" class="chip" [attr.aria-pressed]="scope() === 'income'" (click)="setScope('income')">Income</button>
+    <button type="button" class="chip" [attr.aria-pressed]="scope() === 'month'" (click)="setScope('month')">This month</button>
+    @for (a of accounts(); track a.id) {
+      <button type="button" class="chip" [attr.aria-pressed]="account() === a.id" (click)="setAccount(a.id)">
+        <ll-icon [name]="a.kind === 'jar' ? 'jar' : 'card'" [size]="16" />
+        {{ a.kind === 'jar' ? a.name : a.name + (a.last4 ? ' ••' + a.last4 : '') }}
+      </button>
+    }
+    <button type="button" class="chip more-btn" [attr.aria-pressed]="activeFilters() > 0 || moreOpen()" [attr.aria-expanded]="moreOpen()" (click)="moreOpen.set(!moreOpen())">
+      <ll-icon name="filter" [size]="16" /> More@if (activeFilters() > 0) { · {{ activeFilters() }} }
+    </button>
+  </div>
+
+  @if (moreOpen()) {
+    <div class="popover" role="dialog" aria-label="More filters" (keydown.escape)="moreOpen.set(false)">
+      <div class="field">
+        <label for="f-cat">Category</label>
+        <select id="f-cat" class="input" [value]="category()" (change)="category.set($any($event.target).value)">
+          <option value="">Any category</option>
+          @for (c of categories; track c) {
+            <option [value]="c">{{ labelOf[c] }}</option>
+          }
+        </select>
+      </div>
+      <div class="grid-2" style="margin-top: 12px">
+        <div class="field">
+          <label for="f-min">Amount from</label>
+          <input id="f-min" class="input" inputmode="decimal" placeholder="0" [value]="min()" (input)="min.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label for="f-max">Amount up to</label>
+          <input id="f-max" class="input" inputmode="decimal" placeholder="any" [value]="max()" (input)="max.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label for="f-from">From date</label>
+          <input id="f-from" class="input" type="date" [value]="from()" (input)="from.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label for="f-to">To date</label>
+          <input id="f-to" class="input" type="date" [value]="to()" (input)="to.set($any($event.target).value)" />
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end">
+        <button type="button" class="btn btn-sm btn-quiet" (click)="clearMore()">Reset</button>
+        <button type="button" class="btn btn-sm btn-primary" (click)="moreOpen.set(false)">Done</button>
+      </div>
+    </div>
+  }
+</div>
+
+@if (data(); as activity) {
+  @if (live.sync(); as sync) {
+    @if (sync.total > 0 && sync.phase !== 'idle' && sync.phase !== 'attention') {
+      <p class="results-note" role="status">
+        Loading older history: {{ sync.done }} of {{ sync.total }} steps. New transactions appear as they arrive.
+      </p>
+    }
+  }
+  @if (selectedAccount(); as chosen) {
+    @if (chosen.history.state !== 'done') {
+      <p class="banner" style="margin-top: 8px">
+        <ll-icon name="clock" [size]="18" />
+        <span>{{ chosen.name }} is still loading its history.</span>
+        <button type="button" class="btn btn-sm btn-quiet" (click)="actions.prioritise(chosen.id)">Load it first</button>
+      </p>
+    }
+  }
+
+  <div class="results-note" style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+    <span aria-live="polite">{{ summary() }}</span>
+    <button type="button" class="link-btn" (click)="exportCsv()" [disabled]="filtered().length === 0">
+      <ll-icon name="download" [size]="14" /> Export CSV
+    </button>
+  </div>
+
+  @for (group of groups(); track group.key) {
+    <section class="day" [attr.aria-label]="group.label">
+      <div class="day-head">
+        <h2 style="font-size: inherit; font-weight: inherit; letter-spacing: 0">{{ group.label }}</h2>
+        @if (group.net; as net) {
+          <span><ll-amount [minor]="net.minor" [currency]="net.currency" [plus]="true" [fraction]="false" /></span>
+        }
+      </div>
+      <ul class="rows">
+        @for (view of group.rows; track view.row.id) {
+          <li>
+            <button type="button" class="row" (click)="open(view)">
+              <span class="badge" [attr.data-cat]="view.row.category"><ll-icon [name]="categoryIcon(view.row.category)" [size]="20" /></span>
+              <span style="min-width: 0">
+                <span class="row-title" style="display: block">{{ title(view) }}</span>
+                <span class="row-sub" style="display: block">{{ subtitle(view) }}</span>
+              </span>
+              <span class="row-end">
+                <ll-amount [minor]="view.row.amountMinor" [currency]="view.row.currency" [tone]="true" />
+                @if (view.row.status === 'pending') {
+                  <span class="pill pill-warn">Pending</span>
+                }
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+  } @empty {
+    <div class="empty card" style="margin-top: 14px">
+      @if (filtering()) {
+        <ll-icon name="search" [size]="28" />
+        <h3>Nothing matches</h3>
+        <p>Try fewer words, or clear the filters.</p>
+        <button type="button" class="btn btn-quiet" (click)="clearAll()">Clear filters</button>
+      } @else {
+        <ll-icon name="clock" [size]="28" />
+        <h3>No transactions yet</h3>
+        <p>They arrive a step at a time. This page fills in as monobank answers.</p>
+      }
+    </div>
+  }
+
+  @if (hasMore()) {
+    <div #sentinel class="more-sentinel"></div>
+  } @else if (!filtering() && filtered().length > 0 && (live.sync()?.phase ?? 'idle') === 'idle' && (session.connection()?.historyMonths ?? 13) < 13) {
+    <div style="display: grid; place-items: center; padding: 24px 0 8px">
+      <button type="button" class="btn btn-quiet" (click)="actions.loadEarlier()">Load an earlier month</button>
+    </div>
+  }
+} @else if (stores.activity.error(); as error) {
+  <div class="card offline enter">
+    <div class="empty">
+      <ll-icon name="alert" [size]="28" />
+      <h3>{{ error.offline ? 'Ledger Lens is not reachable' : 'Could not load Activity' }}</h3>
+      <p>{{ error.offline ? 'Is ./start.sh still running? Start it again, then try again.' : error.message }}</p>
+      <button class="btn btn-primary" type="button" (click)="stores.activity.reload()">Try again</button>
+    </div>
+  </div>
+} @else {
+  <div class="rows" aria-busy="true" aria-label="Loading transactions" style="margin-top: 14px">
+    @for (i of skeletonRows; track i) {
+      <div class="row" style="border-top: 1px solid var(--line)">
+        <span class="badge skel"></span>
+        <span style="display: grid; gap: 6px"><span class="skel" style="height: 14px; width: 55%"></span><span class="skel" style="height: 11px; width: 35%"></span></span>
+        <span class="skel" style="height: 14px; width: 64px"></span>
+      </div>
+    }
+  </div>
+}
+
+<ll-sheet [(open)]="detailOpen" title="Transaction">
+  @if (detail(); as v) {
+    <div class="detail-amount">
+      <span class="badge" [attr.data-cat]="v.row.category"><ll-icon [name]="categoryIcon(v.row.category)" [size]="22" /></span>
+      <ll-amount [minor]="v.row.amountMinor" [currency]="v.row.currency" size="xl" [tone]="true" />
+      <h3>{{ title(v) }}</h3>
+      @if (v.row.status === 'pending') {
+        <span class="pill pill-warn">Pending: the bank has not booked it yet</span>
+      }
+    </div>
+    <dl class="kv">
+      <div><dt>When</dt><dd>{{ longDate(v.row.ts) }}, {{ time(v.row.ts) }}</dd></div>
+      <div><dt>Card</dt><dd>{{ cardLabel(v) }}</dd></div>
+      <div>
+        <dt><label for="d-cat">Category</label></dt>
+        <dd>
+          <select id="d-cat" class="input" style="min-height: 38px; width: auto" [value]="v.row.category" (change)="changeCategory(v, $any($event.target).value)">
+            @for (c of categories; track c) {
+              <option [value]="c" [selected]="c === v.row.category">{{ labelOf[c] }}</option>
+            }
+          </select>
+          @if (v.row.chosen) { <div class="hint">Chosen by you</div> }
+        </dd>
+      </div>
+      @if (v.row.counterparty) {
+        <div><dt>From or to</dt><dd>{{ v.row.counterparty }}</dd></div>
+      }
+      <div>
+        <dt>Description</dt>
+        <dd><button type="button" class="copy" (click)="clipboard.copy(v.row.description, 'Description')">{{ v.row.description }} <ll-icon name="copy" [size]="14" /></button></dd>
+      </div>
+      @if (v.row.comment) {
+        <div><dt>Comment</dt><dd>{{ v.row.comment }}</dd></div>
+      }
+      @if (v.row.mcc) {
+        <div><dt>Merchant code (MCC)</dt><dd class="num">{{ v.row.mcc }}</dd></div>
+      }
+      @if (v.row.cashbackMinor) {
+        <div><dt>Cashback</dt><dd><ll-amount [minor]="v.row.cashbackMinor" [currency]="v.row.currency" [tone]="true" [plus]="true" /></dd></div>
+      }
+      @if (v.row.commissionMinor) {
+        <div><dt>Commission</dt><dd><ll-amount [minor]="v.row.commissionMinor" [currency]="v.row.currency" /></dd></div>
+      }
+      @if (v.row.balanceAfterMinor !== undefined) {
+        <div><dt>Balance after</dt><dd><ll-amount [minor]="v.row.balanceAfterMinor" [currency]="v.row.currency" /></dd></div>
+      }
+      @if (v.row.receiptId) {
+        <div>
+          <dt>Receipt</dt>
+          <dd><button type="button" class="copy num" (click)="clipboard.copy(v.row.receiptId, 'Receipt number')">{{ v.row.receiptId }} <ll-icon name="copy" [size]="14" /></button></dd>
+        </div>
+      }
+    </dl>
+  }
+</ll-sheet>

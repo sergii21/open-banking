@@ -1,0 +1,72 @@
+<div class="app">
+  <a class="sr-only" href="#main">Skip to content</a>
+  <header class="topbar" [class.scrolled]="scrolled()">
+    <a class="brand" href="/" (click)="nav.link($event)" aria-label="Ledger Lens, home">
+      <span class="brand-mark"><ll-icon name="lens" [size]="18" /></span>
+      <span class="brand-name">Ledger Lens</span>
+    </a>
+    @if (session.connected()) {
+      @if (session.demo()) {
+        <span class="demo-chip" title="This is made-up data from a built-in demo bank">Demo data</span>
+      }
+      <button
+        type="button"
+        class="sync-chip"
+        (click)="refresh()"
+        [attr.aria-label]="'Sync status: ' + chip().long + '. Press to refresh.'"
+      >
+        <span class="dot" [attr.data-state]="chip().state"></span>
+        <span class="long">{{ chip().long }}</span>
+        <span class="short">{{ chip().short }}</span>
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        role="switch"
+        [attr.aria-checked]="prefs.hidden()"
+        [attr.aria-label]="prefs.hidden() ? 'Show amounts' : 'Hide amounts'"
+        (click)="prefs.setHidden(!prefs.hidden())"
+      >
+        <ll-icon [name]="prefs.hidden() ? 'eye-off' : 'eye'" />
+      </button>
+      <button type="button" class="icon-btn" aria-label="Settings" (click)="ui.settings.set(true)">
+        <ll-icon name="sliders" />
+      </button>
+    }
+  </header>
+
+  <main class="main" id="main" tabindex="-1">
+    <div class="page">
+      @if (nav.component(); as page) {
+        <ng-container *ngComponentOutlet="page" />
+      }
+    </div>
+  </main>
+
+  @if (session.connected()) {
+    <nav class="tabs" aria-label="Main">
+      <a class="tab" href="/home" (click)="nav.link($event)" [attr.aria-current]="nav.page() === 'home' ? 'page' : null">
+        <ll-icon name="home" /> <span>Home</span>
+      </a>
+      <a class="tab" href="/activity" (click)="nav.link($event)" [attr.aria-current]="nav.page() === 'activity' ? 'page' : null">
+        <ll-icon name="list" /> <span>Activity</span>
+      </a>
+      <a class="tab" href="/insights" (click)="nav.link($event)" [attr.aria-current]="nav.page() === 'insights' ? 'page' : null">
+        <ll-icon name="chart" /> <span>Insights</span>
+      </a>
+    </nav>
+    @defer (on idle) {
+      <ll-settings />
+      <ll-live-api />
+    }
+  }
+
+  @if (pull() > 0) {
+    <div class="ptr" [style.--ptr]="pull() / 110" [style.--ptr-y]="pull() * 0.4" aria-hidden="true">
+      <ll-icon name="refresh" />
+    </div>
+  }
+  @if (toast.message(); as message) {
+    <div class="toast" role="status">{{ message }}</div>
+  }
+</div>

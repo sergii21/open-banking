@@ -38,6 +38,8 @@ export interface SessionInfo {
   version: string;
   /** Whether connecting a real monobank token is allowed here (it is only on this machine). */
   live: boolean;
+  /** The IANA zone days and months are cut in; screens group by day in the same zone. */
+  timeZone: string;
   connection: ConnectionInfo | null;
 }
 
@@ -181,6 +183,8 @@ export interface Insights {
   spentMinor: number;
   incomeMinor: number;
   previousSpentMinor: number | null;
+  /** The month is still running, so the earlier month is counted only for the same days. */
+  previousIsSameDays: boolean;
   categories: {
     category: Category;
     spentMinor: number;

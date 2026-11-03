@@ -1,0 +1,90 @@
+<div class="welcome">
+  <div class="welcome-hero enter">
+    <h1>Your monobank,<br />instantly.</h1>
+    <p>Real balances, spending and subscriptions in one calm place. Read-only, on this computer.</p>
+  </div>
+
+  @if (session.live()) {
+    <section class="card enter" style="--i: 1" aria-labelledby="connect-title">
+      <h2 class="card-title" id="connect-title" style="margin-bottom: 14px">Connect monobank</h2>
+      <ol class="steps">
+        <li>
+          <span>
+            <strong>Open
+              <a href="https://api.monobank.ua/" target="_blank" rel="noopener noreferrer">api.monobank.ua</a></strong>
+            in a new tab.
+          </span>
+        </li>
+        <li><span><strong>Scan the QR code</strong> with the monobank app on your phone and confirm.</span></li>
+        <li><span><strong>Copy the token</strong> the page shows and paste it here.</span></li>
+      </ol>
+
+      <form class="field" style="margin-top: 18px" (submit)="$event.preventDefault(); connect()">
+        <label for="token">Your monobank token</label>
+        <div class="token-wrap" [attr.data-shown]="shown() ? '' : null">
+          <input
+            id="token"
+            class="input"
+            name="monobank-token"
+            type="text"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            inputmode="text"
+            placeholder="Paste it here"
+            [value]="token()"
+            [attr.aria-invalid]="error() ? 'true' : null"
+            [attr.aria-describedby]="error() ? 'token-error' : 'token-hint'"
+            (input)="token.set($any($event.target).value); error.set(null)"
+          />
+          <button type="button" (click)="shown.set(!shown())" [attr.aria-pressed]="shown()">
+            {{ shown() ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+        @if (error(); as message) {
+          <p class="error-text" id="token-error" role="alert">
+            {{ message }}
+            @if (wait() > 0) { Try again in {{ waitText() }}. }
+          </p>
+        } @else {
+          <p class="hint" id="token-hint">
+            Balances show up in a couple of seconds. History then loads one step a minute, because that is monobank's limit.
+          </p>
+        }
+        <button
+          class="btn btn-primary btn-block"
+          type="submit"
+          style="margin-top: 6px"
+          [disabled]="!token().trim() || busy() !== null || wait() > 0"
+        >
+          @if (busy() === 'token') { Checking with monobank… } @else if (wait() > 0) { Wait {{ waitText() }} } @else { Connect monobank }
+        </button>
+      </form>
+      <p class="privacy" style="margin-top: 14px">
+        <ll-icon name="lock" [size]="16" />
+        <span>Read-only: the token can see balances and transactions, never move money. It stays on this computer, encrypted.</span>
+      </p>
+    </section>
+
+    <div class="divider enter" style="--i: 2">or</div>
+  } @else {
+    <p class="banner enter" style="--i: 1">
+      <ll-icon name="info" [size]="18" />
+      <span>This is a public demo, so real accounts cannot be connected here. Run Ledger Lens on your own computer for that.</span>
+    </p>
+  }
+
+  <button
+    class="btn btn-quiet btn-block enter"
+    style="--i: 3"
+    type="button"
+    (click)="demo()"
+    [disabled]="busy() !== null"
+  >
+    @if (busy() === 'demo') { Opening the demo… } @else { Try with demo data }
+  </button>
+  @if (!session.live() && error()) {
+    <p class="error-text" role="alert">{{ error() }}</p>
+  }
+</div>

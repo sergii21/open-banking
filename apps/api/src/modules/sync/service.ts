@@ -44,6 +44,8 @@ interface Problem {
 export class SyncService {
   private readonly gates = new Map<string, Gate>();
   private readonly running = new Set<string>();
+  /** A statement read is on the wire right now (the sync chip says "loading" only then). */
+  private readonly inflight = new Set<string>();
   private readonly problems = new Map<string, Problem>();
   private version = Math.floor(Date.now() / 1000);
 
@@ -375,9 +377,11 @@ export class SyncService {
     }
     const gate = this.gate(connection.id);
     const startedAt = this.nowMs();
+    this.inflight.add(connection.id);
     this.publish(connection);
+    let rows: ProviderTransaction[];
     try {
-      const rows = await this.access.withTokens(connection, (tokens, provider, call) =>
+      rows = await this.access.withTokens(connection, (tokens, provider, call) =>
         provider.fetchTransactions(
           tokens,
           { providerAccountId: account.providerAccountId, currency: account.currency },
@@ -385,20 +389,21 @@ export class SyncService {
           call,
         ),
       );
-      const limits = this.limitsOf(connection);
-      gate.lastStatementAt = startedAt;
-      gate.nextStatementAt = startedAt + limits.statementIntervalMs;
-      this.store(connection, account, job, rows, limits);
-      this.problems.delete(connection.id);
-      this.bump(connection);
-      if (!repos.syncJobs.next(connection.id)) repos.syncJobs.purgeFinished(connection.id);
-      this.publish(connection);
-      return true;
     } catch (error) {
+      this.inflight.delete(connection.id);
       this.failed(connection, job, error, startedAt);
       this.publish(connection);
       return false;
     }
+    this.inflight.delete(connection.id);
+    const limits = this.limitsOf(connection);
+    gate.lastStatementAt = startedAt;
+    gate.nextStatementAt = startedAt + limits.statementIntervalMs;
+    this.store(connection, account, job, rows, limits);
+    this.problems.delete(connection.id);
+    if (!repos.syncJobs.next(connection.id)) repos.syncJobs.purgeFinished(connection.id);
+    this.bump(connection);
+    return true;
   }
 
   private store(
@@ -655,7 +660,7 @@ export class SyncService {
 
     let phase: SyncState['phase'] = 'idle';
     if (needsToken || problem) phase = 'attention';
-    else if (this.running.has(connection.id)) phase = 'loading';
+    else if (this.inflight.has(connection.id)) phase = 'loading';
     else if (progress.pending > 0) phase = now >= opensAt ? 'loading' : 'waiting';
 
     return {

@@ -39,9 +39,15 @@ export class InsightsService {
         : currentMonth;
     const previousMonth = addMonths(month, -1);
 
-    const window = (m: string) => ({ from: `${m}-01`, to: `${m}-31` });
-    const forMonth = summarise(items, window(month))[0];
-    const forPrevious = summarise(items, window(previousMonth))[0];
+    // A month still running is compared with the same days of the one before it, never with all of it.
+    const isCurrent = month === currentMonth;
+    const dom = Number(today.slice(8, 10));
+    const previousLastDay = isCurrent ? Math.min(dom, daysInMonth(previousMonth)) : 31;
+    const forMonth = summarise(items, { from: `${month}-01`, to: `${month}-31` })[0];
+    const forPrevious = summarise(items, {
+      from: `${previousMonth}-01`,
+      to: `${previousMonth}-${String(previousLastDay).padStart(2, '0')}`,
+    })[0];
 
     const cards = accounts.filter((a) => a.kind === 'card');
     const covers = (m: string): boolean =>
@@ -96,6 +102,7 @@ export class InsightsService {
       spentMinor: forMonth?.totalOutMinor ?? 0,
       incomeMinor: forMonth?.totalInMinor ?? 0,
       previousSpentMinor: previousKnown ? (forPrevious?.totalOutMinor ?? 0) : null,
+      previousIsSameDays: isCurrent,
       categories: (forMonth?.categories ?? []).map((c) => ({
         category: c.category,
         spentMinor: c.spentMinor,

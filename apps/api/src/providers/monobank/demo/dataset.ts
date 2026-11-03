@@ -83,7 +83,7 @@ const weighted = <T extends { w: number }>(rng: Rng, list: readonly T[]): T => {
 };
 /** An amount between two bounds, skewed towards the small end like real purchases. */
 const amountBetween = (rng: Rng, min: number, max: number): number => {
-  const raw = min + rng() ** 1.7 * (max - min);
+  const raw = min + rng() ** 2.1 * (max - min);
   const style = rng();
   const rounded = style < 0.25 ? Math.round(raw / 10) * 10 : style < 0.4 ? Math.round(raw) : raw;
   return Math.max(100, Math.round(rounded * 100));
@@ -116,53 +116,53 @@ const m = (name: string, mcc: number, min: number, max: number, w = 1): Merchant
 });
 
 const GROCERIES: Merchant[] = [
-  m('Сільпо', 5411, 80, 950, 5),
-  m('АТБ-маркет', 5411, 60, 640, 6),
-  m('Фора', 5411, 50, 520, 4),
-  m('Novus', 5411, 150, 1500, 3),
-  m('Ашан', 5411, 400, 3100, 1),
-  m('Рукавичка', 5411, 40, 380, 2),
-  m('Продукти', 5499, 30, 260, 2),
+  m('Сільпо', 5411, 40, 520, 5),
+  m('АТБ-маркет', 5411, 30, 420, 6),
+  m('Фора', 5411, 30, 380, 4),
+  m('Novus', 5411, 90, 900, 2),
+  m('Ашан', 5411, 300, 2000, 0.25),
+  m('Рукавичка', 5411, 25, 260, 2),
+  m('Продукти', 5499, 20, 180, 3),
 ];
 const DINING: Merchant[] = [
-  m('Aroma Kava', 5814, 60, 230, 5),
-  m('Starbucks', 5814, 120, 360, 3),
-  m("McDonald's", 5814, 90, 480, 3),
-  m('Львівська майстерня шоколаду', 5441, 90, 420, 2),
-  m('Mafia', 5812, 450, 1700, 1),
-  m('Пузата Хата', 5812, 280, 900, 1),
-  m('Glovo', 5814, 250, 950, 3),
-  m('Bolt Food', 5814, 220, 820, 2),
-  m('KFC', 5814, 140, 560, 2),
+  m('Aroma Kava', 5814, 55, 190, 6),
+  m('Starbucks', 5814, 110, 300, 3),
+  m("McDonald's", 5814, 80, 380, 3),
+  m('Львівська майстерня шоколаду', 5441, 70, 320, 2),
+  m('Mafia', 5812, 380, 1200, 0.4),
+  m('Пузата Хата', 5812, 220, 700, 0.6),
+  m('Glovo', 5814, 220, 750, 2),
+  m('Bolt Food', 5814, 190, 650, 1.5),
+  m('KFC', 5814, 120, 420, 2),
 ];
 const TRANSPORT: Merchant[] = [
-  m('Uklon', 4121, 70, 340, 6),
-  m('Bolt', 4121, 60, 300, 4),
-  m('Київ Цифровий', 4111, 8, 20, 3),
-  m('WOG', 5541, 900, 2600, 1),
-  m('ОККО', 5541, 800, 2400, 1),
-  m('Укрзалізниця', 4112, 350, 1400, 0.4),
+  m('Uklon', 4121, 65, 260, 7),
+  m('Bolt', 4121, 55, 230, 5),
+  m('Київ Цифровий', 4111, 8, 20, 4),
+  m('WOG', 5541, 700, 2000, 0.5),
+  m('ОККО', 5541, 650, 1900, 0.5),
+  m('Укрзалізниця', 4112, 300, 1100, 0.2),
 ];
 const SHOPPING: Merchant[] = [
-  m('Rozetka', 5311, 300, 7200, 2),
-  m('Нова пошта', 4215, 60, 420, 4),
-  m('Епіцентр', 5200, 150, 3600, 1.5),
-  m('Zara', 5651, 800, 3400, 1),
-  m('Sinsay', 5651, 200, 1300, 1.5),
-  m('Comfy', 5732, 600, 9500, 0.6),
+  m('Rozetka', 5311, 300, 4000, 1),
+  m('Нова пошта', 4215, 60, 420, 3),
+  m('Епіцентр', 5200, 150, 2600, 0.5),
+  m('Zara', 5651, 800, 3400, 0.3),
+  m('Sinsay', 5651, 200, 1300, 1),
+  m('Comfy', 5732, 1000, 12000, 0.15),
   m('Eva', 5912, 120, 900, 2),
-  m('Allo', 5732, 500, 6800, 0.6),
-  m('IKEA', 5712, 250, 6400, 0.4),
+  m('Allo', 5732, 500, 6800, 0.15),
+  m('IKEA', 5712, 250, 6400, 0.1),
 ];
 const HEALTH: Merchant[] = [
-  m('Аптека Подорожник', 5912, 100, 950, 3),
-  m('Аптека Доброго Дня', 5912, 90, 720, 3),
-  m('Добробут', 8011, 600, 2800, 0.5),
+  m('Аптека Подорожник', 5912, 80, 600, 3),
+  m('Аптека Доброго Дня', 5912, 70, 500, 3),
+  m('Добробут', 8011, 500, 2200, 0.3),
 ];
 const FUN: Merchant[] = [
-  m('Multiplex', 7832, 200, 720, 2),
-  m('Steam', 5816, 150, 1600, 1),
-  m('Планета Кіно', 7832, 180, 650, 1),
+  m('Multiplex', 7832, 180, 600, 2),
+  m('Steam', 5816, 120, 1100, 1),
+  m('Планета Кіно', 7832, 150, 520, 1),
 ];
 const FOREIGN: Merchant[] = [
   m('Amazon.com', 5942, 8, 85, 3),
@@ -220,13 +220,13 @@ function purchase(rng: Rng, merchant: Merchant, cashbackPercent: number, currenc
 function blackCardDay(rng: Rng, day: string, dom: number, weekday: number): Draft[] {
   const weekend = weekday === 0 || weekday === 6;
   const drafts: Draft[] = [];
-  const count = Math.round((weekend ? 17 : 14) + (rng() - 0.5) * 10);
+  const count = Math.round((weekend ? 12 : 9) + (rng() - 0.5) * 6);
   const mix: { w: number; list: Merchant[]; cashback: number }[] = [
-    { w: 30, list: GROCERIES, cashback: 1 },
-    { w: 20, list: DINING, cashback: 2 },
-    { w: 15, list: TRANSPORT, cashback: 1 },
-    { w: 11, list: SHOPPING, cashback: 1 },
-    { w: 4, list: HEALTH, cashback: 0 },
+    { w: 38, list: GROCERIES, cashback: 1 },
+    { w: 22, list: DINING, cashback: 2 },
+    { w: 22, list: TRANSPORT, cashback: 1 },
+    { w: 6, list: SHOPPING, cashback: 1 },
+    { w: 5, list: HEALTH, cashback: 0 },
     { w: 3, list: FUN, cashback: 1 },
   ];
   for (let i = 0; i < count; i += 1) {
@@ -316,9 +316,19 @@ function blackCardDay(rng: Rng, day: string, dom: number, weekday: number): Draf
       at: 11 * 3600 + 120,
       description: 'Зарахування заробітної плати',
       mcc: 4829,
-      amount: 3_950_000 + Math.round((rng() - 0.5) * 80_000),
+      amount: 5_400_000 + Math.round((rng() - 0.5) * 80_000),
       currencyCode: UAH,
       counterName: 'ТОВ «Софтсервіс Україна»',
+      receiptId: receipt(rng),
+    });
+  }
+  if (dom === 22) {
+    drafts.push({
+      at: 13 * 3600 + 200,
+      description: 'Від: ФОП Демо Д.',
+      mcc: 4829,
+      amount: 3_800_000,
+      currencyCode: UAH,
       receiptId: receipt(rng),
     });
   }
@@ -327,7 +337,7 @@ function blackCardDay(rng: Rng, day: string, dom: number, weekday: number): Draf
       at: 12 * 3600 + 300,
       description: 'Аванс',
       mcc: 4829,
-      amount: 3_650_000,
+      amount: 2_600_000,
       currencyCode: UAH,
       counterName: 'ТОВ «Софтсервіс Україна»',
       receiptId: receipt(rng),
@@ -371,7 +381,7 @@ function blackCardDay(rng: Rng, day: string, dom: number, weekday: number): Draf
       at: 16 * 3600,
       description: 'Переказ на кредитну картку',
       mcc: 4829,
-      amount: -500_000,
+      amount: -1_300_000,
       currencyCode: UAH,
     });
   }
@@ -381,7 +391,7 @@ function blackCardDay(rng: Rng, day: string, dom: number, weekday: number): Draf
 
 function creditCardDay(rng: Rng, dom: number, weekday: number): Draft[] {
   const weekend = weekday === 0 || weekday === 6;
-  const count = Math.round((weekend ? 9 : 6) + (rng() - 0.5) * 6);
+  const count = Math.round((weekend ? 4 : 3) + (rng() - 0.5) * 4);
   const mix = [
     { w: 22, list: GROCERIES, cashback: 0 },
     { w: 24, list: DINING, cashback: 0 },
@@ -400,7 +410,7 @@ function creditCardDay(rng: Rng, dom: number, weekday: number): Draft[] {
       at: 16 * 3600 + 60,
       description: 'Поповнення з картки',
       mcc: 4829,
-      amount: 500_000,
+      amount: 1_300_000,
       currencyCode: UAH,
     });
   }
@@ -426,7 +436,7 @@ function usdCardDay(rng: Rng, dom: number): Draft[] {
 
 function fopDay(rng: Rng, dom: number, index: number): Draft[] {
   const drafts: Draft[] = [];
-  if ([7, 16, 27].includes(dom)) {
+  if ([7, 27].includes(dom)) {
     const client = pick(rng, [
       'ТОВ «Нова Лінія»',
       'ТОВ «Технологічні рішення»',
@@ -436,7 +446,7 @@ function fopDay(rng: Rng, dom: number, index: number): Draft[] {
       at: 12 * 3600 + Math.floor(rng() * 7200),
       description: `Оплата за послуги згідно договору №${10 + (index % 40)}`,
       mcc: 4829,
-      amount: amountBetween(rng, 25_000, 70_000),
+      amount: 2_000_000 + Math.floor(rng() * 1_000_000),
       currencyCode: UAH,
       counterName: client,
       counterEdrpou: String(30_000_000 + Math.floor(rng() * 9_000_000)),
@@ -458,7 +468,7 @@ function fopDay(rng: Rng, dom: number, index: number): Draft[] {
       at: 11 * 3600,
       description: 'Переказ на власну картку',
       mcc: 4829,
-      amount: -3_000_000,
+      amount: -3_800_000,
       currencyCode: UAH,
     });
   }
@@ -498,7 +508,7 @@ const dayParts = (day: string): { dom: number; weekday: number } => {
 };
 
 /** Everything a demo customer "has", relative to now: stable ids and times, so a screen looks the same tomorrow plus a day. */
-export function buildDataset(now: Date, calendar: Calendar, seed = 20_261_103): Dataset {
+export function buildDataset(now: Date, calendar: Calendar, seed = 20_261_103, density = 1): Dataset {
   const today = calendar.today(now);
   const nowSeconds = Math.floor(now.getTime() / 1000);
 
