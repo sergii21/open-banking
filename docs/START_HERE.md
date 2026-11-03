@@ -77,7 +77,7 @@ you expected.
 - The token stays valid at api.monobank.ua until you issue a new one there. Do that to revoke it.
 - Everything lives in the `data/` folder next to the app (not in git). `rm -rf data` removes the database and its key.
 - The token is encrypted. Your transactions are stored as plain data in that folder, protected by the folder's permissions (only
-  your user can open it) and by your disk's own encryption.
+  your user can open it) and by your disk's own encryption if you have it on (FileVault, on a Mac).
 
 ## Good to know
 

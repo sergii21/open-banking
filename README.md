@@ -64,7 +64,7 @@ docs                 START_HERE.md, HANDOVER.md (state of the work), UKRAINE.md,
 | Home page weight                       | 1181 kB             | **101 kB**                    |
 | Keystroke to filtered list, 5,892 rows | n/a                 | about one frame (26 to 33 ms) |
 | Source lines (no tests)                | 19,589              | 13,141                        |
-| Tests                                  | 513                 | 82 unit + 10 Playwright       |
+| Tests                                  | 513                 | 84 unit + 10 Playwright       |
 
 Measured on the production build, with Lighthouse 13.6 on `/home` with a session cookie, three runs, median. Details and method
 in [docs/HANDOVER.md](docs/HANDOVER.md).

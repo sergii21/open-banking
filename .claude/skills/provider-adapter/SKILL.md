@@ -1,120 +1,95 @@
 ---
 name: provider-adapter
 description: >
-  How to add or change a bank/aggregator provider in Ledger Lens (the BankingProvider port in
-  apps/api/src/providers). Use this skill whenever asked to add a provider (TrueLayer, Enable Banking, another
-  aggregator), change how a provider's data is mapped, add a failure scenario to the mock bank, record fixtures, or debug
-  provider drift. Covers the port contract, mapping into packages/contracts types, instrumented transport and redaction,
-  token handling, error mapping, webhooks, fixtures and the test checklist.
+  How the bank seam works in Ledger Lens (the BankingProvider port in apps/api/src/providers) and how to change it. Use this skill
+  whenever asked to change how monobank's data is mapped, read a new field from client-info or the statement, handle a new response
+  shape or status, change the pacing, add another bank, or debug "real data looks different from the demo". Covers the port, the
+  tolerant DTOs, the diagnostics collector, error mapping, redaction, the fake bank and the test checklist.
 tools: Read, Bash, Edit, Write
 ---
 
-# Adding or changing a provider adapter
+# Changing or adding a provider adapter
 
-Every provider is an adapter behind one port. Nothing outside `apps/api/src/providers/<id>/` may know a provider's wire
-format: adapters normalise to the types in `packages/contracts` and throw `AppError`s with stable codes.
+Everything outside `apps/api/src/providers/<id>/` is bank-agnostic: an adapter owns its provider's wire format, hands the core the
+normalised types from `port.ts`, and never touches the database. v2 has one real adapter, monobank's personal API, and it is also the
+demo: the `demo` provider is the same class with its transport pointed at an in-process fake bank, so everything the demo shows has gone
+through the code a real connection uses. The v1 adapters (TrueLayer, the mock bank) are in the git tag `v1-full-featured`.
 
 ```
 apps/api/src/providers/
-  port.ts            BankingProvider interface, TokenSet, ProviderAccount/Transaction, typed errors
-  registry.ts        builds the enabled adapters from config; `resolveInstitution('<provider>:<slug>')`, `mock()`
-  transport.ts       ProviderHttp: every provider call is timed, redacted and pushed to the Inspector
-  shared/data-api.ts DTO schemas + mappers for the "Data API" dialect (TrueLayer and the mock both speak it)
-  mock/              the fake bank: adapter, bank.ts (OAuth + data API routes), html.ts pages, dataset.ts, store.ts
-  <id>/              one folder per provider: adapter, DTO schemas, fixtures-based tests
-apps/api/test/fixtures/<id>/   recorded provider payloads (verbatim JSON)
-
-## Token providers and rate-limited banks (monobank)
-
-Not every bank has a consent redirect. `providers/monobank/` is the pattern for a **token** provider: `Institution.connectMethod:
-'token'` makes the SPA show a token field, `POST /api/connections/token` calls `provider.connectWithToken()` (a real call, so a typo
-fails immediately), and the token is stored as `TokenSet.accessToken` with a far-future expiry and no refresh token
-(`refreshTokens` throws `InvalidGrantError`, so a rejected token becomes `needs_reauth`).
-
-A provider that caps read speed sets `limits` (`minIntervalMs`, `maxWindowDays`, `maxItemsPerCall`, `historyMonths`). Then
-`SyncService.initialSync` stores accounts and balances at once and queues `sync_jobs` (one per account and window, newest first)
-instead of reading history inline; `runDue()` runs one job per open rate gate, waits out a 429, asks for the rest of a window that hit
-the row cap, and stops when the connection is lost. Cache whatever you can inside the adapter (monobank's client-info is cached for a
-minute because the account list *is* the balance call). Redact the credential header in `domain/redact.ts` and mark the provider's
-`mode` as `live`, which also masks identifiers in the Inspector.
-
-`test/monobank-stub.ts` enforces the real service's rules (token check, one request per minute per endpoint, window and row caps), so a
-test fails if the worker ever goes faster than the bank allows. Keep a `test/live/*.live.ts` file for the checks that can run against
-the real service without secrets, and let it read an optional personal token from the environment, never from a file.
-apps/api/src/modules/connections/access.ts   the only place tokens are unsealed, refreshed (single-flight) and retried
+  port.ts                  BankingProvider, ProviderLimits, ProviderAccount / ProviderTransaction / RatePair, TokenRejectedError
+  registry.ts              builds `monobank` (only when live) and `demo`: transport, diagnostics collector, rate sources
+  transport.ts             ProviderHttp: every call timed, redacted and filed with the Live API drawer; a network failure
+                           becomes bank_unavailable; non-2xx answers are returned, not thrown
+  monobank/adapter.ts      MonobankProvider (one class for both providers), normaliseToken, status → error mapping
+  monobank/dto.ts          tolerant DTOs, the known-field lists, parseRows (one bad row never hides the others)
+  monobank/currency.ts     ISO 4217 numeric → alphabetic
+  monobank/demo/           FakeMonobank (in process), dataset.ts (a made-up Ukrainian dataset), server.ts (the same fake over HTTP,
+                           with a 429 for a second read inside the interval: `npm run fake:monobank`)
+apps/api/src/domain/diagnostics.ts          DiagnosticsCollector: field names, types, counts; never values
+apps/api/src/domain/redact.ts               masks tokens and, for live providers, card numbers and IBANs
+apps/api/src/modules/connection/access.ts   the one place a token is unsealed and a provider call is run with it
+apps/api/src/modules/sync/service.ts        paces statement reads from `limits`
 ```
 
-## The port (what an adapter implements)
+## The port
 
-- `listInstitutions(query, ctx)` — bank picker. Institution ids are `<provider>:<slug>`; `mode` is mock | sandbox | live.
-- `startConnection({ institutionId, state, codeChallenge, redirectUri }, ctx)` → `{ authUrl }`. Always send `state` and PKCE (S256).
-- `parseCallback(query)` → `{ kind: 'code', code }` or `{ kind: 'failure', outcome }` where outcome is one of
-  `denied | timeout | unavailable | error`: the SPA has a designed state for each. Never throw from here.
-- `completeConnection({ code, codeVerifier, redirectUri }, ctx)` → `{ tokens, consentExpiresAt, permissions }`.
-- `refreshTokens(tokens, ctx)` — throw `InvalidGrantError` on `invalid_grant`; the caller marks the connection `needs_reauth`.
-- `fetchConsent(tokens, ctx)` → `{ expiresAt, permissions }`, called on every user-initiated refresh so reminders stay accurate.
-- `fetchAccounts` / `fetchBalance` / `fetchTransactions` (booked + pending merged and de-duplicated; paginate inside the adapter).
-- `revoke(tokens, ctx)` — best effort; local data is deleted regardless.
-- Payments: implement `PaymentInitiation` too (`supportsPayments()` checks for it) and advertise it through institution
-  `capabilities.payments`. `fixedPayee(institutionId, currency)` names the one account a provider pays (or null when the
-  customer chooses); `createPayment(input, ctx)` → `{ providerPaymentId, authUrl, status, settlementExpected }`;
-  `getPayment(id, ctx)` → a `PaymentUpdate`; `verifyWebhook({ method, path, headers, rawBody })` → `{ eventId, type,
-providerPaymentId, update | null, payload }`, throwing `invalid_webhook_signature` for anything that does not verify.
-  The adapter never touches the database: `modules/payments/PaymentService` owns idempotency, the state machine, SSE and polling.
-  Pass the provider `input.idempotencyKey` through as its idempotency header; a timeout or 5xx must surface as
-  `bank_unavailable` (outcome unknown: the service keeps the attempt so a retry completes the same payment), a refusal as
-  `payment_rejected` / `rate_limited` / `idempotency_conflict` (definitive: the service forgets the attempt).
-  `providers/shared/payments-api.ts` holds the Payments-v3-shaped DTOs, the status/failure mapping and the error mapper
-  (TrueLayer and the mock bank both speak it); request signing and webhook verification are per provider (`truelayer/signing.ts`,
-  `truelayer/webhooks.ts`, `mock/signature.ts`).
+`connect({ token })` checks the token with a real call and returns the tokens plus the accounts it saw (so no second read is spent: the
+bank allows one a minute); `fetchAccounts`, `fetchTransactions(tokens, account, { from, to })` (calendar days in the configured zone,
+newest first, de-duplicated), `fetchRates` (public, no token), `revoke` (best effort: local data is deleted regardless). `limits` says how
+fast the bank may be read (`statementIntervalMs`, `infoIntervalMs`, `maxWindowDays`, `maxItemsPerCall`, `historyMonths`); the sync
+worker paces itself from it and asks for the rest of a window when a response reaches `maxItemsPerCall`.
 
-Typed errors the adapter throws so the core can react: `TokenRejectedError` (401 on a data call: refresh once and retry),
-`InvalidGrantError` (re-auth needed), `ConsentGoneError('expired' | 'revoked')` (403), and `AppError` for the rest
-(`bank_unavailable`, `rate_limited` with `retryAfterSeconds`, `provider_error`). `throwDataApiError` in `shared/data-api.ts` maps a
-Data-API-style response in one call.
+## Rules for an adapter
 
-## Rules
+1. **Normalise at the edge.** Money is integer minor units with the account's currency (negative is out). Card numbers and IBANs are
+   reduced to the last four digits before they leave the adapter. Own funds are computed by the core from `balanceMinor` and
+   `creditLimitMinor`; the adapter reports what the bank said.
+2. **Parse tolerantly, fail loudly only when the whole answer is wrong.** Each row goes through `parseRows(Dto, raw)`: a row that does not
+   parse is skipped and counted (`diagnostics.warn`), the rest is used. An answer of the wrong top-level shape is `unreadable` (a
+   `provider_error`), never guessed at. Optional fields stay optional: monobank omits `comment`, `receiptId`, `goal` and others.
+3. **Record what arrived.** Call `diagnostics.observeRows(endpoint, rows, KNOWN_FIELDS)` for every list so a field nobody mapped yet shows
+   up under "fields we do not use" in Settings, Copy diagnostics. Every new field you read goes into the `*_FIELDS` set in `dto.ts`.
+   `diagnostics.warn` takes field names and codes only, never data.
+4. **Map statuses to the states the screens know.** 401 and 403 → `TokenRejectedError` (the loader stops and the app asks for a new
+   token); 429 → `AppError('rate_limited', 429, …, { retryAfterSeconds })` (the worker waits as long as the bank says, else 60 s);
+   5xx and network failures → `bank_unavailable`; anything else → `provider_error` with the status.
+5. **No caching, no retries in the adapter.** The sync worker owns pacing; an adapter that retries on its own can burn the one read a
+   minute. If an endpoint is cheap to share (the account list is the balance call), the worker shares it.
+6. **The token stays out of everything.** It is sent only as the `X-Token` header, through `ProviderHttp`; `connect` strips whitespace and
+   quotes from what the person pasted (`normaliseToken`) and refuses anything that does not look like a token before calling the bank.
+   `domain/redact.ts` masks `xtoken`, and for a live provider card numbers and IBANs: add any new secret header or field name there.
+7. **Live means localhost.** A provider that reads a real person's account is registered only when `PUBLIC_URL` is localhost
+   (`config.live`); a public instance can run the demo only. Mark such an adapter `mode: 'live'`.
 
-1. **Money**: integer minor units + ISO 4217. Parse provider decimals with string math (`toMinorUnits`), never `parseFloat`.
-   Transactions are signed (negative = out). Never sum across currencies.
-2. **IDs**: de-duplicate transactions on `(account_id, provider_txn_id)`. If the provider has no stable id, derive a
-   deterministic hash from date + amount + description + counter, and say so in a comment.
-3. **Pending vs booked**: map both; pending rows are replaced when the booked row arrives.
-4. **Transport**: use `ProviderHttp` only (never bare `fetch`) so the Inspector records the call. Redaction lives in
-   `domain/redact.ts` (`authorization`, tokens, `client_secret`, `code`, `code_verifier`, signatures always; account identifiers
-   for live providers); add new secret key names there, with a test. The transport is injectable (`Transport`), which is how
-   adapter tests replay fixtures and how the mock bank is reached in-process.
-5. **Errors** (throw `AppError`): 401 on data call → refresh once, then `reauth_required`; `invalid_grant` → `reauth_required`;
-   consent expired/revoked → `consent_expired` / `consent_revoked`; 429 → `rate_limited` with `retryAfterSeconds`;
-   5xx/timeouts → `bank_unavailable`; everything else → `provider_error` (log the provider's request id, not the body).
-6. **Secrets** come from `config.providers.<id>` (Zod-validated env). An adapter without credentials is not registered.
-7. **Webhooks**: verify the signature over the **raw body** (the route has its own `application/json` buffer parser) with a
-   timestamp tolerance, store `event_id` (unique) in the same transaction that applies the update, and make processing
-   idempotent (`domain/payment-state.ts`: final states never change, progress only moves forward). Pin what the sender
-   controls: the algorithm, and where the keys come from (TrueLayer's `jku` must equal the published JWKS URL; it is never
-   fetched from the header). Answer 2xx for duplicates, unknown payments and event types we ignore, 401 for a bad signature,
-   5xx when we could not check (so the provider retries). The polling fallback must reach the same state.
-8. **Tests are fixture-based and offline**: record real sandbox responses (strip secrets), put them in
-   `test/fixtures/<id>/`, and drive the adapter through a stub `Transport` that replays them. Cover: happy path, pagination,
-   pending→booked, 401→refresh→retry, `invalid_grant`, 429, 5xx, malformed payload, amount edge cases (0.10, 1000000.01,
-   negative), and webhook signature (valid, tampered, stale, replayed). The TrueLayer stub verifies every payment request's
-   `Tl-Signature` against the registered public key, like the real API, and the tests re-check the canonical string and
-   header shape with plain `node:crypto`; webhook keys are generated per run, so no key material is committed.
-9. Live checks are opt-in (`npm run e2e:sandbox`) and must never run in `verify`.
+## Adding a field the bank already sends
 
-## Checklist for a new provider
+DTO and `*_FIELDS` in `monobank/dto.ts` → `mapItem` / `fetchAccounts` in the adapter → `ProviderTransaction` / `ProviderAccount` in
+`port.ts` → a migration and the repository in `db/` if it is stored → the contracts type and the presenter if a screen shows it → the
+fake's dataset so the demo exercises it → a test. If the field rests on an assumption the bank's documentation does not state, add a
+yes/no fact for it in `modules/diagnostics/service.ts` (see `domain/checks.ts`), so the first real run tells us whether it holds.
 
-- [ ] Add the id to `ProviderId` / `ProviderMode` in `packages/contracts/src/common.ts` if it is new.
-- [ ] Config section + `.env.example` entries; skip registration when credentials are missing.
-- [ ] Adapter folder, DTO Zod schemas for the provider's responses, mapper functions with unit tests.
-- [ ] Register in `providers/registry.ts`; institutions appear in `GET /api/institutions` with the right `mode`.
-- [ ] Fixtures + offline tests; update the README provider table and the Inspector labels.
-- [ ] Redaction audit: grep the Inspector output and logs for tokens/identifiers for a full connect + refresh + payment run.
-- [ ] Document consent lifetime, rate limits, and any unattended-access limits in the adapter header comment.
+## Adding another bank
 
-## The mock bank is a real adapter
+Implement `BankingProvider` in `providers/<id>/`, add the id to `ProviderId` in the contracts, build it in `registry.ts` behind the live
+rule, and give it a scripted fake next to it so tests and a demo can run offline. A provider with an OAuth redirect needs a connect flow
+the current port does not have: v1's version of that is in the `v1-full-featured` tag. PrivatBank has no personal API (see
+`docs/UKRAINE.md`); a statement-file importer would be its own module, not an adapter, because it has no token and no live reads.
 
-`providers/mock/` implements the same port against an in-process fake bank that speaks HTTP (OAuth + a TrueLayer-shaped
-REST API) served at `/mock-bank`. Failure scenarios (consent denied, SCA timeout, bank unavailable, rate limited,
-insufficient funds, payment rejected, cancelled) live there, selected by persona on the consent page or by demo controls.
-Add new failure modes to the mock first so the UI state and the e2e test exist before the live adapter needs them.
+## Tests
+
+- `apps/api/test/monobank.test.ts` runs the adapter against the scripted `FakeMonobank` through a stubbed `Transport`: mapping of cards,
+  credit cards and jars, holds, foreign-currency purchases, transfers with comments, skipped rows, every status → error, token cleaning,
+  rates.
+- `apps/api/test/sync.test.ts` uses the `paced()` helper (a fake that enforces the bank's one-read-a-minute rule on a clock you move by
+  hand) to prove the worker never goes faster than the bank allows, waits out a 429 and asks for the rest of a capped window.
+- `apps/api/test/app.test.ts` covers the routes, CSRF, connect and disconnect on an in-memory database.
+- The diagnostics test proves that no description, comment, id, last four digits or token appears in the text the person copies. Keep it
+  passing when you add a field.
+- `e2e/monobank.spec.ts` drives the real-token flow through the browser against the paced fake.
+
+## Trying it against something real
+
+Without a token you can check only what is public: `/bank/currency` (the demo reads real rates through the app) and the real 403 a made-up
+token gets. Anything that needs a real account is the person's to run on their own machine: `npm run doctor` or Settings, Copy diagnostics.
+Never ask for, print or store a real token; the first real connection is their step, and `docs/HANDOVER.md` lists what it will confirm.

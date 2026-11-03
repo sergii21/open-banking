@@ -1,8 +1,10 @@
 # Ledger Lens — project rules
 
-An Open Banking proof of concept: a personal-finance app (account information + payment initiation) with an
-API Inspector that shows the real provider calls behind each screen. The approved plan is `docs/PLAN.md`;
-read it before changing scope. Decisions D1–D7 are settled.
+A personal-finance app for a person's own monobank accounts: their money in hryvnias, this month against the same days last month,
+every transaction with instant search, and their regular payments. Read-only, on their own computer, and fast. How to run it:
+`README.md`; the person's own steps: `docs/START_HERE.md`; current state, measurements and what is **not** verified:
+`docs/HANDOVER.md`. `docs/V2_BRIEF.md` and `docs/PLAN.md` are history. The full v1 (payments, TrueLayer, mock bank, Material UI)
+is the git tag `v1-full-featured`.
 
 ## Externally modified files
 
@@ -22,22 +24,22 @@ Prefix every session with:
 export PATH="$HOME/.nvm/versions/node/v24.15.0/bin:$PATH"
 ```
 
-`npm run check:node` (also run by `verify`, `dev` and `build`) fails fast with that hint. zsh does not word-split
-unquoted variables and macOS has no `timeout`; keep scripts POSIX-simple.
+`npm run check:node` (also run by `verify`, `dev` and `build`) fails fast with that hint. `./start.sh` picks Node 24 by itself. zsh does
+not word-split unquoted variables and macOS has no `timeout`; keep scripts POSIX-simple.
 
 ## Commands
 
-| Command                                                         | What it does                                                                          |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `npm run dev`                                                   | API on :3000 (tsx watch) + SPA on :4200 (`ng serve`, `/api` and `/mock-bank` proxied) |
-| `npm run verify`                                                | check:node, ESLint, Prettier, typecheck, Vitest (all workspaces), production build    |
-| `npm run e2e`                                                   | build, then Playwright against the built app on :4300 (mock bank, in-memory DB)       |
-| `npm run e2e:only`                                              | Playwright without rebuilding                                                         |
-| `PLAYWRIGHT_BASE_URL=http://localhost:4200 npx playwright test` | run against `npm run dev` instead                                                     |
-| `npm run e2e:sandbox`                                           | opt-in TrueLayer sandbox suite (needs credentials in `apps/api/.env`)                 |
-| `npm run test:live -w @ledger-lens/api`                         | opt-in checks against the real monobank service (your own `MONOBANK_TOKEN` optional)  |
-| `npm run keys:truelayer`                                        | generate the ES512 signing key pair for TrueLayer Payments                            |
-| `npm test -w @ledger-lens/api`                                  | one workspace's tests                                                                 |
+| Command                                        | What it does                                                                                                                                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `./start.sh`                                   | The person's entry point: finds Node 24, installs once, builds when the sources are newer than the build, serves on :3000 and opens the browser                                                     |
+| `npm run app`                                  | Build if stale, then one Node process serves the API and the SPA on :3000 (`PORT=3100` to change it)                                                                                                |
+| `PUBLIC_URL=http://localhost:4200 npm run dev` | API on :3000 (tsx watch) and SPA on :4200 (`ng serve`, `/api` proxied). The API checks the CSRF origin against `PUBLIC_URL`, so it must be told the origin the browser uses                         |
+| `MONOBANK_TOKEN=… npm run doctor`              | Checks a real token and prints PASS or FAIL per check, counts only. The person types the token in their own terminal                                                                                |
+| `npm run fake:monobank`                        | A stand-in for api.monobank.ua on :4310 that answers 429 to a second read inside the interval (`FAKE_MONOBANK_INTERVAL_SECONDS`). Point the app at it with `MONOBANK_API_URL=http://127.0.0.1:4310` |
+| `npm run verify`                               | check:node, ESLint, Prettier, typecheck, unit tests (contracts, API, web), production build                                                                                                         |
+| `npm run e2e`                                  | Build, then Playwright (see Testing). `e2e:only` skips the build, `e2e:report` opens the last report                                                                                                |
+| `node scripts/screenshots.mjs`                 | Retakes `docs/screenshots` from running servers (its header says which)                                                                                                                             |
+| `npm test -w @ledger-lens/api`                 | One workspace's tests                                                                                                                                                                               |
 
 `package-lock.json` is the source of truth: use `npm ci`, commit lockfile changes, never `--legacy-peer-deps`.
 TypeScript stays `~6.0.x` (Angular 22 peers `>=6.0 <6.1`; npm `latest` 7.x is unsupported).
@@ -45,15 +47,17 @@ TypeScript stays `~6.0.x` (Angular 22 peers `>=6.0 <6.1`; npm `latest` 7.x is un
 ## Layout
 
 ```
-apps/web         Angular 22 SPA (zoneless, signals, Material 22 + Tailwind 4, Signal Forms, httpResource)
-apps/api         Fastify 5 BFF (Zod 4, node:sqlite, pino). src/{plugins,modules,providers,domain,db}
-packages/contracts   Zod schemas + inferred types shared by both apps. Source-only package, no build step.
-e2e              Playwright (auth.setup.ts storage-state pattern, smoke journeys, axe checks)
-.claude/skills   e2e-smoke-testing, provider-adapter
+apps/web             Angular 22 SPA: zoneless, signals, no router, no UI library. Own CSS design system in src/styles
+apps/api             Fastify 5 BFF (zod 4 for request schemas, node:sqlite, pino). src/{plugins,modules,providers,domain,db}
+packages/contracts   Plain TypeScript types and pure helpers (money, CSV) shared by both apps. Source only, no build step
+e2e                  Playwright: demo, monobank (the real-token flow), a11y (axe, light and dark), phone
+scripts              app.mjs (npm run app), check-node.mjs, screenshots.mjs
+docs                 START_HERE, HANDOVER, UKRAINE; PLAN and V2_BRIEF are history; screenshots/
+.claude/skills       e2e-smoke-testing, provider-adapter
 ```
 
-`@ledger-lens/contracts` is resolved through `tsconfig.base.json` `paths` (source files) in the SPA, the API,
-tsx and the esbuild API bundle. A contract change is a change to both apps: update the schema first.
+`@ledger-lens/contracts` is resolved through `tsconfig.base.json` `paths` (source files) in the SPA, the API, tsx and the esbuild API
+bundle. A contract change is a change to both apps: update the types first.
 
 ## Angular conventions
 
@@ -61,75 +65,86 @@ The official best-practice file generated by `ng new --ai-config=claude-code` is
 
 @apps/web/CLAUDE.md
 
-Project specifics on top of it (enforced by ESLint where possible):
+Project specifics on top of it (ESLint enforces what it can):
 
 - Standalone only, **zoneless**, default OnPush: never write `changeDetection` or `standalone: true`.
 - `input()` / `output()` / `model()` / `viewChild()`, `inject()`, `@if` / `@for` / `@let`; `computed` and `linkedSignal` before `effect`.
-- Server state with `httpResource()` / `resource()`; `@ngrx/signals` SignalStore only for shared client state
-  (transaction filters, selected account). Parse responses with the contracts schemas (`parse` option).
-- Forms: Signal Forms from `@angular/forms/signals`; validate with the contracts schemas via `validateStandardSchema`.
-- New singleton services use `@Service()` + `inject()`, not `@Injectable({ providedIn: 'root' })`.
-- Fetch is the default `HttpBackend`: do **not** add `withFetch()` or `withXhr()`. Interceptors are functional and live in
-  `core/interceptors/`. Angular's built-in XSRF handling echoes the `XSRF-TOKEN` cookie as `X-XSRF-TOKEN`.
-- Styling: Tailwind 4 utilities for layout/spacing, Material 3 tokens (`--mat-sys-*`) for colour. Tailwind is configured
-  CSS-first (`src/tailwind.css`) through `.postcssrc.json` + `@tailwindcss/postcss`; there is **no** `tailwind.config.js`
-  (a stale one is what broke Karma builds in the older workspace). No `ngClass` / `ngStyle` / `CommonModule`.
-- Dark mode is token-based (`light-dark()`); never hard-code a colour that only works on a light surface. The theme uses our own
-  tonal palette (`src/_palette.scss`, generated with Material Color Utilities; stock `$cyan-palette` is neon). Material's
-  surface tokens need the extra neutral tones (4, 6, 12, 17, 22, 24, 87, 92, 94, 96): without them dark mode silently falls
-  back to white. The axe suite (light + dark) is the guard.
-- **Charts** follow the data-viz rules: one hue for one series (the category list is a bar list, not a rainbow), a legend for two
-  or more series, solid hairline grid, 2px surface gap between columns, and a table view next to every chart (the relief for the one
-  palette contrast WARN). The two series colours are `--ll-series-1/2` in `styles.scss` and `chart-theme.ts`, validated with the
-  data-viz skill's `validate_palette.js` against this app's real surfaces; re-run it if the theme or the colours change. ApexCharts
-  loads lazily with the Insights route (the initial bundle is within 2 kB of its 900 kB budget: check `npm run build` after adding
-  anything to the shell or the routes, and prefer lazy imports over static ones for things only one page needs).
-- Layout adapts to the width a component actually gets: grids use Tailwind **container queries** (`@container` +
-  `@2xl:grid-cols-2`), not viewport breakpoints, because the Inspector can take space. The API Inspector is a non-modal
-  `<aside>` docked at the bottom below 1440px and on the right above it (content gets padding and `scroll-padding` so a
-  focused control is never hidden behind it: WCAG 2.2 "Focus Not Obscured").
-- **zod in the SPA**: always `import * as z from 'zod'` (namespace import), never `import { z } from 'zod'` - the latter
-  makes esbuild bundle all 64 locales (~300 kB). In the SPA the specifier `zod` is mapped (`apps/web/tsconfig.json` `paths`) to `src/zod-jitless.ts`, which turns on
-  `jitless` before any schema exists, so zod never probes `new Function` under our strict CSP (which logs a violation). It must
-  be a module every schema file imports: a `config()` call in `main.ts` runs after the shared chunk that builds the contract
-  schemas. `e2e/csp.spec.ts` watches for violations. The initial bundle budget is 900 kB warn / 1.2 MB error.
-- Bank logos use `NgOptimizedImage`. Every route must pass axe (WCAG AA): labels, focus order, contrast, status text — never colour alone.
-- Feature-first folders with lazy routes: `core/` (config, interceptors, session, inspector stream), `shared/`, `features/<name>/`.
-- File names follow the CLI 2025 style guide: `transactions.ts`, `transactions.html`, no `.component` suffix.
+- New singleton services use `@Service()` + `inject()`. No `HttpClient`, `zod`, Material, CDK, Tailwind, ngrx or chart library in the
+  browser: this is what keeps the first load small. The SPA uses `fetch` through `core/api.ts` (it echoes the `XSRF-TOKEN` cookie as
+  `X-XSRF-TOKEN`) and the contracts' plain types, because the API is same-origin and trusted.
+- **No Angular Router.** `core/nav.ts` maps the URL to a page signal with the History API (and View Transitions where the browser has them),
+  and loads each screen as its own small chunk while the browser is idle, so a tab switch never waits on the network. Sheets are
+  signals in `core/ui.ts` over `shared/sheet.ts` (a native `<dialog>`: focus, Escape and inertness are the browser's). The Live API
+  drawer is the one non-modal exception (`features/settings/live-api.ts`): Escape closes it from anywhere unless a modal sheet is on top,
+  focus moves to its Close button on open and goes back to the opener on close.
+- **Server data** is a `Remote<T>` per screen (`core/remote.ts`, held in `core/stores.ts`): the first load shows a skeleton, every reload
+  after that keeps the old data on screen and swaps the new in. `core/live.ts` holds the server-sent event stream; when it says
+  something changed, the stores reload quietly.
+- **Styling** is our own CSS in `src/styles` (`tokens.css`, `base.css`, `components.css`, `screens.css`). Every colour is a `light-dark()`
+  token: never hard-code a colour that only works on one surface. One accent hue, green for money in, no alarm red for ordinary
+  spending. Amounts use tabular figures and go through `<ll-amount>` (Ukrainian format, small kopiykas, blurs in privacy mode).
+- Charts are hand-drawn SVG (`shared/charts.ts`), icons are inline SVG (`shared/icon.ts`). One hue for one series, and every chart has a
+  text alternative.
+- **Bundle budget** (`angular.json`): initial JS + CSS 215 kB warn / 250 kB error. v2 ships about 198 kB raw (170 kB of it JS), about 58 kB over the wire.
+  Run `npm run build` after touching the shell, `core/nav.ts` or anything `main.ts` imports, and load what only one place needs lazily.
+- The CSP is strict (`script-src 'self'`, no inline script): the pre-paint theme script is `public/theme-init.js`. The demo spec fails on
+  any violation.
+- Preferences live in `localStorage` through `core/prefs.ts`, wrapped in try/catch: the app must work when storage is blocked.
+- Every screen and sheet passes axe (WCAG 2.2 AA) in light and dark, and nothing sticks out at 320 px: status is never colour alone.
+- Feature-first folders: `core/` (singletons), `shared/` (components), `features/<name>/`. File names follow the CLI 2025 style guide
+  (`home.ts`, `home.html`, no `.component` suffix); the selector prefix is `ll`.
 - Strict TypeScript: `strict`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`, `noImplicitReturns`,
   `noFallthroughCasesInSwitch`, plus Angular `strictTemplates`.
 
 ## API conventions
 
-- Every route has a Zod `schema` (params/query/body/response). Errors are `application/problem+json` with a stable
-  `code` from `packages/contracts` (`ErrorCode`); throw `AppError`, never hand-roll an error body.
-- The SPA only ever talks to the BFF, same origin, with an HttpOnly session cookie. **Provider tokens, client secrets and
-  signing keys never reach the browser, API responses, logs or the Inspector.** Tokens are AES-256-GCM encrypted at rest.
-- Money is integer minor units + ISO 4217 currency. Never floats; never sum across currencies.
-- Live providers (real people's accounts, e.g. monobank) only run when `PUBLIC_URL` is localhost; a public instance uses sandbox
-  providers only (decision D7). Their credentials are tokens the customer pastes into the app, sealed like any other.
-- Providers that cap read speed declare `limits` on the port; the sync worker (`modules/sync`) paces itself from them.
-- All provider HTTP goes through the instrumented transport so the Inspector sees it (and redaction applies).
-  Providers sit behind the `BankingProvider` port; see the `provider-adapter` skill.
-- SQL lives only in `db/` repositories. `node:sqlite` is still early-stability: keep it behind that layer.
-- Time comes from the injected `Clock`, never `Date.now()` inside domain code (deterministic tests).
-- No `console.*` in the API (use the request/app logger). No PII in logs; query strings are stripped from logged URLs.
-- Money moves only through `modules/payments/PaymentService`: an `Idempotency-Key` on every create, the attempt stored before the
-  provider is called, provider reports applied through `domain/payment-state.ts` (final states never change, progress only moves
-  forward), webhooks verified over the **raw body** and de-duplicated by event id. Routes never call a provider's payment methods.
+- Every route validates its request with a zod schema (`fastify-type-provider-zod`); responses are typed by the contracts, not parsed.
+  Errors are `application/problem+json` with a stable `code` from `packages/contracts` (`ErrorCode`): throw `AppError`, never
+  hand-roll an error body.
+- The SPA only ever talks to the BFF, same origin, with an HttpOnly session cookie (`ll_sid`, SameSite=Lax) and a CSRF check (the
+  `XSRF-TOKEN` echo plus an origin check against `PUBLIC_URL`).
+- **The monobank token never reaches the browser, API responses, logs, diagnostics or the Live API drawer.** It is sealed with AES-256-GCM
+  (`v1.<keyId>.<iv>.<ciphertext>`), the key is generated on first run into `data/secret.key` (0600; `TOKEN_ENCRYPTION_KEY` overrides it),
+  and it is unsealed in one place: `modules/connection/access.ts`.
+- **Data at rest:** only the token is encrypted. The transaction history is plain data in SQLite, so the data folder belongs to its owner:
+  `src/data-dir.ts` creates it 0700 and keeps the database files 0600 (and tightens what an older run left open). Never loosen that, and
+  never describe the history as encrypted.
+- Money is integer minor units + ISO 4217 currency. Never floats; never sum across currencies without a rate. Home and Insights are in
+  hryvnias: foreign balances and rows are valued at the bank's own rate, and the screens say so.
+- **Live providers** (a real person's account) only run when `PUBLIC_URL` is localhost (`ALLOW_LIVE_PROVIDERS` overrides it); the server binds
+  127.0.0.1 by default. A public instance can run the demo only.
+- **One adapter class serves two providers**: `monobank` (the real bank) and `demo` (the same class on the in-process `FakeMonobank` with a
+  made-up Ukrainian dataset), so everything the demo shows has gone through the code a real connection uses. See the `provider-adapter`
+  skill.
+- Providers that cap read speed declare `limits` on the port; the sync worker (`modules/sync`) paces itself from them: connect is one
+  account-list read, then statement windows one step per interval, the main card first, a 429 waits, a response at the row cap queues the
+  rest of its window.
+- All provider HTTP goes through `ProviderHttp` (`providers/transport.ts`): timed, redacted and recorded for the Live API drawer.
+- Parsing is tolerant (`providers/monobank/dto.ts`): a row that does not parse is skipped and counted, never fatal, and the adapter's
+  `DiagnosticsCollector` records field names and types, never values.
+- **Diagnostics hold counts, field names and yes/no checks only** — no token, description, comment, merchant, id, amount or card digits. A test
+  guards this; keep it so, because the person pastes that text into chats.
+- SQL lives only in `db/` repositories; migrations are in `db/migrations.ts`. `node:sqlite` is early-stability: keep it behind that layer.
+- Time comes from the injected `Clock`, and days and months from `Calendar` (Europe/Kyiv by default). Never `Date.now()` or the machine's
+  zone inside domain code.
+- No `console.*` in the API (use the request or app logger). No PII in logs.
 
 ## Testing
 
-- Vitest everywhere (`@angular/build:unit-test` for the SPA). Provider adapters are tested from recorded fixtures with a
-  stubbed transport, so they run offline in CI. Live sandbox checks are opt-in (`e2e:sandbox`).
-- Playwright journeys run against the **mock bank** and must stay deterministic: `connect` (journey + every failure state), `payments` (every outcome through the bank's own page),
-  `dashboard`/`transactions`/`connections` (read-only, shared session), `lifecycle` (refresh, outage, rate limit, revoke,
-  consent expiry, privacy; each test uses its own fresh session), `a11y` (axe in light and dark, keyboard basics) and
-  `*.mobile.spec.ts` (Pixel 7). See the `e2e-smoke-testing` skill.
-- Before calling work done: `npm run verify` and `npm run e2e`, then use the running app in a browser (desktop + phone width,
-  dark mode, axe). Say what was and was not verified.
+- Vitest for contracts, the API and the SPA (`@angular/build:unit-test`). The API tests run the whole app on an in-memory database and a
+  clock you move by hand (`test/helpers.ts`); the adapter is tested against the scripted `FakeMonobank`, which enforces the bank's rules.
+- Playwright runs against the **built** app and stays deterministic: `demo` (every tab, instant search, a transaction, the Live API drawer,
+  blur, disconnect, no CSP violations), `monobank` (the real-token flow against the paced fake: a wrong token is explained, balances
+  at once, history at the bank's pace), `a11y` (axe in light and dark) and `phone.mobile` (Pixel 7 and 320 px). See the
+  `e2e-smoke-testing` skill.
+- Before calling work done: `npm run verify` and `npm run e2e`, then look at the running app (desktop and phone width, dark and light).
+  Say what was and was not verified.
+- **Not verifiable without the person's real token** (and so never claimed as verified): the real field shapes on a real account,
+  that an account's `balance` includes its `creditLimit`, that a statement item's `balance` is the balance after that item, and the real
+  429 body. `npm run doctor` and Settings, Copy diagnostics, test the two assumptions on their data. `docs/HANDOVER.md` keeps the list.
 
 ## Secrets and git
 
-- `.env` is git-ignored; `apps/api/.env.example` is committed. Never ask for or paste secrets in chat or commit them.
+- `.env` and `data/` (the database and the key) are git-ignored; `apps/api/.env.example` is committed. Never ask for, print or paste a
+  token in chat or commit one: the person pastes it into the app themselves, or types it in their own terminal for `doctor`.
 - Commit locally at the end of each milestone with a descriptive message. There is no remote; never push.

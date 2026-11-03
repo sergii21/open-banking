@@ -6,15 +6,17 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 
 ## Latest state (read this first; it supersedes the older sections below where they differ)
 
-The session stopped on a usage limit. Everything below is committed; `npm run verify` exits 0 (contracts 11, API 67, web 4 unit
-tests) and the Playwright suite passes (10 tests).
+Everything below is committed; `npm run verify` exits 0 (contracts 11, API 69, web 4 unit tests) and the Playwright suite passes
+(10 tests). A second pass looked at the running app from outside (`./start.sh` from a Node 25 shell, phone and desktop in dark and
+light, the token flow against the paced fake, the real 403 for a made-up token) and its polish list is done: two-column Home, Live API
+drawer keyboard and focus, phone wrapping, the "Leave the demo" row, 0700/0600 data permissions, a new logo mark.
 
-| Phase                          | State                                                                                                                                                                                                                                                    |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A baseline and cut             | done                                                                                                                                                                                                                                                     |
-| B real-data path (API)         | done                                                                                                                                                                                                                                                     |
-| C new UI                       | done: welcome, Home, Activity, Insights, Settings sheet, Live API drawer; own design system; no Router, Material, Tailwind, zod or chart library in the browser                                                                                          |
-| D evidence, docs, deliverables | done except two things: `CLAUDE.md` and `.claude/skills/*` still describe v1 (see "What is left"). Docs pass finished: README, UKRAINE.md, render.yaml (demo-only), DEMO.md deleted, PLAN.md and V2_BRIEF.md marked as history, phone screenshots shrunk |
+| Phase                          | State                                                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A baseline and cut             | done                                                                                                                                                                                  |
+| B real-data path (API)         | done                                                                                                                                                                                  |
+| C new UI                       | done: welcome, Home, Activity, Insights, Settings sheet, Live API drawer; own design system; no Router, Material, Tailwind, zod or chart library in the browser                       |
+| D evidence, docs, deliverables | done: README, UKRAINE.md, render.yaml (demo-only), CLAUDE.md and both skills rewritten for v2, DEMO.md deleted, PLAN.md and V2_BRIEF.md marked as history, screenshots as small JPEGs |
 
 ### Before and after (measured 2026-11-03, same method as the baseline)
 
@@ -27,7 +29,7 @@ tests) and the Playwright suite passes (10 tests).
 | Page weight on Home                  | 1181 kB (uncompressed) | 101 kB (brotli, pre-compressed assets, all lazy chunks prefetched)                      |
 | Keystroke to filtered list           | n/a                    | about one frame: 26 to 33 ms for two frames on 5,892 rows (Activity first paint 138 ms) |
 | Source lines (app code, no tests)    | 19,589                 | 13141                                                                                   |
-| Test lines                           | 7,294 unit + 1,890 e2e | 1870 (82 unit tests, 10 Playwright)                                                     |
+| Test lines                           | 7,294 unit + 1,890 e2e | 1870 (84 unit tests, 10 Playwright)                                                     |
 
 ### Verified
 
@@ -67,22 +69,10 @@ Finished in the docs pass: `README.md` (rewritten for v2), `docs/UKRAINE.md` (cu
 added, the rest of the v1 settings removed), `docs/DEMO.md` (deleted: it was the v1 tour), banners on `docs/PLAN.md` and `docs/V2_BRIEF.md`,
 phone and 320 px screenshots reduced to 1x.
 
-1. **`CLAUDE.md` and `.claude/skills/*` still describe v1 and were deliberately not changed.** A peer session asked for those edits;
-   instruction and configuration files only change on the user's own say-so. When the user agrees, what has to change:
-   - `CLAUDE.md`: no Material, Tailwind, ngrx, zod, HttpClient, CDK or Router in the SPA (own CSS tokens in `apps/web/src/styles`,
-     native `<dialog>`, hand-drawn SVG, `core/nav.ts`, `fetch` with the XSRF header in `core/api.ts`); contracts are plain types and
-     pure helpers; the API validates requests with zod and does not schema-validate responses; bundle budget 215 kB warn / 250 kB
-     error for initial JS + CSS; commands `./start.sh`, `npm run app|doctor|dev|verify|e2e|fake:monobank`; keep: integer minor
-     units, live providers localhost-only, token sealed (key in `data/secret.key`) and never logged, statement reads paced from the
-     port's `limits`, all provider HTTP through `ProviderHttp`, time from the injected `Clock` and days from `Calendar`. Remove:
-     the payments rule, charts rule, `zod-jitless`, Material/Tailwind rules, the 106-test matrix, TrueLayer and mock-bank
-     commands (`e2e:sandbox`, `keys:truelayer`, `test:live`).
-   - `e2e-smoke-testing`: the suite is `e2e/demo`, `monobank`, `a11y` and `phone.mobile` specs (10 tests); the demo app is on :4300 and the
-     real-token flow on :4301 against the paced fake on :4310; `npm run e2e` builds first; `scripts/screenshots.mjs` retakes the pictures.
-   - `provider-adapter`: the port is now `connect`, `fetchAccounts`, `fetchTransactions`, `fetchRates`, `revoke` plus `limits`
-     (statement and account-list intervals, window days, row cap, history months); no redirect or payment parts; one adapter class
-     serves `monobank` and `demo`; the fake bank is in `providers/monobank/demo`; DTOs are tolerant (per-row parse, diagnostics
-     collector). The v1 text is in the `v1-full-featured` tag.
+1. Done: `CLAUDE.md`, `.claude/skills/e2e-smoke-testing` and `.claude/skills/provider-adapter` now describe v2 (own CSS tokens, no router, one
+   adapter class for the bank and the demo, the paced fake, the 10-test suite). The build session left them alone on purpose, since
+   instruction files change only on the user's say-so; they were rewritten afterwards by the session that talks to the user, in its own commit, so the diff can be reviewed.
+   The v1 text is in the `v1-full-featured` tag.
 2. Done in the polish pass: Home on desktop is two independent columns.
 3. Noticed, not changed (it is code): `npm run dev` serves the SPA on :4200, but `PUBLIC_URL` now defaults to `http://localhost:<PORT>`,
    so the CSRF origin check rejects writes unless `PUBLIC_URL=http://localhost:4200` is set (the README says so; the default could
