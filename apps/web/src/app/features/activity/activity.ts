@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   computed,
   effect,
   ElementRef,
@@ -98,6 +99,8 @@ export class Activity {
   protected readonly detail = signal<RowView | null>(null);
   protected readonly detailOpen = signal(false);
 
+  /** On a phone the placeholder is one word: the long one is cut off by the narrow field. */
+  protected readonly narrow = signal(window.matchMedia('(max-width: 520px)').matches);
   private readonly search = viewChild<ElementRef<HTMLInputElement>>('search');
   private readonly sentinel = viewChild<ElementRef<HTMLElement>>('sentinel');
   private handledFocus = this.ui.focusSearch();
@@ -201,6 +204,10 @@ export class Activity {
 
   constructor() {
     this.stores.activity.ensure();
+    const phone = window.matchMedia('(max-width: 520px)');
+    const onChange = (): void => this.narrow.set(phone.matches);
+    phone.addEventListener('change', onChange);
+    inject(DestroyRef).onDestroy(() => phone.removeEventListener('change', onChange));
     // `?card=<id>` from a tile on Home.
     effect(() => {
       this.account.set(this.nav.query().get('card'));

@@ -27,6 +27,8 @@ Click **Try with demo data**. Within a couple of seconds you should see Home wit
 accounts and an "Updated just now" chip. Try Activity (press `/` and type Сільпо), Insights (regular payments), the eye icon
 (blurs every amount) and the sliders icon, then **Live API** (the calls the app made).
 
+The demo is optional: if you would rather go straight to your own accounts, skip to step 3.
+
 If the page is blank or says Ledger Lens is not reachable, the terminal from step 1 was closed: run `./start.sh` again.
 
 ## 3. Get your monobank token
@@ -41,8 +43,8 @@ your own and your family's accounts and is not available under 16.
 
 ## 4. Paste it
 
-1. In the app: sliders icon, then **Disconnect and delete my data** (press it twice) to leave the demo. You land on the first-run
-   screen.
+1. If you looked at the demo: sliders icon, then **Leave the demo and connect monobank**. You land on the first-run screen (if you
+   skipped the demo you are already there).
 2. Paste the token and press **Connect monobank**.
 
 What to expect: balances and your money in hryvnias in about 2 seconds; the first transactions of your main card in about 10
@@ -74,6 +76,8 @@ you expected.
 - Settings, **Disconnect and delete my data**: deletes the token and everything read from monobank from this computer.
 - The token stays valid at api.monobank.ua until you issue a new one there. Do that to revoke it.
 - Everything lives in the `data/` folder next to the app (not in git). `rm -rf data` removes the database and its key.
+- The token is encrypted. Your transactions are stored as plain data in that folder, protected by the folder's permissions (only
+  your user can open it) and by your disk's own encryption.
 
 ## Good to know
 

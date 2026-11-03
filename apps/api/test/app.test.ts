@@ -1,7 +1,16 @@
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { buildApp } from '../src/app';
 import { loadConfig } from '../src/config';
 import { loadOrCreateKeys } from '../src/keys';
 import { Client, createTestApp, type TestApp } from './helpers';
@@ -176,6 +185,47 @@ describe('keys', () => {
       expect(loadConfig({ DATA_DIR: dir, PUBLIC_URL: 'https://x.example' }).live).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('data at rest', () => {
+  const opened = (dir: string): [string, number][] =>
+    readdirSync(dir).map((name) => [name, statSync(join(dir, name)).mode & 0o777]);
+
+  it('creates the data folder for the owner only and keeps the database files that way', async () => {
+    const parent = mkdtempSync(join(tmpdir(), 'll-data-'));
+    try {
+      const dir = join(parent, 'data');
+      const { app } = await buildApp({ config: loadConfig({ NODE_ENV: 'test', DATA_DIR: dir }) });
+      await app.ready();
+      expect(statSync(dir).mode & 0o777).toBe(0o700);
+      const files = opened(dir);
+      expect(files.map(([name]) => name)).toContain('ledger-lens.db');
+      for (const [name, mode] of files) expect(mode & 0o077, `${name} is open to others`).toBe(0);
+      await app.close();
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it('tightens a folder and files that an older run left open', async () => {
+    const parent = mkdtempSync(join(tmpdir(), 'll-data-'));
+    try {
+      const dir = join(parent, 'data');
+      mkdirSync(dir);
+      chmodSync(dir, 0o755);
+      const file = join(dir, 'ledger-lens.db');
+      writeFileSync(file, '');
+      chmodSync(file, 0o644);
+      const { app } = await buildApp({ config: loadConfig({ NODE_ENV: 'test', DATA_DIR: dir }) });
+      await app.ready();
+      expect(statSync(dir).mode & 0o777).toBe(0o700);
+      for (const [name, mode] of opened(dir))
+        expect(mode & 0o077, `${name} is open to others`).toBe(0);
+      await app.close();
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
     }
   });
 });

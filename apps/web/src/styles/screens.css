@@ -82,31 +82,47 @@
 .home > * {
   min-width: 0;
 }
+/* On a phone the two columns dissolve and the cards keep one order (hero, accounts, month, the rest). On a desktop they are
+   two independent stacks, so a shorter card never leaves a hole beside a taller one. */
+.home .col {
+  display: contents;
+}
+.home .a-banner {
+  order: 0;
+}
+.home .a-hero {
+  order: 1;
+}
+.home .a-accounts {
+  order: 2;
+}
+.home .a-month {
+  order: 3;
+}
+.home .a-side {
+  order: 4;
+}
 @media (min-width: 900px) {
   .home {
     grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    grid-template-areas:
-      'hero accounts'
-      'month side';
     align-items: start;
     gap: 18px;
   }
-  .home .a-hero {
-    grid-area: hero;
-  }
-  .home .a-accounts {
-    grid-area: accounts;
-  }
-  .home .a-month {
-    grid-area: month;
-  }
-  .home .a-side {
-    grid-area: side;
+  .home .col {
+    display: grid;
+    align-content: start;
+    gap: 18px;
+    min-width: 0;
   }
 }
 .side-stack {
   display: grid;
   gap: 14px;
+}
+@media (min-width: 900px) {
+  .side-stack {
+    gap: 18px;
+  }
 }
 
 .hero {
@@ -822,4 +838,34 @@ html {
 }
 .setting:disabled {
   opacity: 0.55;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+/* Phone Insights: the count and the comparison stack when the list is narrow, and regular payments wrap instead of cutting
+   the date off. */
+.rank {
+  container-type: inline-size;
+}
+@container (max-width: 480px) {
+  .rank-sub {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+.regular-list .row-title,
+.regular-list .row-sub {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.setting-primary {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.setting-primary small {
+  color: inherit;
+  opacity: 0.85;
 }

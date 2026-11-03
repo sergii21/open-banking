@@ -81,6 +81,16 @@ export class Settings {
     }
   }
 
+  /** Leaving the demo is the normal first step: the same reset as disconnecting, without the warning (nothing here is yours). */
+  protected async leaveDemo(): Promise<void> {
+    try {
+      await this.session.disconnect();
+      this.ui.settings.set(false);
+    } catch {
+      this.toast.show('Could not leave the demo. Try again.');
+    }
+  }
+
   protected async disconnect(): Promise<void> {
     if (!this.confirming()) {
       this.confirming.set(true);

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { constants as zlib } from 'node:zlib';
 import fastifyCompress from '@fastify/compress';
 import fastifyCookie from '@fastify/cookie';
@@ -20,6 +20,7 @@ import type { AppConfig } from './config';
 import { Db } from './db/database';
 import { migrate } from './db/migrations';
 import { createRepositories } from './db/repos';
+import { secureDatabaseFiles, secureDataDir } from './data-dir';
 import { Calendar } from './domain/calendar';
 import { TokenVault } from './domain/crypto';
 import { AppError } from './errors';
@@ -62,8 +63,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const { config } = options;
   const clock = options.clock ?? systemClock;
   const ownsDb = options.db === undefined;
+  // The data folder holds the transaction history in plain data and the key that seals the token: owner-only, always.
+  if (ownsDb && dirname(config.databasePath) === config.dataDir) secureDataDir(config.dataDir);
   const db = options.db ?? new Db(config.databasePath);
   migrate(db);
+  if (ownsDb) secureDatabaseFiles(config.databasePath);
 
   const logger = loggerOptions(config);
   const app: App = Fastify({

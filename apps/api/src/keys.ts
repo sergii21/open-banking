@@ -1,6 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { secureDataDir } from './data-dir';
 
 export interface StoredKeys {
   /** HMAC key for CSRF tokens. */
@@ -17,6 +18,7 @@ export const KEY_FILE = 'secret.key';
  * the app asks for it again.
  */
 export function loadOrCreateKeys(dataDir: string): StoredKeys {
+  secureDataDir(dataDir);
   const path = join(dataDir, KEY_FILE);
   if (existsSync(path)) {
     try {
@@ -38,7 +40,6 @@ export function loadOrCreateKeys(dataDir: string): StoredKeys {
     session: randomBytes(48).toString('base64'),
     token: randomBytes(32).toString('base64'),
   };
-  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(keys), { mode: 0o600 });
   chmodSync(path, 0o600);
   return keys;

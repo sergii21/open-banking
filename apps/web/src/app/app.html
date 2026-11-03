@@ -2,7 +2,7 @@
   <a class="sr-only" href="#main">Skip to content</a>
   <header class="topbar" [class.scrolled]="scrolled()">
     <a class="brand" href="/" (click)="nav.link($event)" aria-label="Ledger Lens, home">
-      <span class="brand-mark"><ll-icon name="lens" [size]="18" /></span>
+      <span class="brand-mark"><ll-icon name="mark" [size]="18" /></span>
       <span class="brand-name">Ledger Lens</span>
     </a>
     @if (session.connected()) {
@@ -26,7 +26,13 @@
       >
         <ll-icon [name]="prefs.hidden() ? 'eye-off' : 'eye'" />
       </button>
-      <button type="button" class="icon-btn" aria-label="Settings" (click)="ui.settings.set(true)">
+      <button
+        type="button"
+        id="settings-btn"
+        class="icon-btn"
+        aria-label="Settings"
+        (click)="ui.settings.set(true)"
+      >
         <ll-icon name="sliders" />
       </button>
     }

@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
 import type { InspectorCall } from '@ledger-lens/contracts';
 import { Live } from '../../core/live';
 import { Session } from '../../core/session';
@@ -9,14 +9,10 @@ import { Icon } from '../../shared/icon';
 @Component({
   selector: 'll-live-api',
   imports: [Icon],
+  host: { '(window:keydown.escape)': 'onEscape($event)' },
   template: `
     @if (ui.liveApi()) {
-      <aside
-        class="api-drawer"
-        role="complementary"
-        aria-labelledby="api-title"
-        (keydown.escape)="ui.liveApi.set(false)"
-      >
+      <aside class="api-drawer" role="complementary" aria-labelledby="api-title">
         <div class="sheet-head">
           <h2 id="api-title">Live API</h2>
           <button
@@ -27,13 +23,19 @@ import { Icon } from '../../shared/icon';
           >
             Clear
           </button>
-          <button type="button" class="icon-btn" aria-label="Close" (click)="ui.liveApi.set(false)">
+          <button #close type="button" class="icon-btn" aria-label="Close" (click)="closeDrawer()">
             <ll-icon name="x" />
           </button>
         </div>
         <p class="hint" style="padding: 0 20px 8px">
-          What this app asked monobank, and what it answered. The token is replaced by [redacted],
-          and so are card numbers.
+          @if (session.demo()) {
+            You are on demo data: these are the calls this app makes to the built-in demo bank,
+            through the same code that talks to monobank. Connect your own token and the real ones
+            appear here.
+          } @else {
+            What this app asked monobank, and what it answered. The token is replaced by [redacted],
+            and so are card numbers.
+          }
         </p>
         <div class="call-list">
           @for (call of live.calls(); track call.id) {
@@ -73,6 +75,38 @@ export class LiveApi {
   protected readonly live = inject(Live);
   protected readonly session = inject(Session);
   protected readonly open = signal<string | null>(null);
+  private readonly closeButton = viewChild<ElementRef<HTMLButtonElement>>('close');
+  private opener: HTMLElement | null = null;
+
+  constructor() {
+    // The drawer takes focus when it opens (its Close button) and remembers where focus was, so closing can give it back.
+    effect(() => {
+      const button = this.closeButton()?.nativeElement;
+      if (!button) return;
+      const active = document.activeElement;
+      this.opener = active instanceof HTMLElement && active !== document.body ? active : null;
+      // After the frame: the Settings sheet that opened the drawer is closing in the same breath and hands focus back first.
+      requestAnimationFrame(() => {
+        if (button.isConnected) button.focus();
+      });
+    });
+  }
+
+  protected closeDrawer(): void {
+    this.ui.liveApi.set(false);
+    // Back to where the person came from. The "Live API" button lived in the Settings sheet, which is gone by now, so the
+    // control that opened Settings gets the focus.
+    const usable = this.opener?.isConnected === true && this.opener.offsetParent !== null;
+    (usable ? this.opener : document.getElementById('settings-btn'))?.focus();
+    this.opener = null;
+  }
+
+  /** The drawer is non-modal, so Escape works from anywhere, unless a modal sheet is on top: that one closes first. */
+  protected onEscape(event: Event): void {
+    if (!this.ui.liveApi() || document.querySelector('dialog[open]')) return;
+    event.preventDefault();
+    this.closeDrawer();
+  }
 
   protected path(call: InspectorCall): string {
     try {

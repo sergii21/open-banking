@@ -76,7 +76,7 @@
               currency="UAH"
               size="xl"
               [fraction]="false"
-            /><span class="hint"> a month</span>
+            /><span class="hint nowrap"> a month</span>
           </dd>
         </div>
       </dl>
@@ -139,13 +139,13 @@
                 <span style="min-width: 0">
                   <span class="row-title" style="display: block">{{ r.merchant }}</span>
                   <span class="row-sub" style="display: block"
-                    >{{ cadence[r.cadence] }} · next around {{ shortDate(r.nextExpectedAt) }}</span
+                    >{{ cadence[r.cadence] }} · next {{ shortDate(r.nextExpectedAt) }}</span
                   >
                 </span>
                 <span class="row-end">
                   <ll-amount [minor]="r.amountMinor" currency="UAH" />
                   @if (r.cadence !== 'monthly') {
-                    <small
+                    <small class="nowrap"
                       >≈ <ll-amount [minor]="r.monthlyMinor" currency="UAH" [fraction]="false" /> a
                       month</small
                     >

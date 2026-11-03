@@ -44,5 +44,12 @@ test('pasting a token: a wrong one is explained, the right one shows balances at
     .poll(async () => (await chip.innerText()).replace(/\s+/g, ' '), { timeout: 40_000 })
     .toMatch(/Updated|Loading history · [2-9]|Next step in .* · [2-9]/);
 
+  // Leaving for good takes two presses, and everything read from the bank is deleted here.
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Disconnect and delete my data/ }).click();
+  await page.getByRole('button', { name: /Press again to delete everything/ }).click();
+  await expect(page).toHaveURL(/\/welcome/);
+
   expect(await violations()).toEqual([]);
 });

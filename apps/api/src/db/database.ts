@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
+import { secureDatabaseFiles } from '../data-dir';
 
 export type SqlParam = SQLInputValue;
 
@@ -21,6 +22,8 @@ export class Db {
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     if (path !== ':memory:') {
       this.db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;');
+      // The history is plain data: owner-only (SQLite gives the -wal and -shm files the main file's permissions).
+      secureDatabaseFiles(path);
     }
   }
 

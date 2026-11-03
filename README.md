@@ -46,7 +46,8 @@ docs                 START_HERE.md, HANDOVER.md (state of the work), UKRAINE.md,
 - One browser is one session: an HttpOnly cookie, a CSRF header on every write, a strict Content-Security-Policy. The browser
   only talks to this server, same origin. The bank is only ever called from the server.
 - The token is sealed with AES-256-GCM under a key generated on the first run and kept next to the database. It never reaches
-  the browser, a log or the Live API drawer (`x-token` is redacted).
+  the browser, a log or the Live API drawer (`x-token` is redacted). The transaction history in the SQLite file is not encrypted by the app: it is protected by the
+  folder (0700) and file (0600) permissions and by your disk's own encryption.
 - Real accounts connect only when the app is served from this machine (`PUBLIC_URL` on localhost). A public instance can only
   run demo data.
 - Money is integer minor units plus a currency. Home and Insights value foreign amounts in hryvnias at today's rate and say so.

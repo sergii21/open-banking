@@ -50,6 +50,17 @@ diagnostics report where a credit card's balance sits against its limit); that a
 that item (the spec only says "account balance"; the diagnostics report how many consecutive pairs agree); the real 429 body;
 real latency; the Render blueprint (now demo-only; reasoned from the code, never deployed).
 
+### Polish pass after the review
+
+Done: Home is two independent columns on desktop (one order on a phone); the Live API drawer closes on Escape, takes focus when it
+opens and gives it back to the Settings button; phone Insights no longer breaks "a month", stacks each category's count and
+comparison, and lets regular payments wrap; the Activity search placeholder is "Search" on a phone; the Settings footer reads
+"g then h, a or i"; Settings has "Leave the demo and connect monobank" (no warning, no double press) and START_HERE uses it; the
+data folder is created 0700 and the database files 0600 (the token is encrypted, the transaction history is plain data protected
+by those permissions and the disk; the docs say exactly that, and two tests cover it); the logo is a trend mark instead of a
+magnifier. Screenshots were retaken at 1x as JPEGs (all under 125 kB; the old PNGs are gone). `npm run verify` exits 0 (contracts 11,
+API 69, web 4 tests, initial JS + CSS 197.7 kB) and the 10 Playwright tests pass.
+
 ### What is left
 
 Finished in the docs pass: `README.md` (rewritten for v2), `docs/UKRAINE.md` (cut to what is true), `render.yaml` (demo-only; `HOST=0.0.0.0`
@@ -72,7 +83,7 @@ phone and 320 px screenshots reduced to 1x.
      (statement and account-list intervals, window days, row cap, history months); no redirect or payment parts; one adapter class
      serves `monobank` and `demo`; the fake bank is in `providers/monobank/demo`; DTOs are tolerant (per-row parse, diagnostics
      collector). The v1 text is in the `v1-full-featured` tag.
-2. Home on desktop: the hero card does not stretch to the height of the accounts column.
+2. Done in the polish pass: Home on desktop is two independent columns.
 3. Noticed, not changed (it is code): `npm run dev` serves the SPA on :4200, but `PUBLIC_URL` now defaults to `http://localhost:<PORT>`,
    so the CSRF origin check rejects writes unless `PUBLIC_URL=http://localhost:4200` is set (the README says so; the default could
    follow `NODE_ENV=development`). Not verified.
@@ -82,7 +93,7 @@ phone and 320 px screenshots reduced to 1x.
 
 `npm run fake:monobank` keeps one limit for everything that talks to it. If an earlier session's background loader is still
 running against the same fake, a new session's first statement gets a 429 and waits 60 s ("Next step in 59 s" in
-`docs/screenshots/15-paced-home-loading.png`). A real token has its own limit.
+`docs/screenshots/15-paced-home-loading.jpg`). A real token has its own limit.
 
 ---
 

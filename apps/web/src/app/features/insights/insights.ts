@@ -7,10 +7,10 @@ import { CATEGORY_LABEL } from '../../shared/categories';
 import { categoryIcon, Icon } from '../../shared/icon';
 
 const CADENCE: Record<string, string> = {
-  weekly: 'Every week',
-  monthly: 'Every month',
-  quarterly: 'Every 3 months',
-  yearly: 'Every year',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  yearly: 'Yearly',
 };
 
 @Component({
@@ -73,7 +73,7 @@ export class Insights {
     if (category.previousMinor === null) return null;
     const diff = category.spentMinor - category.previousMinor;
     const than = this.data()?.previousIsSameDays ? 'the same days last month' : 'the month before';
-    if (diff === 0) return `Same as ${than}`;
+    if (diff === 0) return 'Unchanged from last month';
     return `${formatMoney(Math.abs(diff), 'UAH', { fraction: false })} ${diff > 0 ? 'more' : 'less'} than ${than}`;
   }
 }

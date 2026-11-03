@@ -49,6 +49,12 @@ test('the demo: every tab, instant search, a transaction, the live calls, and no
   await expect(drawer.getByText('/personal/client-info').first()).toBeVisible();
   await expect(drawer.getByText('/personal/statement').first()).toBeVisible();
 
+  // The drawer takes focus when it opens, Escape closes it, and focus goes back to the control that started it.
+  await expect(drawer.getByRole('button', { name: 'Close' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Settings' })).toBeFocused();
+
   await settle(page);
   expect(await violations()).toEqual([]);
 });
@@ -67,13 +73,10 @@ test('blurring amounts is one click, covers every screen, and is remembered', as
   await expect(page.locator('.row .amt').first()).toHaveCSS('filter', 'none');
 });
 
-test('disconnecting deletes what was read and returns to the first-run screen', async ({
-  page,
-}) => {
+test('leaving the demo is one click and returns to the first-run screen', async ({ page }) => {
   await connectDemo(page);
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: /Disconnect and delete my data/ }).click();
-  await page.getByRole('button', { name: /Press again to delete everything/ }).click();
+  await page.getByRole('button', { name: /Leave the demo and connect monobank/ }).click();
   await expect(page).toHaveURL(/\/welcome/);
   await expect(page.getByRole('button', { name: 'Try with demo data' })).toBeVisible();
 });

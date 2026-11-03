@@ -34,197 +34,208 @@
       </p>
     }
 
-    <section class="hero a-hero enter" aria-labelledby="hero-title">
-      <div class="hero-top">
-        <h2 id="hero-title">Your money</h2>
-        @if (trend(); as t) {
-          <span class="delta" [attr.aria-label]="'Change over 30 days'">
-            <ll-amount [minor]="t.change" currency="UAH" [plus]="true" [fraction]="false" /> in 30
-            days
-          </span>
-        }
-      </div>
-      <ll-amount [minor]="shown()" currency="UAH" size="hero" />
-      <p class="hero-sub">
-        @if (credit() !== null) {
-          Available with credit
-          <ll-amount [minor]="credit() ?? 0" currency="UAH" [fraction]="false" />
-        } @else if (h.accounts.length > 1) {
-          Across {{ h.accounts.length }} accounts, in hryvnias
-        }
-      </p>
-      @if (trend(); as t) {
-        <ll-sparkline [points]="t.points" [from]="t.from" />
-      } @else {
-        <div
-          class="hero-chart"
-          style="
-            display: grid;
-            place-items: center;
-            color: var(--on-hero-2);
-            font-size: var(--fs-sm);
-          "
-        >
-          @if (h.sync.total > 0) {
-            The 30-day line appears when history has loaded ({{ h.sync.done }} of
-            {{ h.sync.total }})
+    <div class="col">
+      <section class="hero a-hero enter" aria-labelledby="hero-title">
+        <div class="hero-top">
+          <h2 id="hero-title">Your money</h2>
+          @if (trend(); as t) {
+            <span class="delta" [attr.aria-label]="'Change over 30 days'">
+              <ll-amount [minor]="t.change" currency="UAH" [plus]="true" [fraction]="false" /> in 30
+              days
+            </span>
           }
         </div>
-      }
-      @if (foreign().length > 0) {
-        <div class="hero-ccy" aria-label="Foreign currencies included">
-          @for (f of foreign(); track f.currency) {
-            <span>{{ f.text }}</span>
+        <ll-amount [minor]="shown()" currency="UAH" size="hero" />
+        <p class="hero-sub">
+          @if (credit() !== null) {
+            Available with credit
+            <ll-amount [minor]="credit() ?? 0" currency="UAH" [fraction]="false" />
+          } @else if (h.accounts.length > 1) {
+            Across {{ h.accounts.length }} accounts, in hryvnias
           }
-        </div>
-      }
-      @if (ratesNote()) {
-        <p class="hero-foot">
-          <span>{{ ratesNote() }}</span>
         </p>
-      }
-    </section>
-
-    <section class="a-accounts enter" style="--i: 1" aria-labelledby="accounts-title">
-      <div class="card-head" style="margin-bottom: 8px; padding: 0 4px">
-        <h2 class="card-title" id="accounts-title">Accounts</h2>
-        <span class="card-aside">{{ h.accounts.length }}</span>
-      </div>
-      <div class="accounts">
-        @for (account of h.accounts; track account.id; let i = $index) {
-          <a
-            class="tile enter"
-            [style.--i]="i + 2"
-            [attr.href]="'/activity?card=' + account.id"
-            (click)="nav.link($event)"
+        @if (trend(); as t) {
+          <ll-sparkline [points]="t.points" [from]="t.from" />
+        } @else {
+          <div
+            class="hero-chart"
+            style="
+              display: grid;
+              place-items: center;
+              color: var(--on-hero-2);
+              font-size: var(--fs-sm);
+            "
           >
-            <span class="tile-top">
-              <span class="badge badge-sm" [attr.data-cat]="account.kind">
-                <ll-icon [name]="account.kind === 'jar' ? 'jar' : 'card'" [size]="18" />
-              </span>
-              <span class="tile-name"
-                ><span class="sr-only">Open transactions of </span>{{ account.name }}
-                <small>{{
-                  account.kind === 'jar' ? 'Jar' : account.last4 ? '•••• ' + account.last4 : 'Card'
-                }}</small>
-              </span>
-            </span>
-            <span class="tile-amt">
-              <ll-amount [minor]="account.ownMinor" [currency]="account.currency" size="lg" />
-              @if (goalWidth(account); as width) {
-                <span class="meter" role="presentation"><i [style.--w]="width"></i></span>
-              }
-              <span class="tile-note">{{ tileNote(account) }}</span>
-            </span>
-          </a>
-        }
-      </div>
-    </section>
-
-    <section class="card a-month enter" style="--i: 2" aria-labelledby="month-title">
-      <div class="card-head">
-        <h2 class="card-title" id="month-title">Spent in {{ monthTitle() }}</h2>
-        <a class="link-btn" href="/insights" (click)="nav.link($event)">Details</a>
-      </div>
-      <div class="month-figure">
-        <ll-amount [minor]="h.month.spentMinor" currency="UAH" size="lg" [fraction]="false" />
-        @if (delta(); as d) {
-          @if (d.kind === 'pct') {
-            <span class="delta" [attr.data-tone]="d.tone"
-              >{{ d.text }} vs same days last month</span
-            >
-          } @else if (d.kind === 'loading') {
-            <span class="delta">Last month is still loading</span>
-          } @else {
-            <span class="delta">Nothing spent the same days last month</span>
-          }
-        }
-      </div>
-      <ll-daily-bars
-        [values]="h.month.daily"
-        [today]="h.month.daysElapsed"
-        [month]="h.month.label"
-      />
-      <p class="month-note">
-        @if (h.month.projectedMinor !== null) {
-          On pace for about
-          <ll-amount [minor]="h.month.projectedMinor" currency="UAH" [fraction]="false" /> by month
-          end.
-        } @else {
-          A pace estimate appears once the last 30 days have loaded.
-        }
-        @if (h.month.incomeMinor > 0) {
-          Income so far
-          <ll-amount
-            [minor]="h.month.incomeMinor"
-            currency="UAH"
-            [fraction]="false"
-            [tone]="true"
-          />.
-        }
-      </p>
-    </section>
-
-    <div class="side-stack a-side">
-      <section class="card enter" style="--i: 3" aria-labelledby="cats-title">
-        <div class="card-head">
-          <h2 class="card-title" id="cats-title">Top categories</h2>
-          <a class="link-btn" href="/insights" (click)="nav.link($event)">All</a>
-        </div>
-        @if (h.topCategories.length > 0) {
-          <ul class="rank">
-            @for (c of h.topCategories; track c.category) {
-              <li>
-                <span class="badge" [attr.data-cat]="c.category"
-                  ><ll-icon [name]="categoryIcon(c.category)" [size]="20"
-                /></span>
-                <span class="rank-name">{{ labelOf[c.category] }}</span>
-                <span class="rank-val"
-                  ><ll-amount [minor]="c.spentMinor" currency="UAH" [fraction]="false"
-                /></span>
-                <span class="meter" role="presentation"
-                  ><i [style.--w]="(c.spentMinor / topMax()) * 100 + '%'"></i
-                ></span>
-              </li>
+            @if (h.sync.total > 0) {
+              The 30-day line appears when history has loaded ({{ h.sync.done }} of
+              {{ h.sync.total }})
             }
-          </ul>
-        } @else {
-          <p class="hint">Nothing categorised this month yet.</p>
+          </div>
+        }
+        @if (foreign().length > 0) {
+          <div class="hero-ccy" aria-label="Foreign currencies included">
+            @for (f of foreign(); track f.currency) {
+              <span>{{ f.text }}</span>
+            }
+          </div>
+        }
+        @if (ratesNote()) {
+          <p class="hero-foot">
+            <span>{{ ratesNote() }}</span>
+          </p>
         }
       </section>
 
-      <a class="card teaser enter" style="--i: 4" href="/insights" (click)="nav.link($event)">
-        <span class="badge" data-cat="subscriptions"><ll-icon name="repeat" /></span>
-        <span style="flex: 1">
-          @if (h.regular.count > 0) {
-            <strong>{{ h.regular.count }} regular payments</strong>
-            <span
-              ><ll-amount [minor]="h.regular.monthlyMinor" currency="UAH" [fraction]="false" /> a
-              month</span
-            >
-          } @else {
-            <strong>Regular payments</strong>
-            <span>Subscriptions and bills show up here once they have repeated.</span>
+      <section class="card a-month enter" style="--i: 2" aria-labelledby="month-title">
+        <div class="card-head">
+          <h2 class="card-title" id="month-title">Spent in {{ monthTitle() }}</h2>
+          <a class="link-btn" href="/insights" (click)="nav.link($event)">Details</a>
+        </div>
+        <div class="month-figure">
+          <ll-amount [minor]="h.month.spentMinor" currency="UAH" size="lg" [fraction]="false" />
+          @if (delta(); as d) {
+            @if (d.kind === 'pct') {
+              <span class="delta" [attr.data-tone]="d.tone"
+                >{{ d.text }} vs same days last month</span
+              >
+            } @else if (d.kind === 'loading') {
+              <span class="delta">Last month is still loading</span>
+            } @else {
+              <span class="delta">Nothing spent the same days last month</span>
+            }
           }
-        </span>
-        <ll-icon name="chevron-right" />
-      </a>
+        </div>
+        <ll-daily-bars
+          [values]="h.month.daily"
+          [today]="h.month.daysElapsed"
+          [month]="h.month.label"
+        />
+        <p class="month-note">
+          @if (h.month.projectedMinor !== null) {
+            On pace for about
+            <ll-amount [minor]="h.month.projectedMinor" currency="UAH" [fraction]="false" /> by
+            month end.
+          } @else {
+            A pace estimate appears once the last 30 days have loaded.
+          }
+          @if (h.month.incomeMinor > 0) {
+            Income so far
+            <ll-amount
+              [minor]="h.month.incomeMinor"
+              currency="UAH"
+              [fraction]="false"
+              [tone]="true"
+            />.
+          }
+        </p>
+      </section>
+    </div>
+    <div class="col">
+      <section class="a-accounts enter" style="--i: 1" aria-labelledby="accounts-title">
+        <div class="card-head" style="margin-bottom: 8px; padding: 0 4px">
+          <h2 class="card-title" id="accounts-title">Accounts</h2>
+          <span class="card-aside">{{ h.accounts.length }}</span>
+        </div>
+        <div class="accounts">
+          @for (account of h.accounts; track account.id; let i = $index) {
+            <a
+              class="tile enter"
+              [style.--i]="i + 2"
+              [attr.href]="'/activity?card=' + account.id"
+              (click)="nav.link($event)"
+            >
+              <span class="tile-top">
+                <span class="badge badge-sm" [attr.data-cat]="account.kind">
+                  <ll-icon [name]="account.kind === 'jar' ? 'jar' : 'card'" [size]="18" />
+                </span>
+                <span class="tile-name"
+                  ><span class="sr-only">Open transactions of </span>{{ account.name }}
+                  <small>{{
+                    account.kind === 'jar'
+                      ? 'Jar'
+                      : account.last4
+                        ? '•••• ' + account.last4
+                        : 'Card'
+                  }}</small>
+                </span>
+              </span>
+              <span class="tile-amt">
+                <ll-amount [minor]="account.ownMinor" [currency]="account.currency" size="lg" />
+                @if (goalWidth(account); as width) {
+                  <span class="meter" role="presentation"><i [style.--w]="width"></i></span>
+                }
+                <span class="tile-note">{{ tileNote(account) }}</span>
+              </span>
+            </a>
+          }
+        </div>
+      </section>
+
+      <div class="side-stack a-side">
+        <section class="card enter" style="--i: 3" aria-labelledby="cats-title">
+          <div class="card-head">
+            <h2 class="card-title" id="cats-title">Top categories</h2>
+            <a class="link-btn" href="/insights" (click)="nav.link($event)">All</a>
+          </div>
+          @if (h.topCategories.length > 0) {
+            <ul class="rank">
+              @for (c of h.topCategories; track c.category) {
+                <li>
+                  <span class="badge" [attr.data-cat]="c.category"
+                    ><ll-icon [name]="categoryIcon(c.category)" [size]="20"
+                  /></span>
+                  <span class="rank-name">{{ labelOf[c.category] }}</span>
+                  <span class="rank-val"
+                    ><ll-amount [minor]="c.spentMinor" currency="UAH" [fraction]="false"
+                  /></span>
+                  <span class="meter" role="presentation"
+                    ><i [style.--w]="(c.spentMinor / topMax()) * 100 + '%'"></i
+                  ></span>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="hint">Nothing categorised this month yet.</p>
+          }
+        </section>
+
+        <a class="card teaser enter" style="--i: 4" href="/insights" (click)="nav.link($event)">
+          <span class="badge" data-cat="subscriptions"><ll-icon name="repeat" /></span>
+          <span style="flex: 1">
+            @if (h.regular.count > 0) {
+              <strong>{{ h.regular.count }} regular payments</strong>
+              <span
+                ><ll-amount [minor]="h.regular.monthlyMinor" currency="UAH" [fraction]="false" /> a
+                month</span
+              >
+            } @else {
+              <strong>Regular payments</strong>
+              <span>Subscriptions and bills show up here once they have repeated.</span>
+            }
+          </span>
+          <ll-icon name="chevron-right" />
+        </a>
+      </div>
     </div>
   </div>
 } @else if (stores.home.loading() || !stores.home.error()) {
   <div class="home" aria-busy="true" aria-label="Loading Home">
-    <div class="hero a-hero skel" style="color: transparent"></div>
-    <div class="a-accounts">
-      <div class="accounts">
-        @for (i of skeletonTiles; track i) {
-          <div class="tile skel"></div>
-        }
-      </div>
+    <div class="col">
+      <div class="hero a-hero skel" style="color: transparent"></div>
+      <div class="card a-month skel" style="min-height: 288px"></div>
     </div>
-    <div class="card a-month skel" style="min-height: 288px"></div>
-    <div class="side-stack a-side">
-      <div class="card skel" style="min-height: 316px"></div>
-      <div class="card skel" style="min-height: 78px"></div>
+    <div class="col">
+      <div class="a-accounts">
+        <div class="accounts">
+          @for (i of skeletonTiles; track i) {
+            <div class="tile skel"></div>
+          }
+        </div>
+      </div>
+      <div class="side-stack a-side">
+        <div class="card skel" style="min-height: 316px"></div>
+        <div class="card skel" style="min-height: 78px"></div>
+      </div>
     </div>
   </div>
 }

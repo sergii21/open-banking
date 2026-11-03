@@ -1,5 +1,19 @@
 <ll-sheet [(open)]="ui.settings" title="Settings">
   @if (session.connection(); as connection) {
+    @if (connection.demo) {
+      <section class="settings-group" aria-label="Demo">
+        <button type="button" class="setting setting-primary" (click)="leaveDemo()">
+          <span>
+            <b>Leave the demo and connect monobank</b>
+            <small
+              >Takes you to the first-run screen. The demo data goes away; none of it was
+              yours.</small
+            >
+          </span>
+          <ll-icon name="chevron-right" />
+        </button>
+      </section>
+    }
     <section class="settings-group" aria-label="Connection">
       <h3>Connection</h3>
       <div class="setting">
@@ -130,7 +144,7 @@
     </button>
   </section>
 
-  @if (session.connection()) {
+  @if (session.connection() && !session.demo()) {
     <section class="settings-group" aria-label="Disconnect">
       <h3>Leave</h3>
       <button type="button" class="setting" [class.danger]="confirming()" (click)="disconnect()">
@@ -150,7 +164,7 @@
 
   <p class="hint" style="margin-top: 18px">
     Shortcuts: <span class="kbd">/</span> search · <span class="kbd">g</span> then
-    <span class="kbd">h</span> <span class="kbd">a</span> <span class="kbd">i</span> switch tabs ·
-    version {{ session.info()?.version }}
+    <span class="kbd">h</span>, <span class="kbd">a</span> or <span class="kbd">i</span> to switch
+    tabs · version {{ session.info()?.version }}
   </p>
 </ll-sheet>

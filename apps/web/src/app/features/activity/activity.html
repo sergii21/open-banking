@@ -8,7 +8,7 @@
       type="search"
       autocomplete="off"
       spellcheck="false"
-      placeholder="Search merchants, comments, amounts"
+      [placeholder]="narrow() ? 'Search' : 'Search merchants, comments, amounts'"
       aria-label="Search transactions"
       [value]="q()"
       (input)="q.set($any($event.target).value)"

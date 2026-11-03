@@ -2,6 +2,7 @@
 // playwright.config.ts for the environment), then: node scripts/screenshots.mjs
 //   DEMO  http://localhost:4300   the built app on the demo bank
 //   LIVE  http://localhost:4301   the real-token flow against the paced fake monobank on :4310 (one read per few seconds)
+/* global document */
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 
@@ -26,7 +27,7 @@ const shot = async (page, name) => {
     ),
   );
   await page.waitForTimeout(150);
-  await page.screenshot({ path: `${out}${name}.png`, type: 'png' });
+  await page.screenshot({ path: `${out}${name}.jpg`, type: 'jpeg', quality: 82 });
   process.stdout.write(`  ${name}\n`);
 };
 async function context(base, { width, height, scheme = 'dark', scale = 1 }) {
@@ -55,7 +56,7 @@ async function demo(page) {
 }
 
 const D = { width: 1280, height: 800 };
-const P = { width: 375, height: 812, scale: 2 };
+const P = { width: 375, height: 812, scale: 1 };
 
 process.stdout.write('demo, desktop\n');
 {
@@ -103,7 +104,7 @@ process.stdout.write('demo, phone\n');
   await ctx.close();
 }
 {
-  const { ctx, page } = await context(DEMO, { width: 320, height: 640, scale: 2 }, 'dark');
+  const { ctx, page } = await context(DEMO, { width: 320, height: 640, scale: 1 }, 'dark');
   await page.goto('/');
   await shot(page, '13-welcome-320');
   await demo(page);
@@ -111,7 +112,7 @@ process.stdout.write('demo, phone\n');
   await ctx.close();
 }
 {
-  const { ctx, page } = await context(DEMO, { width: 375, height: 812, scheme: 'light', scale: 2 });
+  const { ctx, page } = await context(DEMO, { width: 375, height: 812, scheme: 'light', scale: 1 });
   await demo(page);
   await shot(page, '10b-home-phone-light');
   await ctx.close();
