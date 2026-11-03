@@ -3,8 +3,8 @@ name: e2e-smoke-testing
 description: >
   Reference for Ledger Lens's Playwright suite (e2e/). Use this skill whenever asked to smoke-test the app, check whether it works end
   to end, run a regression pass after changes, or investigate an "is X broken" question. Run `npm run e2e` first: it builds the app,
-  starts its own servers (the demo app, a paced fake of api.monobank.ua and a second app wired to that fake) and finishes in about a
-  minute, with no browser exploration needed. Only fall back to manual browsing for things outside the suite's coverage. Also use
+  starts its own servers (the demo app, paced fakes of api.monobank.ua and acp.privatbank.ua, and a second app wired to them) and
+  finishes in about two minutes, with no browser exploration needed. Only fall back to manual browsing for things outside the suite's coverage. Also use
   when extending the suite or adding axe accessibility checks.
 tools: Read, Bash, Edit, Write
 ---
@@ -18,7 +18,7 @@ export PATH="$HOME/.nvm/versions/node/v24.15.0/bin:$PATH"
 npm run e2e                                  # build, then every project
 npm run e2e:only                             # skip the build (after a build you trust)
 npx playwright test e2e/demo.spec.ts         # one file
-npx playwright test --project=monobank       # one project (chromium, mobile or monobank)
+npx playwright test --project=privat         # one project (chromium, mobile, monobank or privat; privat runs monobank first)
 npm run e2e:report                           # open the last HTML report
 PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test --project=chromium   # demo specs against a server you started
 ```
@@ -65,13 +65,15 @@ because contrast and positions are only meaningful afterwards), `expectNoViolati
   `.tile`, `.row`) mark things with no role of their own.
 - Each test gets a fresh browser context, so a fresh anonymous session and its own data. Tests do not share state.
 - Wait on what the person would see (`expect(...).toBeVisible({ timeout })`), never on a fixed sleep. History in the `monobank` project
-  arrives one step every four seconds.
+  arrives one step every four seconds, in the `privat` project about one every second or two; a bank that stops answering is tried
+  again after 30 s, so a recovery test needs a long timeout (`test.setTimeout`).
 - A new screen or sheet goes into `a11y.spec.ts` in both colour schemes. A contrast failure means a token needs a better `light-dark()`
   pair in `apps/web/src/styles/tokens.css`, not an exemption in the test.
 - A sheet or drawer must close with Escape and return focus to what opened it; `demo.spec.ts` asserts that for the Live API drawer, so do the same when you add one.
 
 ## Not covered by the suite
 
-The real monobank service (it needs the person's own token: `npm run doctor`), the `./start.sh` first run, and visual quality beyond axe
-and the edge check. For those, run the app and look at it on a phone width and a desktop width in dark and light mode;
-`node scripts/screenshots.mjs` retakes `docs/screenshots` from the three servers above if you start them as `playwright.config.ts` does.
+The real monobank and PrivatBank services (they need the person's own token: `npm run doctor`, `npm run doctor:privat`), a real Privat24
+statement (the fixtures are built from a description, not from an export), the `./start.sh` first run, and visual quality beyond axe and
+the edge check. For those, run the app and look at it on a phone width and a desktop width in dark and light mode;
+`node scripts/screenshots.mjs` retakes `docs/screenshots` from the four servers above if you start them as `playwright.config.ts` does.

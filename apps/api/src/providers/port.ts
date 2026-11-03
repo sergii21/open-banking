@@ -12,13 +12,18 @@ export interface TokenSet {
 }
 
 export interface ProviderAccount {
+  /**
+   * The bank's id for the account, which the core hands back when it asks for statements. Opaque for monobank; for PrivatBank it is
+   * the IBAN, because the API addresses an account by nothing else. It is stored as it is, shown as four digits and masked in the
+   * Live API drawer.
+   */
   providerAccountId: string;
   kind: 'card' | 'jar';
-  /** The bank's own type (black, white, platinum, iron, fop, yellow, eAid) or `jar`. */
+  /** The bank's own type (black, white, platinum, iron, fop, yellow, eAid), `business` (PrivatBank) or `jar`. */
   cardType: string;
   name: string;
   currency: string;
-  /** Already reduced to the last four digits; the adapter never hands the full card number or IBAN to the core. */
+  /** Already reduced to the last four digits: no other field carries a full card number or IBAN except an id the bank needs in full. */
   last4: string | null;
   creditLimitMinor: number;
   /** As the bank reports it: includes the credit limit. The core subtracts it to get own funds. */

@@ -20,7 +20,7 @@ rate-limited bank with a header token and no OAuth. Personal Privat cards have n
 ```
 apps/api/src/providers/
   port.ts                  BankingProvider, ProviderLimits, ProviderAccount / ProviderTransaction / RatePair, TokenRejectedError
-  registry.ts              builds `monobank` (only when live) and `demo`: transport, diagnostics collector, rate sources
+  registry.ts              builds `monobank` and `privatbank` (only when live) and `demo`: transport, diagnostics collector, rate sources
   transport.ts             ProviderHttp: every call timed, redacted and filed with the Live API drawer; a network failure
                            becomes bank_unavailable; non-2xx answers are returned, not thrown
   token.ts                 normaliseToken: strips whitespace and quotes from what the person pasted
@@ -53,8 +53,9 @@ worker paces itself from it and asks for the rest of a window when a response re
 ## Rules for an adapter
 
 1. **Normalise at the edge.** Money is integer minor units with the account's currency (negative is out). Card numbers and IBANs are
-   reduced to the last four digits before they leave the adapter. Own funds are computed by the core from `balanceMinor` and
-   `creditLimitMinor`; the adapter reports what the bank said.
+   reduced to the last four digits (`last4`) before they leave the adapter. The one exception is an account id the bank only accepts in
+   full: PrivatBank's `providerAccountId` is the IBAN, stored as it is, shown as four digits and masked in the drawer. Own funds are
+   computed by the core from `balanceMinor` and `creditLimitMinor`; the adapter reports what the bank said.
 2. **Parse tolerantly, fail loudly only when the whole answer is wrong.** Each row goes through `parseRows(Dto, raw)`: a row that does not
    parse is skipped and counted (`diagnostics.warn`), the rest is used. An answer of the wrong top-level shape is `unreadable` (a
    `provider_error`), never guessed at. Optional fields stay optional: monobank omits `comment`, `receiptId`, `goal` and others.
@@ -64,15 +65,16 @@ worker paces itself from it and asks for the rest of a window when a response re
 4. **Map statuses to the states the screens know.** 401 and 403 → `TokenRejectedError` (the loader stops and the app asks for a new
    token); 429 → `AppError('rate_limited', 429, …, { retryAfterSeconds })` (the worker waits as long as the bank says, else 60 s);
    5xx and network failures → `bank_unavailable`; anything else → `provider_error` with the status. PrivatBank also maps 400 `VE014`
-   (bad token format) to `TokenRejectedError`, and a `settings` answer with `phase` ≠ `WRK` or `work_balance` `Y` to `bank_unavailable`
-   with the daily-routine message.
+   (bad token format) to `TokenRejectedError`, a `settings` answer with `phase` ≠ `WRK` or `work_balance` `Y` to `bank_unavailable`
+   with the daily-routine message, and waits 5 s on a 429 that names no time.
 5. **No caching, no retries in the adapter.** The sync worker owns pacing; an adapter that retries on its own can burn the one read a
    minute. If an endpoint is cheap to share (the account list is the balance call), the worker shares it. The one exception: when a
    window needs several requests (PrivatBank's pages), the adapter paces itself between them, and the worker measures its wait from the
    end of the step. A bank with one limit for every endpoint sets `limits.sharedLimit`, which joins the gates.
 6. **The token stays out of everything.** It is sent only in the bank's token header (`X-Token` for monobank, `token` for PrivatBank),
-   through `ProviderHttp`; `connect` strips whitespace and quotes from what the person pasted (`providers/token.ts`) and refuses anything
-   that does not look like a token before calling the bank. `domain/redact.ts` masks those headers, and for a live provider card
+   through `ProviderHttp`; `connect` strips whitespace and quotes from what the person pasted (`providers/token.ts`). monobank's also
+   refuses anything that does not look like a token before calling the bank; PrivatBank's lets the bank answer, because its real
+   `VE014` is the better message. `domain/redact.ts` masks those headers, and for a live provider card
    numbers, IBANs (PrivatBank's `acc`, also in the URL), tax ids and every `*_ULTMT_*` field: add any new secret header or field name there.
 7. **Live means localhost.** A provider that reads a real person's account is registered only when `PUBLIC_URL` is localhost
    (`config.live`); a public instance can run the demo only. Mark such an adapter `mode: 'live'`.
@@ -110,6 +112,8 @@ of a paged, rate-limited bank with a header token. A bank with no API at all is 
 
 ## Trying it against something real
 
-Without a token you can check only what is public: `/bank/currency` (the demo reads real rates through the app) and the real 403 a made-up
-token gets. Anything that needs a real account is the person's to run on their own machine: `npm run doctor` or Settings, Copy diagnostics.
-Never ask for, print or store a real token; the first real connection is their step, and `docs/HANDOVER.md` lists what it will confirm.
+Without a token you can check only what is public: `/bank/currency` (the demo reads real rates through the app), the real 403 a made-up
+monobank token gets, and the real 400 `VE014` a made-up PrivatBank token gets from acp.privatbank.ua (seen through the app on
+2026-11-03). Anything that needs a real account is the person's to run on their own machine: `npm run doctor`, `npm run doctor:privat` or
+Settings, Copy diagnostics. Never ask for, print or store a real token or a real statement file; the first real connection is their step,
+and `docs/HANDOVER.md` lists what it will confirm.

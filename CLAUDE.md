@@ -114,9 +114,10 @@ Project specifics on top of it (ESLint enforces what it can):
   and it is unsealed in one place: `modules/connection/access.ts`.
 - **Data at rest:** only the token is encrypted. The transaction history is plain data in SQLite, so the data folder belongs to its owner:
   `src/data-dir.ts` creates it 0700 and keeps the database files 0600 (and tightens what an older run left open). Never loosen that, and
-  never describe the history as encrypted.
+  never describe the history as encrypted. A PrivatBank business account's IBAN is stored in plain too: it is the id the API addresses the
+  account by (`providerAccountId`), and it is shown as four digits everywhere else.
 - Money is integer minor units + ISO 4217 currency. Never floats; never sum across currencies without a rate. Home and Insights are in
-  hryvnias: foreign balances and rows are valued at the bank's own rate, and the screens say so.
+  hryvnias: foreign balances and rows are valued at monobank's public exchange rates, for every bank, and the screens say so.
 - **Live providers** (a real person's account) only run when `PUBLIC_URL` is localhost (`ALLOW_LIVE_PROVIDERS` overrides it); the server binds
   127.0.0.1 by default. A public instance can run the demo only.
 - **Providers**: `monobank` and `demo` share one adapter class (the demo is the same class on the in-process `FakeMonobank` with a
