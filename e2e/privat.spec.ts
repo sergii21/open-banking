@@ -124,8 +124,8 @@ test('two banks at once: one number, accounts and transactions that say where th
   await expect(page.locator('.hero > .amt')).toContainText('₴');
   await expect(page.locator('.hero-sub')).toContainText(/accounts at 2 banks/);
   await expect(page.locator('.tile')).toHaveCount(8);
-  await expect(page.locator('.tile', { hasText: 'PrivatBank · •••• 6001' })).toHaveCount(1);
-  await expect(page.locator('.tile', { hasText: 'monobank · •••• ' }).first()).toBeVisible();
+  await expect(page.locator('.tile', { hasText: '•••• 6001 · PrivatBank' })).toHaveCount(1);
+  await expect(page.locator('.tile', { hasText: /•••• \d{4} · monobank/ }).first()).toBeVisible();
   await settle(page);
   await expectNoViolations(page);
 

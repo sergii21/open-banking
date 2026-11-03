@@ -47,7 +47,7 @@
       </p>
     }
     @if (ui.imported(); as imported) {
-      <p class="banner a-banner" role="status" style="grid-column: 1 / -1">
+      <p class="banner banner-ok a-banner" role="status" style="grid-column: 1 / -1">
         <ll-icon name="check" [size]="18" />
         <span>
           Read {{ imported.rows.read }} rows from {{ imported.cards.length }}
@@ -181,7 +181,8 @@
                   <ll-icon [name]="account.kind === 'jar' ? 'jar' : 'card'" [size]="18" />
                 </span>
                 <span class="tile-name"
-                  ><span class="sr-only">Open transactions of </span>{{ account.name }}
+                  ><span class="sr-only">Open transactions of </span
+                  ><span class="tile-title">{{ account.name }}</span>
                   <small>{{ tileLabel(account) }}</small>
                 </span>
               </span>

@@ -723,6 +723,7 @@ dialog.sheet::backdrop {
 }
 .banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
@@ -732,8 +733,19 @@ dialog.sheet::backdrop {
   font-size: var(--fs-sm);
   font-weight: 600;
 }
+/* On a phone the button moves under the text instead of squeezing itself onto three lines. */
+.banner > span {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
 .banner .btn {
   margin-left: auto;
+  white-space: nowrap;
+}
+/* Good news is not a warning. */
+.banner-ok {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 .demo-chip {
   display: inline-flex;

@@ -259,14 +259,22 @@
 }
 .tile-name {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--fs-sm);
   font-weight: 650;
 }
+/* Two lines before an ellipsis, so "Business account" and "Business account USD" stay apart on a phone. */
+.tile-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .tile-name small {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--fs-xs);
   font-weight: 500;
   color: var(--text-3);

@@ -167,7 +167,8 @@ export class Home {
   /** What sits under a tile's name: the kind of account, and the bank once there is more than one. */
   protected tileLabel(account: Account): string {
     const kind = account.kind === 'jar' ? 'Jar' : account.last4 ? `•••• ${account.last4}` : 'Card';
-    return this.session.manyBanks() ? `${BANK_NAME[account.bank]} · ${kind}` : kind;
+    // The digits come first: on a narrow tile the bank's name is what gets cut, never the card.
+    return this.session.manyBanks() ? `${kind} · ${BANK_NAME[account.bank]}` : kind;
   }
 
   protected dismissImport(): void {
