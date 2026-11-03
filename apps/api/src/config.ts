@@ -17,6 +17,16 @@ export interface MonobankConfig {
   historyMonths: number;
 }
 
+/** PrivatBank's Autoclient API (business and ФОП accounts), as the live adapter uses it. */
+export interface PrivatbankConfig {
+  /** https://acp.privatbank.ua except in tests and when pointed at the stand-alone fake. */
+  apiUrl: string;
+  /** Gap between two requests. The bank asks for at most one a second; a little more keeps clock jitter from tripping it. */
+  intervalMs: number;
+  /** How many months of history the background loader fetches. */
+  historyMonths: number;
+}
+
 export interface AppConfig {
   env: NodeEnv;
   isProd: boolean;
@@ -46,6 +56,7 @@ export interface AppConfig {
   live: boolean;
   /** Real provider settings, used when `live` is on. */
   monobank: MonobankConfig;
+  privatbank: PrivatbankConfig;
   /** The demo asks the real bank for its public rates before falling back to the fake's. Off in tests. */
   demoRealRates: boolean;
   /** The demo runs the same adapter against the in-process fake; pacing is off so history appears at once. */
@@ -91,6 +102,9 @@ const EnvSchema = z.object({
   MONOBANK_HISTORY_MONTHS: z.coerce.number().int().min(1).max(13).default(2),
   MONOBANK_API_URL: z.url().default('https://api.monobank.ua'),
   MONOBANK_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(600).default(61),
+  PRIVATBANK_API_URL: z.url().default('https://acp.privatbank.ua'),
+  PRIVATBANK_MIN_INTERVAL_MS: z.coerce.number().int().min(0).max(60_000).default(1100),
+  PRIVATBANK_HISTORY_MONTHS: z.coerce.number().int().min(1).max(13).default(2),
   /** 0 (the default) shows the whole demo history at once; a value shows what the paced real thing feels like. */
   DEMO_REAL_RATES: z.stringbool().optional(),
   DEMO_HISTORY_DAYS: z.coerce.number().int().min(30).max(800).default(100),
@@ -175,6 +189,13 @@ export function loadConfig(
     );
   }
 
+  const privatUrl = e.PRIVATBANK_API_URL.replace(/\/+$/, '');
+  if (!privatUrl.startsWith('https://') && !isLoopbackUrl(privatUrl)) {
+    throw new ConfigError(
+      'PRIVATBANK_API_URL must be https (plain http is only allowed for localhost).',
+    );
+  }
+
   return {
     env: e.NODE_ENV,
     isProd,
@@ -201,6 +222,11 @@ export function loadConfig(
       statementIntervalMs: e.MONOBANK_MIN_INTERVAL_SECONDS * 1000,
       infoIntervalMs: e.MONOBANK_MIN_INTERVAL_SECONDS * 1000,
       historyMonths: e.MONOBANK_HISTORY_MONTHS,
+    },
+    privatbank: {
+      apiUrl: privatUrl,
+      intervalMs: e.PRIVATBANK_MIN_INTERVAL_MS,
+      historyMonths: e.PRIVATBANK_HISTORY_MONTHS,
     },
     demoRealRates: e.DEMO_REAL_RATES ?? e.NODE_ENV !== 'test',
     demo: {

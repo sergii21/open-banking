@@ -64,7 +64,7 @@ describe('redaction', () => {
     const redacted = redactJson(
       {
         access_token: 'abc',
-        nested: { refresh_token: 'def', client_secret: 's', code: 'c1', keep: 1 },
+        nested: { refresh_token: 'def', client_secret: 's', code: 'VE014', keep: 1 },
         list: [{ code_verifier: 'v' }, { name: 'ok' }],
         resource_token: 'r',
         status: 'Succeeded',
@@ -76,7 +76,7 @@ describe('redaction', () => {
       nested: {
         refresh_token: '[redacted]',
         client_secret: '[redacted]',
-        code: '[redacted]',
+        code: 'VE014', // an error code, not a secret
         keep: 1,
       },
       list: [{ code_verifier: '[redacted]' }, { name: 'ok' }],

@@ -71,6 +71,7 @@ export class ProviderHttp {
 
     const started = performance.now();
     const at = this.options.clock.now().toISOString();
+    const redactOptions = { maskIdentifiers: this.options.mode === 'live' };
     const recordBase = {
       id: newId('call'),
       at,
@@ -78,10 +79,9 @@ export class ProviderHttp {
       label: spec.label,
       direction: 'outbound' as const,
       method: spec.method,
-      url: redactUrl(spec.url),
+      url: redactUrl(spec.url, redactOptions),
       connectionId: ctx.connectionId,
     };
-    const redactOptions = { maskIdentifiers: this.options.mode === 'live' };
     const requestSummary = {
       headers: redactHeaders(headers),
       body: truncateJson(redactJson(spec.json ?? spec.form ?? null, redactOptions)).value,

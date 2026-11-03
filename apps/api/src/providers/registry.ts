@@ -8,12 +8,16 @@ import type { InspectorStore } from '../modules/inspector/inspector-store';
 import type { BankingProvider } from './port';
 import { MonobankProvider } from './monobank/adapter';
 import { FakeMonobank } from './monobank/demo/fake';
+import { PrivatBankProvider } from './privatbank/adapter';
 import { ProviderHttp, fetchTransport, type Transport } from './transport';
 
 /** The real bank's address, for the public rates the demo shows. */
 const REAL_API = 'https://api.monobank.ua';
 
-/** The enabled adapters: `monobank` (the person's own account, local only) and `demo` (the same adapter on a fake bank). */
+/**
+ * The enabled adapters: `monobank` and `privatbank` (the person's own accounts, local only) and `demo` (the monobank adapter on
+ * a fake bank). `privat24`, an imported statement file, has no adapter: it only has a place to record what the importer saw.
+ */
 export class ProviderRegistry {
   constructor(
     private readonly providers: ReadonlyMap<ProviderId, BankingProvider>,
@@ -52,7 +56,10 @@ export class ProviderRegistry {
 /** Tests replace the network with a scripted bank; production uses `fetch`. */
 export interface ProviderTransports {
   monobank?: Transport;
+  privatbank?: Transport;
   demo?: Transport;
+  /** Waits between PrivatBank requests; tests move their clock instead of the wall clock. */
+  pause?: (ms: number) => Promise<void>;
 }
 
 export interface RegistryDeps {
@@ -76,6 +83,7 @@ export function buildRegistry({
   const providers = new Map<ProviderId, BankingProvider>();
   const rateSources = new Map<ProviderId, BankingProvider[]>();
   const collectors = new Map<ProviderId, DiagnosticsCollector>();
+  collectors.set('privat24', new DiagnosticsCollector());
 
   if (config.live) {
     const diagnostics = new DiagnosticsCollector();
@@ -105,6 +113,42 @@ export function buildRegistry({
     });
     providers.set('monobank', live);
     rateSources.set('monobank', [live]);
+
+    // PrivatBank publishes no rates it lets a business key read for this, so every bank values foreign money at monobank's
+    // public rates (no token involved); a statement file does too.
+    const privatDiagnostics = new DiagnosticsCollector();
+    collectors.set('privatbank', privatDiagnostics);
+    providers.set(
+      'privatbank',
+      new PrivatBankProvider({
+        id: 'privatbank',
+        mode: 'live',
+        label: 'PrivatBank business',
+        http: new ProviderHttp({
+          provider: 'privatbank',
+          mode: 'live',
+          transport: transports.privatbank ?? fetchTransport,
+          inspector,
+          clock,
+        }),
+        apiUrl: config.privatbank.apiUrl,
+        limits: {
+          statementIntervalMs: config.privatbank.intervalMs,
+          infoIntervalMs: config.privatbank.intervalMs,
+          maxWindowDays: 31,
+          // Rows come in pages that the adapter follows to the end, so a response is never "cut short".
+          maxItemsPerCall: Number.MAX_SAFE_INTEGER,
+          historyMonths: config.privatbank.historyMonths,
+          sharedLimit: true,
+        },
+        calendar,
+        clock,
+        diagnostics: privatDiagnostics,
+        ...(transports.pause ? { pause: transports.pause } : {}),
+      }),
+    );
+    rateSources.set('privatbank', [live]);
+    rateSources.set('privat24', [live]);
   }
 
   // The demo: the same adapter, its transport pointed at an in-process fake, pacing off.

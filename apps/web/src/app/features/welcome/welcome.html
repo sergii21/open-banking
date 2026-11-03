@@ -1,96 +1,202 @@
 <div class="welcome">
   <div class="welcome-hero enter">
-    <h1>Your monobank,<br />instantly.</h1>
-    <p>Real balances, spending and subscriptions in one calm place. Read-only, on this computer.</p>
+    @if (adding()) {
+      <h1>Add a bank</h1>
+      <p>Everything you connect adds up on Home, Activity and Insights, in hryvnias.</p>
+    } @else {
+      <h1>Your banks,<br />instantly.</h1>
+      <p>
+        Real balances, spending and subscriptions in one calm place. Read-only, on this computer.
+      </p>
+    }
   </div>
 
   @if (session.live()) {
     <section class="card enter" style="--i: 1" aria-labelledby="connect-title">
-      <h2 class="card-title" id="connect-title" style="margin-bottom: 14px">Connect monobank</h2>
-      <ol class="steps">
-        <li>
-          <span>
-            <strong
-              >Open
-              <a href="https://api.monobank.ua/" target="_blank" rel="noopener noreferrer"
-                >api.monobank.ua</a
-              ></strong
-            >
-            in a new tab.
-          </span>
-        </li>
-        <li>
-          <span
-            ><strong>Scan the QR code</strong> with the monobank app on your phone and
-            confirm.</span
+      <h2 class="card-title" id="connect-title" style="margin-bottom: 14px">Connect a bank</h2>
+      <div class="seg seg-wide" role="radiogroup" aria-label="Bank">
+        @for (s of sources; track s.id) {
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="source() === s.id"
+            (click)="pick(s.id)"
           >
-        </li>
-        <li>
-          <span><strong>Copy the token</strong> the page shows and paste it here.</span>
-        </li>
-      </ol>
-
-      <form class="field" style="margin-top: 18px" (submit)="$event.preventDefault(); connect()">
-        <label for="token">Your monobank token</label>
-        <div class="token-wrap" [attr.data-shown]="shown() ? '' : null">
-          <input
-            id="token"
-            class="input"
-            name="monobank-token"
-            type="text"
-            autocomplete="off"
-            autocapitalize="off"
-            autocorrect="off"
-            spellcheck="false"
-            inputmode="text"
-            placeholder="Paste it here"
-            [value]="token()"
-            [attr.aria-invalid]="error() ? 'true' : null"
-            [attr.aria-describedby]="error() ? 'token-error' : 'token-hint'"
-            (input)="token.set($any($event.target).value); error.set(null)"
-          />
-          <button type="button" (click)="shown.set(!shown())" [attr.aria-pressed]="shown()">
-            {{ shown() ? 'Hide' : 'Show' }}
+            {{ s.label }}
           </button>
-        </div>
-        @if (error(); as message) {
-          <p class="error-text" id="token-error" role="alert">
-            {{ message }}
-            @if (wait() > 0) {
-              Try again in {{ waitText() }}.
-            }
-          </p>
-        } @else {
-          <p class="hint" id="token-hint">
-            Balances show up in a couple of seconds. History then loads one step a minute, because
-            that is monobank's limit.
-          </p>
         }
-        <button
-          class="btn btn-primary btn-block"
-          type="submit"
-          style="margin-top: 6px"
-          [disabled]="!token().trim() || busy() !== null || wait() > 0"
-        >
-          @if (busy() === 'token') {
-            Checking with monobank…
-          } @else if (wait() > 0) {
-            Wait {{ waitText() }}
+      </div>
+
+      @switch (source()) {
+        @case ('monobank') {
+          <ol class="steps">
+            <li>
+              <span>
+                <strong
+                  >Open
+                  <a href="https://api.monobank.ua/" target="_blank" rel="noopener noreferrer"
+                    >api.monobank.ua</a
+                  ></strong
+                >
+                in a new tab.
+              </span>
+            </li>
+            <li>
+              <span
+                ><strong>Scan the QR code</strong> with the monobank app on your phone and
+                confirm.</span
+              >
+            </li>
+            <li>
+              <span><strong>Copy the token</strong> the page shows and paste it here.</span>
+            </li>
+          </ol>
+        }
+        @case ('privatbank') {
+          <ol class="steps">
+            <li>
+              <span
+                ><strong>In Privat24 for Business</strong> connect the app “Інтеграція
+                (Автоклієнт)”, press “Підключити API” and name the key.</span
+              >
+            </li>
+            <li>
+              <span
+                ><strong>Restrict the key.</strong> In its settings open “Обмеження по сервісам”,
+                switch it on and tick only “Отримання балансів і транзакцій за рахунками”. It can
+                then read, never pay.</span
+              >
+            </li>
+            <li>
+              <span
+                ><strong>Copy the token</strong> (the “ID і Token” button shows it) and paste it
+                here.</span
+              >
+            </li>
+          </ol>
+        }
+        @case ('privat24') {
+          <ol class="steps">
+            <li>
+              <span
+                ><strong>In Privat24</strong> open your card, choose “Виписка”, pick the period and
+                download it as <strong>Excel</strong> or <strong>CSV</strong>.</span
+              >
+            </li>
+            <li>
+              <span
+                ><strong>Choose the file</strong> below. It is read here and not kept; only its rows
+                are stored.</span
+              >
+            </li>
+          </ol>
+        }
+      }
+
+      @if (source() === 'privat24') {
+        <div class="field" style="margin-top: 18px">
+          <input
+            #picker
+            id="statement"
+            type="file"
+            hidden
+            accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            (change)="importFile(picker)"
+          />
+          <button
+            class="btn btn-primary btn-block"
+            type="button"
+            [disabled]="busy() !== null"
+            [attr.aria-describedby]="error() ? 'file-error' : 'file-hint'"
+            (click)="picker.click()"
+          >
+            {{ busy() === 'file' ? 'Reading the statement…' : 'Choose a statement file' }}
+          </button>
+          @if (error(); as message) {
+            <p class="error-text" id="file-error" role="alert">{{ message }}</p>
           } @else {
-            Connect monobank
+            <p class="hint" id="file-hint">
+              Personal cards have no live connection any more (PrivatBank closed its API in 2022),
+              so a statement is the way in. Import again later for newer days: rows already here are
+              not counted twice.
+            </p>
           }
-        </button>
-      </form>
+        </div>
+      } @else {
+        <form class="field" style="margin-top: 18px" (submit)="$event.preventDefault(); connect()">
+          <label for="token">Your {{ bank() }} token</label>
+          <div class="token-wrap" [attr.data-shown]="shown() ? '' : null">
+            <input
+              id="token"
+              class="input"
+              [name]="source() + '-token'"
+              type="text"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              spellcheck="false"
+              inputmode="text"
+              placeholder="Paste it here"
+              [value]="token()"
+              [attr.aria-invalid]="error() ? 'true' : null"
+              [attr.aria-describedby]="error() ? 'token-error' : 'token-hint'"
+              (input)="token.set($any($event.target).value); error.set(null)"
+            />
+            <button type="button" (click)="shown.set(!shown())" [attr.aria-pressed]="shown()">
+              {{ shown() ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+          @if (error(); as message) {
+            <p class="error-text" id="token-error" role="alert">
+              {{ message }}
+              @if (wait() > 0) {
+                Try again in {{ waitText() }}.
+              }
+            </p>
+          } @else {
+            <p class="hint" id="token-hint">
+              @if (source() === 'privatbank') {
+                Business and ФОП accounts. Balances show up in a couple of seconds; history then
+                loads at the bank’s pace of one request a second.
+              } @else {
+                Balances show up in a couple of seconds. History then loads one step a minute,
+                because that is monobank's limit.
+              }
+            </p>
+          }
+          <button
+            class="btn btn-primary btn-block"
+            type="submit"
+            style="margin-top: 6px"
+            [disabled]="!token().trim() || busy() !== null || wait() > 0"
+          >
+            @if (busy() === 'token') {
+              Checking with {{ bank() }}…
+            } @else if (wait() > 0) {
+              Wait {{ waitText() }}
+            } @else {
+              Connect {{ bank() }}
+            }
+          </button>
+        </form>
+      }
       <p class="privacy" style="margin-top: 14px">
         <ll-icon name="lock" [size]="16" />
-        <span
-          >Read-only: the token can see balances and transactions, never move money. It stays on
-          this computer, encrypted.</span
-        >
+        <span>
+          @if (source() === 'privat24') {
+            Nothing is sent anywhere but this computer. The file is read and thrown away; the rows
+            stay here.
+          } @else {
+            Read-only: the token can see balances and transactions, never move money. It stays on
+            this computer, encrypted.
+          }
+        </span>
       </p>
     </section>
 
-    <div class="divider enter" style="--i: 2">or</div>
+    @if (!adding()) {
+      <div class="divider enter" style="--i: 2">or</div>
+    }
   } @else {
     <p class="banner enter" style="--i: 1">
       <ll-icon name="info" [size]="18" />
@@ -101,20 +207,22 @@
     </p>
   }
 
-  <button
-    class="btn btn-quiet btn-block enter"
-    style="--i: 3"
-    type="button"
-    (click)="demo()"
-    [disabled]="busy() !== null"
-  >
-    @if (busy() === 'demo') {
-      Opening the demo…
-    } @else {
-      Try with demo data
+  @if (!adding()) {
+    <button
+      class="btn btn-quiet btn-block enter"
+      style="--i: 3"
+      type="button"
+      (click)="demo()"
+      [disabled]="busy() !== null"
+    >
+      @if (busy() === 'demo') {
+        Opening the demo…
+      } @else {
+        Try with demo data
+      }
+    </button>
+    @if (!session.live() && error()) {
+      <p class="error-text" role="alert">{{ error() }}</p>
     }
-  </button>
-  @if (!session.live() && error()) {
-    <p class="error-text" role="alert">{{ error() }}</p>
   }
 </div>

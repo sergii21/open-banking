@@ -5,7 +5,7 @@ import { countdown } from './format';
 import { Live } from './live';
 import { Toast } from './toast';
 
-/** The things the person can ask the loader to do. Every answer is honest about monobank's one-read-a-minute limit. */
+/** The things the person can ask the loader to do. Every answer is honest about the banks' read limits. */
 @Service()
 export class SyncActions {
   private readonly api = inject(Api);
@@ -20,23 +20,28 @@ export class SyncActions {
         const wait = Date.parse(state.balancesNextAt) - Date.now();
         if (wait > 1000)
           this.toast.show(
-            `Balances are fresh. monobank allows another read in ${countdown(wait)}.`,
+            `Balances are fresh. The bank allows another read in ${countdown(wait)}.`,
           );
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === 'refresh_cooldown') {
         this.toast.show('Just refreshed.');
       } else if (error instanceof ApiError && error.code === 'reauth_required') {
-        this.toast.show('monobank no longer accepts your token. Open Settings to paste a new one.');
+        this.toast.show('A bank no longer accepts your token. Open Settings to paste a new one.');
       } else {
         this.toast.show('Could not refresh. Try again in a moment.');
       }
     }
   }
 
-  async loadEarlier(): Promise<void> {
+  async loadEarlier(connectionId?: string): Promise<void> {
     try {
-      this.live.sync.set(await this.api.post<SyncState>('/api/sync/load-earlier'));
+      this.live.sync.set(
+        await this.api.post<SyncState>(
+          '/api/sync/load-earlier',
+          connectionId ? { connectionId } : {},
+        ),
+      );
       this.toast.show('Loading one more month of history.');
     } catch {
       this.toast.show('Could not start that. Try again in a moment.');

@@ -3,6 +3,13 @@ import type { Db } from './database';
 export interface Migration {
   id: string;
   sql: string;
+  /**
+   * The migration rebuilds a table other tables point at (SQLite cannot drop a UNIQUE or widen a CHECK in place). Foreign keys
+   * are switched off around it, as SQLite's own procedure says, because dropping the old table would otherwise cascade into
+   * the accounts and transactions. Nothing may be lost: inside the same transaction the row count of every table is compared
+   * before and after and the foreign keys are checked, and either one failing rolls everything back.
+   */
+  rebuild?: boolean;
 }
 
 /**
@@ -99,7 +106,86 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    // Several banks at once. The one-connection-per-session rule becomes one-per-bank, and a connection may be an imported
+    // statement file (no token, nothing to sync). Every existing row, id and sealed token is carried over unchanged: a
+    // sealed token is bound to its connection id, which does not change.
+    id: '002_many_connections',
+    rebuild: true,
+    sql: `
+      CREATE TABLE connections_new (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL CHECK (provider IN ('monobank','demo','privatbank','privat24')),
+        kind TEXT NOT NULL DEFAULT 'api' CHECK (kind IN ('api','file')),
+        status TEXT NOT NULL CHECK (status IN ('active','needs_reauth','error')),
+        tokens_enc TEXT,                         -- sealed JSON, never sent to the browser; null for a file
+        last_refreshed_at TEXT,
+        history_months INTEGER NOT NULL DEFAULT 2,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (session_id, provider)
+      );
+      INSERT INTO connections_new
+        (id, session_id, provider, kind, status, tokens_enc, last_refreshed_at, history_months, created_at, updated_at)
+        SELECT id, session_id, provider, 'api', status, tokens_enc, last_refreshed_at, history_months, created_at, updated_at
+        FROM connections;
+      DROP TABLE connections;
+      ALTER TABLE connections_new RENAME TO connections;
+
+      -- An imported statement may carry no balance; the account is then left out of the totals instead of counted as zero.
+      ALTER TABLE accounts ADD COLUMN balance_known INTEGER NOT NULL DEFAULT 1;
+    `,
+  },
 ];
+
+const tableNames = (db: Db): string[] =>
+  db
+    .all<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
+    )
+    .map((r) => r.name);
+
+const rowCounts = (db: Db): Map<string, number> =>
+  new Map(
+    tableNames(db).map((name) => [
+      name,
+      db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM "${name}"`)?.n ?? 0,
+    ]),
+  );
+
+function record(db: Db, id: string): void {
+  db.run(
+    'INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)',
+    id,
+    new Date().toISOString(),
+  );
+}
+
+function applyRebuild(db: Db, migration: Migration): void {
+  // `PRAGMA foreign_keys` does nothing inside a transaction, so it goes around it.
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      const before = rowCounts(db);
+      db.exec(migration.sql);
+      record(db, migration.id);
+      const after = rowCounts(db);
+      for (const [name, count] of before) {
+        if ((after.get(name) ?? 0) < count) {
+          throw new Error(
+            `Migration ${migration.id} would lose rows from ${name}; nothing changed.`,
+          );
+        }
+      }
+      if (db.all('PRAGMA foreign_key_check').length > 0) {
+        throw new Error(`Migration ${migration.id} would break a foreign key; nothing changed.`);
+      }
+    });
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
 
 export function migrate(db: Db, available: readonly Migration[] = migrations): string[] {
   db.exec(`
@@ -114,14 +200,14 @@ export function migrate(db: Db, available: readonly Migration[] = migrations): s
   const ran: string[] = [];
   for (const migration of available) {
     if (applied.has(migration.id)) continue;
-    db.transaction(() => {
-      db.exec(migration.sql);
-      db.run(
-        'INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)',
-        migration.id,
-        new Date().toISOString(),
-      );
-    });
+    if (migration.rebuild) {
+      applyRebuild(db, migration);
+    } else {
+      db.transaction(() => {
+        db.exec(migration.sql);
+        record(db, migration.id);
+      });
+    }
     ran.push(migration.id);
   }
   return ran;

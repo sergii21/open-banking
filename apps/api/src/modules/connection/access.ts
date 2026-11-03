@@ -10,10 +10,10 @@ import {
 } from '../../providers/port';
 import type { ProviderRegistry } from '../../providers/registry';
 import type { CoreContext } from '../../types';
-import { toConnectionInfo } from './presenter';
+import { BANK_NAME, toConnectionInfo } from './presenter';
 
 /**
- * The one place that holds the bank token in memory: it unseals it, runs a provider call with it, and turns a rejected
+ * The one place that holds a bank token in memory: it unseals it, runs a provider call with it, and turns a rejected
  * token into a connection state plus the stable error code the SPA has a designed screen for. The token never leaves this
  * class except to the adapter.
  */
@@ -42,9 +42,12 @@ export class ConnectionAccess {
       // Tampered, or sealed with a key we no longer hold: the stored token is unusable, so ask for it again.
       this.core.log.error({ connectionId: connection.id }, 'stored token could not be unsealed');
       this.markStatus(connection, 'needs_reauth');
-      throw new AppError('reauth_required', 401, 'Paste your monobank token again.', {
-        cause: error,
-      });
+      throw new AppError(
+        'reauth_required',
+        401,
+        `Paste your ${BANK_NAME[connection.provider]} token again.`,
+        { cause: error },
+      );
     }
   }
 
@@ -54,16 +57,14 @@ export class ConnectionAccess {
       { status },
       this.core.clock.now().toISOString(),
     );
-    this.notify(connection.id);
+    this.notifySession(connection.sessionId);
   }
 
-  /** Pushes the connection's current state to the owner's open pages. */
-  notify(connectionId: string): void {
-    const record = this.core.repos.connections.findById(connectionId);
-    if (!record) return;
-    this.core.events.publish(record.sessionId, {
+  /** Pushes the session's connections, as they are now, to the owner's open pages. */
+  notifySession(sessionId: string): void {
+    this.core.events.publish(sessionId, {
       type: 'connection.updated',
-      connection: toConnectionInfo(record),
+      connections: this.core.repos.connections.listBySession(sessionId).map(toConnectionInfo),
     });
   }
 
@@ -71,13 +72,20 @@ export class ConnectionAccess {
     return this.providers.get(connection.provider).limits;
   }
 
+  reauthMessage(connection: ConnectionRecord): string {
+    return `${BANK_NAME[connection.provider]} no longer accepts your token. Paste a new one.`;
+  }
+
   assertUsable(connection: ConnectionRecord): void {
-    if (connection.status === 'needs_reauth') {
+    if (connection.kind === 'file') {
       throw new AppError(
-        'reauth_required',
-        401,
-        'monobank no longer accepts your token. Paste a new one.',
+        'connection_not_active',
+        409,
+        'An imported statement has nothing to refresh.',
       );
+    }
+    if (connection.status === 'needs_reauth') {
+      throw new AppError('reauth_required', 401, this.reauthMessage(connection));
     }
     if (connection.status !== 'active') {
       throw new AppError('connection_not_active', 409, 'This connection is not active.');
@@ -96,12 +104,9 @@ export class ConnectionAccess {
     } catch (error) {
       if (error instanceof TokenRejectedError) {
         this.markStatus(connection, 'needs_reauth');
-        throw new AppError(
-          'reauth_required',
-          401,
-          'monobank no longer accepts your token. Paste a new one.',
-          { cause: error },
-        );
+        throw new AppError('reauth_required', 401, this.reauthMessage(connection), {
+          cause: error,
+        });
       }
       throw error;
     }

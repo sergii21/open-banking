@@ -15,7 +15,7 @@ const SECRET_KEYS = new Set([
   'token',
   'clientsecret',
   'secret',
-  'code',
+  // Not `code`: PrivatBank's error answers carry a `code` such as VE014, which is exactly what the person needs to read.
   'codeverifier',
   'resourcetoken',
   'password',
@@ -42,7 +42,19 @@ const IDENTIFIER_KEYS = new Set([
   'cardnumber',
   'counteriban',
   'sendid',
+  // PrivatBank (Autoclient): the account (an IBAN or a short number), the business's and the counterparty's tax ids (ЄДРПОУ/ІПН),
+  // the business's own registered name (a ФОП's full name) and the name of the account, which is the same name.
+  'acc',
+  'autmyacc',
+  'autcntracc',
+  'autmycrf',
+  'autcntrcrf',
+  'autmynam',
+  'nameacc',
 ]);
+
+/** Query parameters that name an account; masked like the same fields in a body. */
+const IDENTIFIER_QUERY_PARAMS = new Set(['acc']);
 
 export interface RedactOptions {
   maskIdentifiers: boolean;
@@ -76,6 +88,14 @@ export function redactJson(value: unknown, options: RedactOptions): unknown {
       const normalised = normalise(key);
       if (SECRET_KEYS.has(normalised) && child !== null && child !== undefined) {
         result[key] = REDACTED;
+      } else if (
+        isUltimateParty(normalised) &&
+        child !== null &&
+        child !== undefined &&
+        child !== ''
+      ) {
+        // The National Bank's "ultimate payer / recipient" fields can hold a passport number: hidden even for fake data.
+        result[key] = REDACTED;
       } else if (options.maskIdentifiers && IDENTIFIER_KEYS.has(normalised)) {
         result[key] = Array.isArray(child) ? child.map(maskIdentifier) : maskIdentifier(child);
       } else {
@@ -86,6 +106,10 @@ export function redactJson(value: unknown, options: RedactOptions): unknown {
   }
   return value;
 }
+
+/** `PAYER_ULTMT_DOCUMENT`, `RECIPIENT_ULTMT_NAME` and the like; the bare `ULTMT` flag only says whether they are filled in. */
+const isUltimateParty = (normalised: string): boolean =>
+  normalised.includes('ultmt') && normalised !== 'ultmt';
 
 export function redactHeaders(headers: Record<string, string>): Record<string, string> {
   const result: Record<string, string> = {};
@@ -98,6 +122,7 @@ export function redactHeaders(headers: Record<string, string>): Record<string, s
       key === 'cookie' ||
       key === 'setcookie' ||
       key === 'xtoken' ||
+      key === 'token' ||
       key.endsWith('signature')
     ) {
       result[name] = REDACTED;
@@ -159,12 +184,18 @@ export function maskUrlSecrets(url: string): string {
   );
 }
 
-/** Masks secret query and fragment values; relative or malformed URLs are returned as given. */
-export function redactUrl(url: string): string {
+/** Masks secret query and fragment values (and, for a live bank, account numbers); relative or malformed URLs are returned as given. */
+export function redactUrl(
+  url: string,
+  options: RedactOptions = { maskIdentifiers: false },
+): string {
   try {
     const parsed = new URL(url);
     for (const name of [...parsed.searchParams.keys()]) {
       if (SECRET_QUERY_PARAMS.has(name)) parsed.searchParams.set(name, REDACTED);
+      else if (options.maskIdentifiers && IDENTIFIER_QUERY_PARAMS.has(name)) {
+        parsed.searchParams.set(name, String(maskIdentifier(parsed.searchParams.get(name))));
+      }
     }
     return maskUrlSecrets(decodeURI(parsed.toString()));
   } catch {

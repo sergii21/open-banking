@@ -1,10 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4300;
-// A second copy of the app with the real monobank provider pointed at a local fake of monobank's API, which enforces the
-// bank's one-read-a-minute limit (shortened to a few seconds so a test can watch the pacing).
+// A second copy of the app with the real monobank and PrivatBank providers pointed at local fakes of their APIs, which enforce
+// the banks' limits (monobank's one read a minute shortened to a few seconds so a test can watch the pacing; PrivatBank's
+// one request a second as it is).
 const LIVE_PORT = 4301;
 const FAKE_PORT = 4310;
+const FAKE_PRIVAT_PORT = 4311;
 
 // Set PLAYWRIGHT_BASE_URL to run against a server you started yourself (for example `npm run app`). Otherwise Playwright
 // starts the built app on its own port, backed by an in-memory database and the demo bank, so runs are deterministic and
@@ -53,6 +55,16 @@ export default defineConfig({
           env: { FAKE_MONOBANK_PORT: String(FAKE_PORT), FAKE_MONOBANK_INTERVAL_SECONDS: '4' },
         },
         {
+          command: 'npx tsx apps/api/src/providers/privatbank/demo/server.ts',
+          url: `http://127.0.0.1:${FAKE_PRIVAT_PORT}/health`,
+          reuseExistingServer: false,
+          timeout: 60_000,
+          env: {
+            FAKE_PRIVATBANK_PORT: String(FAKE_PRIVAT_PORT),
+            FAKE_PRIVATBANK_INTERVAL_MS: '1000',
+          },
+        },
+        {
           command: 'node apps/api/dist/server.js',
           url: `${liveBaseURL}/readyz`,
           reuseExistingServer: !process.env['CI'],
@@ -61,6 +73,9 @@ export default defineConfig({
             MONOBANK_API_URL: `http://127.0.0.1:${FAKE_PORT}`,
             MONOBANK_MIN_INTERVAL_SECONDS: '4',
             MONOBANK_HISTORY_MONTHS: '2',
+            PRIVATBANK_API_URL: `http://127.0.0.1:${FAKE_PRIVAT_PORT}`,
+            PRIVATBANK_MIN_INTERVAL_MS: '1100',
+            PRIVATBANK_HISTORY_MONTHS: '2',
           }),
         },
       ],
@@ -68,13 +83,20 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: ['**/*.mobile.spec.ts', '**/monobank.spec.ts'],
+      testIgnore: ['**/*.mobile.spec.ts', '**/monobank.spec.ts', '**/privat.spec.ts'],
     },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: '**/*.mobile.spec.ts' },
     {
       name: 'monobank',
       use: { ...devices['Desktop Chrome'], baseURL: liveBaseURL },
       testMatch: '**/monobank.spec.ts',
+    },
+    {
+      // Uses the same fake monobank as the project above, whose bucket is shared by every session: after it, never beside it.
+      name: 'privat',
+      use: { ...devices['Desktop Chrome'], baseURL: liveBaseURL },
+      testMatch: '**/privat.spec.ts',
+      dependencies: ['monobank'],
     },
   ],
 });

@@ -81,6 +81,8 @@ export interface ProviderLimits {
   maxItemsPerCall: number;
   /** How far back background history loading goes. */
   historyMonths: number;
+  /** The bank documents one limit for every endpoint, so the two gates start joined instead of learning it from a 429. */
+  sharedLimit?: boolean;
 }
 
 /**
@@ -115,7 +117,7 @@ export interface BankingProvider {
   revoke(tokens: TokenSet, ctx: CallContext): Promise<void>;
 }
 
-/** The token was rejected (replaced or revoked at the bank): the person has to paste a new one. */
+/** The token was rejected (replaced or revoked at the bank, or never valid): the person has to paste a new one. */
 export class TokenRejectedError extends Error {
   override name = 'TokenRejectedError';
 }

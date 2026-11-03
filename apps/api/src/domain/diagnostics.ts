@@ -83,9 +83,9 @@ export class DiagnosticsCollector {
   }
 
   /** Only ever call this with text made of field names and codes, never with data. */
-  warn(message: string): void {
+  warn(message: string, count = 1): void {
     const clean = message.replace(/\s+/g, ' ').slice(0, 160);
-    this.warnings.set(clean, (this.warnings.get(clean) ?? 0) + 1);
+    this.warnings.set(clean, (this.warnings.get(clean) ?? 0) + count);
   }
 
   snapshot(): DiagnosticsSnapshot {
@@ -127,45 +127,65 @@ export class DiagnosticsCollector {
 
 export type FactValue = string | number | boolean | null;
 
+/** One source of data: a bank read through its API, or an imported statement file. */
+export interface DiagnosticsSection {
+  title: string;
+  snapshot: DiagnosticsSnapshot;
+  /** A file makes no calls, so its section has no "calls" part. */
+  file?: boolean;
+}
+
 export interface DiagnosticsReport {
   app: string;
   version: string;
+  /** What is connected, in words. */
   provider: string;
   generatedAt: string;
-  snapshot: DiagnosticsSnapshot;
+  sections: readonly DiagnosticsSection[];
   /** Counts and yes/no answers computed from stored data (never the data itself). */
   facts: Readonly<Record<string, FactValue>>;
 }
 
 /** The text block the person copies. Plain, stable and free of data. */
 export function renderDiagnostics(report: DiagnosticsReport): string {
+  const many = report.sections.length > 1;
   const lines: string[] = [
     `${report.app} diagnostics`,
     `version ${report.version} · provider ${report.provider} · ${report.generatedAt}`,
-    '',
-    'Calls to the bank',
   ];
-  if (report.snapshot.endpoints.length === 0) lines.push('  none yet');
-  for (const e of report.snapshot.endpoints) {
-    lines.push(
-      `  ${e.name}: ${e.calls} calls, statuses ${e.statuses}, median ${e.p50Ms ?? '-'} ms, slowest ${e.maxMs ?? '-'} ms`,
-    );
-  }
-  lines.push('', 'What arrived (field: type×count)');
-  if (report.snapshot.shapes.length === 0) lines.push('  nothing yet');
-  for (const shape of report.snapshot.shapes) {
-    lines.push(`  ${shape.path} (${shape.rows} rows)`);
-    for (const field of shape.fields) lines.push(`    ${field.name}: ${field.types}`);
-    if (shape.unknown.length > 0)
-      lines.push(`    fields we do not use: ${shape.unknown.join(', ')}`);
+  const warnings = new Map<string, number>();
+  for (const section of report.sections) {
+    const tag = many ? `: ${section.title}` : '';
+    const { snapshot } = section;
+    if (!section.file) {
+      lines.push('', `Calls to the bank${tag}`);
+      if (snapshot.endpoints.length === 0) lines.push('  none yet');
+      for (const e of snapshot.endpoints) {
+        lines.push(
+          `  ${e.name}: ${e.calls} calls, statuses ${e.statuses}, median ${e.p50Ms ?? '-'} ms, slowest ${e.maxMs ?? '-'} ms`,
+        );
+      }
+    }
+    lines.push('', `What arrived${tag} (field: type×count)`);
+    if (snapshot.shapes.length === 0) lines.push('  nothing yet');
+    for (const shape of snapshot.shapes) {
+      lines.push(`  ${shape.path} (${shape.rows} rows)`);
+      for (const field of shape.fields) lines.push(`    ${field.name}: ${field.types}`);
+      if (shape.unknown.length > 0)
+        lines.push(`    fields we do not use: ${shape.unknown.join(', ')}`);
+    }
+    for (const w of snapshot.warnings) {
+      const key = many ? `[${section.title}] ${w.message}` : w.message;
+      warnings.set(key, (warnings.get(key) ?? 0) + w.count);
+    }
   }
   lines.push('', 'Checks on stored data');
   for (const [key, value] of Object.entries(report.facts))
     lines.push(`  ${key}: ${value ?? 'n/a'}`);
   lines.push('', 'Rows or responses we could not use');
-  if (report.snapshot.warnings.length === 0) lines.push('  none');
-  for (const warning of report.snapshot.warnings) {
-    lines.push(`  ${warning.count}× ${warning.message}`);
+  if (warnings.size === 0) lines.push('  none');
+  for (const [message, count] of [...warnings].sort(([, a], [, b]) => b - a)) {
+    lines.push(`  ${count}× ${message}`);
   }
   return lines.join('\n');
 }

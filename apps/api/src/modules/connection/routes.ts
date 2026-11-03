@@ -6,14 +6,19 @@ import { toConnectionInfo } from './presenter';
 const Token = z.string().min(1).max(1024);
 const ConnectBody = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('demo') }),
-  z.object({ mode: z.literal('token'), token: Token }),
+  z.object({
+    mode: z.literal('token'),
+    provider: z.enum(['monobank', 'privatbank']).default('monobank'),
+    token: Token,
+  }),
 ]);
+const IdParams = z.object({ id: z.string().min(1).max(64) });
 
 export function registerConnectionRoutes(api: App, ctx: AppContext): void {
   // Connecting reads the bank once; its own limit is one a minute, ours just keeps a loop from hammering the check.
   const limited = { rateLimit: { max: 20, timeWindow: '1 minute' } };
 
-  /** Start with a token the person pasted, or with the demo bank. Connecting again with the same bank keeps what is stored. */
+  /** Start with a token the person pasted, or with the demo bank. Connecting the same bank again keeps what is stored. */
   api.post(
     '/connection',
     { config: limited, schema: { body: ConnectBody } },
@@ -23,22 +28,23 @@ export function registerConnectionRoutes(api: App, ctx: AppContext): void {
     },
   );
 
-  /** Replace a token monobank stopped accepting; history stays. */
+  /** Replace a token the bank stopped accepting; history stays. */
   api.put(
-    '/connection/token',
-    { config: limited, schema: { body: z.object({ token: Token }) } },
+    '/connection/:id/token',
+    { config: limited, schema: { params: IdParams, body: z.object({ token: Token }) } },
     async (request) => {
-      const record = await ctx.connections.connect(requireSession(request), {
-        mode: 'token',
-        token: request.body.token,
-      });
+      const record = await ctx.connections.replaceToken(
+        requireSession(request),
+        request.params.id,
+        request.body.token,
+      );
       return toConnectionInfo(record);
     },
   );
 
-  /** Forget the bank here: the token and everything read with it are deleted. */
-  api.delete('/connection', async (request, reply) => {
-    await ctx.connections.disconnect(requireSession(request).id);
+  /** Forget one bank here: its token and everything read with it are deleted. */
+  api.delete('/connection/:id', { schema: { params: IdParams } }, async (request, reply) => {
+    await ctx.connections.disconnect(requireSession(request).id, request.params.id);
     return reply.code(204).send();
   });
 }

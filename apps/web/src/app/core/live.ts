@@ -47,7 +47,7 @@ export class Live {
     });
     on('connection.updated', (event) => {
       if (event.type !== 'connection.updated') return;
-      this.session.setConnection(event.connection);
+      this.session.setConnections(event.connections);
     });
     on('inspector.call', (event) => {
       if (event.type === 'inspector.call')

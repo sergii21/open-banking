@@ -1,11 +1,12 @@
 import type { Home, RatesInfo } from '@ledger-lens/contracts';
-import type { ConnectionRecord, SessionRecord } from '../../db/repos';
+import type { AccountRecord, SessionRecord } from '../../db/repos';
 import { type Calendar, addDays, addMonths, daysInMonth } from '../../domain/calendar';
 import { detectRecurring, summarise } from '../../domain/insights';
 import { dailySpend, sumMap, toUahRows } from '../../domain/uah-rows';
 import { balanceTrend, type TrendAccount } from '../../domain/trend';
 import { notFound } from '../../errors';
 import type { CoreContext } from '../../types';
+import { primaryConnection } from '../connection/presenter';
 import type { RatesService } from '../rates/service';
 import type { SyncService } from '../sync/service';
 import { toAccountDto } from './presenter';
@@ -22,17 +23,16 @@ export class HomeService {
   ) {}
 
   /** Whether every card's loaded history reaches back to `day` (jars do not matter for spending). */
-  private cardsCover(connection: ConnectionRecord, day: string): boolean {
-    const cards = this.core.repos.accounts
-      .listByConnection(connection.id)
-      .filter((a) => a.kind === 'card');
+  private cardsCover(accounts: readonly AccountRecord[], day: string): boolean {
+    const cards = accounts.filter((a) => a.kind === 'card');
     return cards.length > 0 && cards.every((a) => a.coveredFrom !== null && a.coveredFrom <= day);
   }
 
   async build(session: SessionRecord): Promise<Home> {
     const { repos, clock } = this.core;
-    const connection = repos.connections.findBySession(session.id);
-    if (!connection) throw notFound('Connection');
+    const connections = repos.connections.listBySession(session.id);
+    const primary = primaryConnection(connections);
+    if (!primary) throw notFound('Connection');
 
     const now = clock.now();
     const today = this.calendar.today(now);
@@ -44,15 +44,21 @@ export class HomeService {
     const previousStart = `${previousMonth}-01`;
     const previousEnd = `${previousMonth}-${String(Math.min(dom, daysInMonth(previousMonth))).padStart(2, '0')}`;
 
-    const accounts = repos.accounts.listByConnection(connection.id);
-    const states = this.sync.accountStates(connection);
-    const { table, stale } = await this.rates.get(connection);
+    const accounts = repos.accounts.listBySession(session.id);
+    const connectionsById = new Map(connections.map((c) => [c.id, c]));
+    const states = this.sync.accountStates(session.id);
+    const { table, stale } = await this.rates.get(primary);
 
     // Hero: own money in hryvnias, with and without the credit limit.
     let own = 0;
     let available = 0;
     let unconverted = 0;
+    let unknownBalance = 0;
     for (const account of accounts) {
+      if (!account.balanceKnown) {
+        unknownBalance += 1;
+        continue;
+      }
       const ownUah = table.toUahMinor(
         account.balanceMinor - account.creditLimitMinor,
         account.currency,
@@ -75,7 +81,7 @@ export class HomeService {
     // This month against the same days last month. A delta needs last month loaded for every card, or it is not shown.
     const spendThis = dailySpend(items, monthStart, today);
     const spentMinor = sumMap(spendThis);
-    const previousLoaded = this.cardsCover(connection, previousStart);
+    const previousLoaded = this.cardsCover(accounts, previousStart);
     const previousSameDaysMinor = previousLoaded
       ? sumMap(dailySpend(items, previousStart, previousEnd))
       : null;
@@ -91,7 +97,7 @@ export class HomeService {
       .reduce((sum, i) => sum + i.amountMinor, 0);
     // Pace: what the last 30 days cost per day, for the days still to come. Needs those 30 days loaded for every card.
     let projectedMinor: number | null = null;
-    if (dom < dim && this.cardsCover(connection, addDays(today, -30))) {
+    if (dom < dim && this.cardsCover(accounts, addDays(today, -30))) {
       const lastThirty = sumMap(dailySpend(items, addDays(today, -30), addDays(today, -1)));
       projectedMinor = spentMinor + Math.round((lastThirty / 30) * (dim - dom));
     }
@@ -118,16 +124,34 @@ export class HomeService {
       });
       rowsByAccount.set(record.accountId, list);
     }
-    const trendAccounts: TrendAccount[] = accounts.map((account) => ({
-      currency: account.currency,
-      creditLimitMinor: account.creditLimitMinor,
-      currentBalanceMinor: account.balanceMinor,
-      coveredFrom: account.coveredFrom,
-      isJar: account.kind === 'jar',
-      // Records come newest first; the trend walks forward in time.
-      rows: [...(rowsByAccount.get(account.id) ?? [])].reverse(),
-    }));
-    const trend = balanceTrend(trendAccounts, days, (day) => this.calendar.dayEnd(day), table);
+    const flowsByAccount = new Map<string, { ts: number; amountMinor: number }[]>();
+    for (const record of records) {
+      if (record.status !== 'booked') continue;
+      const list = flowsByAccount.get(record.accountId) ?? [];
+      list.push({ ts: record.ts, amountMinor: record.amountMinor });
+      flowsByAccount.set(record.accountId, list);
+    }
+    const trendAccounts: TrendAccount[] = accounts
+      .filter((account) => account.balanceKnown)
+      .map((account) => ({
+        currency: account.currency,
+        creditLimitMinor: account.creditLimitMinor,
+        currentBalanceMinor: account.balanceMinor,
+        coveredFrom: account.coveredFrom,
+        isJar: account.kind === 'jar',
+        // Records come newest first; the trend walks forward in time.
+        rows: [...(rowsByAccount.get(account.id) ?? [])].reverse(),
+        // A bank that reports no balance after each item (PrivatBank, a statement file): walk back from the balance now instead.
+        flows:
+          account.cardType === 'business' || account.cardType === 'privat24'
+            ? (flowsByAccount.get(account.id) ?? [])
+            : null,
+      }));
+    // With no account whose balance is known there is nothing to draw.
+    const trend =
+      trendAccounts.length > 0
+        ? balanceTrend(trendAccounts, days, (day) => this.calendar.dayEnd(day), table)
+        : null;
 
     const ratesInfo: RatesInfo = {
       asOf: table.asOf(),
@@ -144,8 +168,8 @@ export class HomeService {
 
     return {
       asOf: accounts.reduce((latest, a) => (a.balanceAt > latest ? a.balanceAt : latest), ''),
-      demo: connection.provider === 'demo',
-      hero: { ownUahMinor: own, availableUahMinor: available, unconverted },
+      demo: connections.some((c) => c.provider === 'demo'),
+      hero: { ownUahMinor: own, availableUahMinor: available, unconverted, unknownBalance },
       rates: ratesInfo,
       trend: trend ? { from: days[0] ?? today, points: trend.points } : null,
       month: {
@@ -158,13 +182,20 @@ export class HomeService {
         daily,
         projectedMinor,
       },
-      accounts: accounts.map((account) => toAccountDto(account, states.get(account.id), table)),
+      accounts: accounts.map((account) =>
+        toAccountDto(
+          account,
+          states.get(account.id),
+          table,
+          connectionsById.get(account.connectionId),
+        ),
+      ),
       topCategories: categories,
       regular: {
         count: recurring.length,
         monthlyMinor: recurring.reduce((sum, r) => sum + r.monthlyEquivalentMinor, 0),
       },
-      sync: this.sync.state(connection),
+      sync: this.sync.stateForSession(session.id),
     };
   }
 }

@@ -10,11 +10,12 @@ import {
 } from '@angular/core';
 import { Session } from './session';
 
-export type Page = 'welcome' | 'home' | 'activity' | 'insights';
+export type Page = 'welcome' | 'connect' | 'home' | 'activity' | 'insights';
 
 /** Each screen is its own small chunk, fetched while the browser is idle so a tab switch never waits on the network. */
 const LOADERS: Record<Page, () => Promise<Type<unknown>>> = {
   welcome: () => import('../features/welcome/welcome').then((m) => m.Welcome),
+  connect: () => import('../features/welcome/welcome').then((m) => m.Welcome),
   home: () => import('../features/home/home').then((m) => m.Home),
   activity: () => import('../features/activity/activity').then((m) => m.Activity),
   insights: () => import('../features/insights/insights').then((m) => m.Insights),
@@ -22,6 +23,7 @@ const LOADERS: Record<Page, () => Promise<Type<unknown>>> = {
 
 const TITLES: Record<Page, string> = {
   welcome: 'Connect · Ledger Lens',
+  connect: 'Add a bank · Ledger Lens',
   home: 'Home · Ledger Lens',
   activity: 'Activity · Ledger Lens',
   insights: 'Insights · Ledger Lens',
@@ -29,8 +31,20 @@ const TITLES: Record<Page, string> = {
 
 const reducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/** Which connected screen a path is; anything unknown is Home. */
+function pageOf(pathname: string): Page {
+  const path = pathname.replace(/\/+$/, '');
+  return path === '/activity'
+    ? 'activity'
+    : path === '/insights'
+      ? 'insights'
+      : path === '/connect'
+        ? 'connect'
+        : 'home';
+}
+
 /**
- * Four screens and the browser's own history: that is all the routing this app needs, and not shipping a general router
+ * Five screens and the browser's own history: that is all the routing this app needs, and not shipping a general router
  * keeps about 100 kB out of the first load. Links are real `<a href>`; a click is handled here unless the person asked for a
  * new tab. Switching tabs cross-fades with the View Transitions API where the browser has it.
  */
@@ -46,8 +60,7 @@ export class Nav {
 
   readonly page = computed<Page>(() => {
     if (!this.session.connected()) return 'welcome';
-    const path = this.path().replace(/\/+$/, '');
-    return path === '/activity' ? 'activity' : path === '/insights' ? 'insights' : 'home';
+    return pageOf(this.path());
   });
 
   constructor() {
@@ -76,7 +89,11 @@ export class Nav {
     if (this.page() !== page) return;
     const canonical = `/${page}`;
     if (location.pathname !== canonical && !(page === 'home' && location.pathname === '/')) {
-      history.replaceState(null, '', canonical + (page === 'activity' ? location.search : ''));
+      history.replaceState(
+        null,
+        '',
+        canonical + (page === 'activity' || page === 'connect' ? location.search : ''),
+      );
     } else if (location.pathname === '/') {
       history.replaceState(null, '', canonical);
     }
@@ -88,14 +105,7 @@ export class Nav {
   /** Go to a path inside the app. */
   async go(url: string, replace = false): Promise<void> {
     const target = new URL(url, location.href);
-    const path = target.pathname.replace(/\/+$/, '');
-    const page: Page = !this.session.connected()
-      ? 'welcome'
-      : path === '/activity'
-        ? 'activity'
-        : path === '/insights'
-          ? 'insights'
-          : 'home';
+    const page: Page = !this.session.connected() ? 'welcome' : pageOf(target.pathname);
     let component = this.loaded.get(page);
     if (!component) {
       component = await LOADERS[page]();

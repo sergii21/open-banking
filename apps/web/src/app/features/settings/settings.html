@@ -1,10 +1,10 @@
 <ll-sheet [(open)]="ui.settings" title="Settings">
-  @if (session.connection(); as connection) {
+  @for (connection of session.connections(); track connection.id) {
     @if (connection.demo) {
       <section class="settings-group" aria-label="Demo">
-        <button type="button" class="setting setting-primary" (click)="leaveDemo()">
+        <button type="button" class="setting setting-primary" (click)="leaveDemo(connection)">
           <span>
-            <b>Leave the demo and connect monobank</b>
+            <b>Leave the demo and connect a bank</b>
             <small
               >Takes you to the first-run screen. The demo data goes away; none of it was
               yours.</small
@@ -13,87 +13,167 @@
           <ll-icon name="chevron-right" />
         </button>
       </section>
-    }
-    <section class="settings-group" aria-label="Connection">
-      <h3>Connection</h3>
-      <div class="setting">
-        <span>
-          <b>{{ connection.label }}</b>
-          <small>
-            @if (connection.status === 'active') {
-              Connected
-            } @else {
-              Needs a new token
-            }
-            · last update {{ lastSync() }} · {{ connection.historyMonths }} months of history
-          </small>
-        </span>
-        <span
-          class="pill"
-          [class.pill-good]="connection.status === 'active'"
-          [class.pill-warn]="connection.status !== 'active'"
-        >
-          {{ connection.status === 'active' ? 'OK' : 'Action needed' }}
-        </span>
-      </div>
-      @if (!connection.demo) {
-        @if (replacing()) {
-          <form
-            class="setting"
-            style="display: grid; gap: 8px"
-            (submit)="$event.preventDefault(); replace()"
+    } @else {
+      <section class="settings-group" [attr.aria-label]="connection.label">
+        <h3>{{ connection.label }}</h3>
+        <div class="setting">
+          <span>
+            <b>{{ bankName(connection) }}</b>
+            <small>
+              @if (connection.kind === 'file') {
+                Imported statement · last import {{ lastSync(connection) }}
+              } @else {
+                @if (connection.status === 'active') {
+                  Connected
+                } @else {
+                  Needs a new token
+                }
+                · last update {{ lastSync(connection) }} · {{ connection.historyMonths }} months of
+                history
+              }
+            </small>
+          </span>
+          <span
+            class="pill"
+            [class.pill-good]="connection.status === 'active'"
+            [class.pill-warn]="connection.status !== 'active'"
           >
-            <label class="label" for="new-token">New monobank token</label>
-            <input
-              id="new-token"
-              class="input"
-              type="text"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-              placeholder="Paste it here"
-              [value]="newToken()"
-              [attr.aria-invalid]="error() ? 'true' : null"
-              (input)="newToken.set($any($event.target).value); error.set(null)"
-            />
-            @if (error()) {
-              <p class="error-text" role="alert">{{ error() }}</p>
-            }
-            <div style="display: flex; gap: 8px; justify-content: flex-end">
-              <button type="button" class="btn btn-sm btn-quiet" (click)="replacing.set(false)">
-                Cancel
-              </button>
-              <button
-                type="submit"
-                class="btn btn-sm btn-primary"
-                [disabled]="!newToken().trim() || busy()"
-              >
-                {{ busy() ? 'Checking…' : 'Use this token' }}
-              </button>
-            </div>
-          </form>
-        } @else {
-          <button type="button" class="setting" (click)="replacing.set(true)">
+            {{ connection.status === 'active' ? 'OK' : 'Action needed' }}
+          </span>
+        </div>
+
+        @if (connection.kind === 'file') {
+          <button type="button" class="setting" (click)="addBank('privat24')">
             <span
-              ><b>Replace token</b
-              ><small>Issue a new one at api.monobank.ua and paste it here</small></span
+              ><b>Import another statement</b
+              ><small>Newer days are added; rows already here are not counted twice</small></span
+            >
+            <ll-icon name="chevron-right" />
+          </button>
+        } @else {
+          @if (replacing() === connection.id) {
+            <form
+              class="setting"
+              style="display: grid; gap: 8px"
+              (submit)="$event.preventDefault(); replace(connection)"
+            >
+              <label class="label" [attr.for]="'new-token-' + connection.id"
+                >New {{ bankName(connection) }} token</label
+              >
+              <input
+                [id]="'new-token-' + connection.id"
+                class="input"
+                type="text"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="Paste it here"
+                [value]="newToken()"
+                [attr.aria-invalid]="error() ? 'true' : null"
+                (input)="newToken.set($any($event.target).value); error.set(null)"
+              />
+              @if (error()) {
+                <p class="error-text" role="alert">{{ error() }}</p>
+              }
+              <div style="display: flex; gap: 8px; justify-content: flex-end">
+                <button type="button" class="btn btn-sm btn-quiet" (click)="replacing.set(null)">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  class="btn btn-sm btn-primary"
+                  [disabled]="!newToken().trim() || busy()"
+                >
+                  {{ busy() ? 'Checking…' : 'Use this token' }}
+                </button>
+              </div>
+            </form>
+          } @else {
+            <button type="button" class="setting" (click)="startReplacing(connection.id)">
+              <span
+                ><b>Replace token</b
+                ><small>
+                  @if (connection.bank === 'privatbank') {
+                    Create a new key in Privat24 for Business and paste it here
+                  } @else {
+                    Issue a new one at api.monobank.ua and paste it here
+                  }
+                </small></span
+              >
+              <ll-icon name="chevron-right" />
+            </button>
+          }
+          <button
+            type="button"
+            class="setting"
+            (click)="actions.loadEarlier(connection.id)"
+            [disabled]="connection.historyMonths >= 13"
+          >
+            <span
+              ><b>Load an earlier month</b
+              ><small>
+                @if (connection.bank === 'privatbank') {
+                  PrivatBank asks for one request a second, so a month takes a minute or so
+                } @else {
+                  monobank allows one read a minute, so each month takes a few minutes
+                }
+              </small></span
             >
             <ll-icon name="chevron-right" />
           </button>
         }
-      }
-      <button
-        type="button"
-        class="setting"
-        (click)="actions.loadEarlier()"
-        [disabled]="connection.historyMonths >= 13"
-      >
+        <button
+          type="button"
+          class="setting"
+          [class.danger]="confirming() === connection.id"
+          (click)="disconnect(connection)"
+        >
+          <span>
+            <b>{{
+              confirming() === connection.id
+                ? 'Press again to delete everything'
+                : connection.kind === 'file'
+                  ? 'Remove the imported data'
+                  : 'Disconnect and delete my data'
+            }}</b>
+            <small>
+              @if (connection.kind === 'file') {
+                Deletes every row imported from statement files from this computer. The files
+                themselves were never kept.
+              } @else if (connection.bank === 'privatbank') {
+                Deletes the token and everything read from PrivatBank from this computer. The key
+                itself stays valid until you delete it in Privat24 for Business.
+              } @else {
+                Deletes the token and everything read from the bank from this computer. The token
+                itself stays valid at monobank until you issue a new one at api.monobank.ua.
+              }
+            </small>
+          </span>
+          <ll-icon name="trash" />
+        </button>
+      </section>
+    }
+  }
+
+  @if (session.live() && session.connected() && !session.demo()) {
+    <section class="settings-group" aria-label="Add a bank">
+      <h3>More banks</h3>
+      <button type="button" class="setting" (click)="addBank()">
         <span
-          ><b>Load an earlier month</b
-          ><small>monobank allows one read a minute, so each month takes a few minutes</small></span
+          ><b>Add a bank</b
+          ><small>monobank, PrivatBank business, or a Privat24 statement file</small></span
         >
         <ll-icon name="chevron-right" />
       </button>
+      @if (!hasStatement()) {
+        <button type="button" class="setting" (click)="addBank('privat24')">
+          <span
+            ><b>Import a Privat24 statement</b
+            ><small>Personal cards, from an Excel or CSV statement you download</small></span
+          >
+          <ll-icon name="chevron-right" />
+        </button>
+      }
     </section>
   }
 
@@ -143,24 +223,6 @@
       <ll-icon name="copy" />
     </button>
   </section>
-
-  @if (session.connection() && !session.demo()) {
-    <section class="settings-group" aria-label="Disconnect">
-      <h3>Leave</h3>
-      <button type="button" class="setting" [class.danger]="confirming()" (click)="disconnect()">
-        <span>
-          <b>{{
-            confirming() ? 'Press again to delete everything' : 'Disconnect and delete my data'
-          }}</b>
-          <small
-            >Deletes the token and everything read from the bank from this computer. The token
-            itself stays valid at monobank until you issue a new one at api.monobank.ua.</small
-          >
-        </span>
-        <ll-icon name="trash" />
-      </button>
-    </section>
-  }
 
   <p class="hint" style="margin-top: 18px">
     Shortcuts: <span class="kbd">/</span> search · <span class="kbd">g</span> then

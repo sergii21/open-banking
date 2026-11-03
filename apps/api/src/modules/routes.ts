@@ -3,6 +3,7 @@ import * as z from 'zod';
 import { notFound } from '../errors';
 import { requireSession } from '../plugins/session';
 import type { App, AppContext } from '../types';
+import { primaryConnection } from './connection/presenter';
 import { toAccountDto } from './home/presenter';
 
 const CategoryEnum = z.enum(CATEGORIES);
@@ -14,10 +15,13 @@ export function registerAppRoutes(api: App, ctx: AppContext): void {
 
   api.get('/activity', async (request): Promise<Activity> => {
     const session = requireSession(request);
-    const connection = ctx.connections.requireCurrent(session.id);
-    const accounts = ctx.repos.accounts.listByConnection(connection.id);
-    const { table } = await ctx.rates.get(connection);
-    const states = ctx.sync.accountStates(connection);
+    const connections = ctx.connections.requireAny(session.id);
+    const accounts = ctx.repos.accounts.listBySession(session.id);
+    const primary = primaryConnection(connections);
+    if (!primary) throw notFound('Connection');
+    const { table } = await ctx.rates.get(primary);
+    const states = ctx.sync.accountStates(session.id);
+    const byId = new Map(connections.map((c) => [c.id, c]));
     const since = ctx.clock.now().getTime() - THIRTEEN_MONTHS_MS;
     const rows: ActivityRow[] = ctx.repos.transactions
       .listForSession(session.id, since)
@@ -41,9 +45,11 @@ export function registerAppRoutes(api: App, ctx: AppContext): void {
       }));
     return {
       rows,
-      accounts: accounts.map((a) => toAccountDto(a, states.get(a.id), table)),
-      demo: connection.provider === 'demo',
-      version: ctx.sync.state(connection).version,
+      accounts: accounts.map((a) =>
+        toAccountDto(a, states.get(a.id), table, byId.get(a.connectionId)),
+      ),
+      demo: connections.some((c) => c.provider === 'demo'),
+      version: ctx.sync.stateForSession(session.id).version,
     };
   });
 
@@ -81,10 +87,17 @@ export function registerAppRoutes(api: App, ctx: AppContext): void {
 
   api.get('/sync', (request) => {
     const session = requireSession(request);
-    return ctx.sync.state(ctx.connections.requireCurrent(session.id));
+    ctx.connections.requireAny(session.id);
+    return ctx.sync.stateForSession(session.id);
   });
   api.post('/sync/refresh', async (request) => ctx.sync.refresh(requireSession(request).id));
-  api.post('/sync/load-earlier', (request) => ctx.sync.loadEarlier(requireSession(request).id));
+  api.post(
+    '/sync/load-earlier',
+    {
+      schema: { body: z.object({ connectionId: z.string().min(1).max(64).optional() }).optional() },
+    },
+    (request) => ctx.sync.loadEarlier(requireSession(request).id, request.body?.connectionId),
+  );
   api.post(
     '/accounts/:id/prioritise',
     { schema: { params: z.object({ id: z.string().min(1).max(64) }) } },

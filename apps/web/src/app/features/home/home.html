@@ -22,15 +22,34 @@
 
 @if (h) {
   <div class="home">
-    @if (h.sync.phase === 'attention' && h.sync.message) {
+    @let s = sync();
+    @if (s && s.phase === 'attention' && s.message) {
       <p class="banner a-banner" role="alert" style="grid-column: 1 / -1">
         <ll-icon name="alert" [size]="18" />
-        <span>{{ h.sync.message }}</span>
-        @if (h.sync.needsToken) {
+        <span>{{ s.message }}</span>
+        @if (s.needsToken) {
           <button class="btn btn-sm btn-quiet" type="button" (click)="ui.settings.set(true)">
-            Paste a new token
+            Open settings
           </button>
         }
+      </p>
+    }
+    @if (ui.imported(); as imported) {
+      <p class="banner a-banner" role="status" style="grid-column: 1 / -1">
+        <ll-icon name="check" [size]="18" />
+        <span>
+          Read {{ imported.rows.read }} rows from {{ imported.cards.length }}
+          {{ imported.cards.length === 1 ? 'card' : 'cards' }} ({{ imported.rows.added }} new,
+          {{ imported.rows.updated }} already here{{
+            imported.rows.skipped ? ', ' + imported.rows.skipped + ' skipped' : ''
+          }}).
+          @for (note of imported.notes; track note) {
+            {{ note }}
+          }
+        </span>
+        <button class="btn btn-sm btn-quiet" type="button" (click)="dismissImport()">
+          Dismiss
+        </button>
       </p>
     }
 
@@ -47,11 +66,13 @@
         </div>
         <ll-amount [minor]="shown()" currency="UAH" size="hero" />
         <p class="hero-sub">
+          {{ heroSub() }}
           @if (credit() !== null) {
+            @if (heroSub()) {
+              ·
+            }
             Available with credit
             <ll-amount [minor]="credit() ?? 0" currency="UAH" [fraction]="false" />
-          } @else if (h.accounts.length > 1) {
-            Across {{ h.accounts.length }} accounts, in hryvnias
           }
         </p>
         @if (trend(); as t) {
@@ -66,9 +87,8 @@
               font-size: var(--fs-sm);
             "
           >
-            @if (h.sync.total > 0) {
-              The 30-day line appears when history has loaded ({{ h.sync.done }} of
-              {{ h.sync.total }})
+            @if (s && s.total > 0) {
+              The 30-day line appears when history has loaded ({{ s.done }} of {{ s.total }})
             }
           </div>
         }
@@ -150,17 +170,15 @@
                 </span>
                 <span class="tile-name"
                   ><span class="sr-only">Open transactions of </span>{{ account.name }}
-                  <small>{{
-                    account.kind === 'jar'
-                      ? 'Jar'
-                      : account.last4
-                        ? '•••• ' + account.last4
-                        : 'Card'
-                  }}</small>
+                  <small>{{ tileLabel(account) }}</small>
                 </span>
               </span>
               <span class="tile-amt">
-                <ll-amount [minor]="account.ownMinor" [currency]="account.currency" size="lg" />
+                @if (account.balanceKnown) {
+                  <ll-amount [minor]="account.ownMinor" [currency]="account.currency" size="lg" />
+                } @else {
+                  <span class="amt-unknown" aria-label="Balance unknown">—</span>
+                }
                 @if (goalWidth(account); as width) {
                   <span class="meter" role="presentation"><i [style.--w]="width"></i></span>
                 }

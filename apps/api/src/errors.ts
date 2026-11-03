@@ -8,11 +8,12 @@ const TITLES: Record<ErrorCode, string> = {
   conflict: 'Conflict',
   rate_limited: 'Too many requests',
   refresh_cooldown: 'Refreshed too recently',
-  reauth_required: 'monobank needs a new token',
+  reauth_required: 'A new token is needed',
   connection_not_active: 'This connection is not active',
   bank_unavailable: 'The bank is unavailable',
   provider_error: 'The bank returned something unexpected',
   provider_not_available: 'This is not available here',
+  unsupported_file: 'That file cannot be read',
   forbidden: 'Forbidden',
   internal_error: 'Something went wrong',
 };

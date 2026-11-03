@@ -2,6 +2,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page } from '@playwright/test';
 
 export const DEMO_TOKEN = 'demo-token-ledger-lens-not-a-real-bank';
+export const FAKE_PRIVAT_TOKEN = 'privat-autoclient-fake-token-not-a-real-bank';
+/** The fake PrivatBank Autoclient started by playwright.config.ts: its admin switches. */
+export const FAKE_PRIVAT_URL = 'http://127.0.0.1:4311';
 
 /** Starts recording Content-Security-Policy violations; call the returned function at the end to read them. */
 export async function watchCsp(page: Page): Promise<() => Promise<string[]>> {

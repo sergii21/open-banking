@@ -74,11 +74,19 @@ export class Calendar {
     return asUtc - Math.floor(ms / 1000) * 1000;
   }
 
-  /** The instant a local day begins, in Unix milliseconds. */
-  dayStart(day: string): number {
-    const guess = Date.parse(`${day}T00:00:00Z`);
+  /**
+   * The instant a wall-clock time on a local day happens, in Unix milliseconds. A time inside the hour that daylight saving
+   * skips lands just after the gap.
+   */
+  toInstant(day: string, hour = 0, minute = 0, second = 0): number {
+    const guess = Date.parse(`${day}T00:00:00Z`) + ((hour * 60 + minute) * 60 + second) * 1000;
     const first = guess - this.offsetMs(guess);
     return guess - this.offsetMs(first);
+  }
+
+  /** The instant a local day begins, in Unix milliseconds. */
+  dayStart(day: string): number {
+    return this.toInstant(day);
   }
 
   /** The last millisecond of a local day. */

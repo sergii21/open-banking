@@ -1,8 +1,13 @@
 import type { SessionRecord } from '../../db/repos';
 import { balanceVersusLimit, statementContinuity } from '../../domain/checks';
-import { DiagnosticsCollector, renderDiagnostics, type FactValue } from '../../domain/diagnostics';
+import {
+  renderDiagnostics,
+  type DiagnosticsSection,
+  type FactValue,
+} from '../../domain/diagnostics';
 import type { CoreContext } from '../../types';
 import { APP_NAME, APP_VERSION } from '../../version';
+import { LABEL_OF, primaryConnection } from '../connection/presenter';
 import type { RatesService } from '../rates/service';
 import type { ProviderRegistry } from '../../providers/registry';
 import type { SyncService } from '../sync/service';
@@ -31,14 +36,20 @@ export class DiagnosticsService {
 
   async build(session: SessionRecord): Promise<string> {
     const { repos, clock } = this.core;
-    const connection = repos.connections.findBySession(session.id);
-    const collector: DiagnosticsCollector | undefined = connection
-      ? this.providers.diagnostics(connection.provider)
-      : undefined;
+    const connections = repos.connections.listBySession(session.id);
+    const primary = primaryConnection(connections);
+    const sections: DiagnosticsSection[] = connections.map((c) => ({
+      title: LABEL_OF[c.provider],
+      snapshot: this.providers.diagnostics(c.provider).snapshot(),
+      ...(c.kind === 'file' ? { file: true } : {}),
+    }));
     const facts: Record<string, FactValue> = {};
 
-    if (connection) {
-      const accounts = repos.accounts.listByConnection(connection.id);
+    if (primary) {
+      facts['connections'] = connections
+        .map((c) => `${LABEL_OF[c.provider]} (${c.kind}, ${c.status})`)
+        .join(', ');
+      const accounts = repos.accounts.listBySession(session.id);
       const cards = accounts.filter((a) => a.kind === 'card');
       facts['accounts'] = `${cards.length} cards, ${accounts.length - cards.length} jars`;
       facts['card types'] = count(cards.map((a) => a.cardType)) || 'none';
@@ -49,6 +60,9 @@ export class DiagnosticsService {
         ? count(credit.map((a) => balanceVersusLimit(a.balanceMinor, a.creditLimitMinor)))
         : 'n/a';
       facts['jar goals set'] = accounts.filter((a) => a.goalMinor !== null).length;
+      facts['accounts with no balance (imported file without one)'] = accounts.filter(
+        (a) => !a.balanceKnown,
+      ).length;
 
       const records = repos.transactions.listForSession(session.id, 0);
       facts['transactions stored'] = records.length;
@@ -83,7 +97,7 @@ export class DiagnosticsService {
         ? `${consistent} of ${pairs} consecutive pairs agree (${Math.round((consistent / pairs) * 100)}%)`
         : 'not enough data yet';
 
-      const { table, stale } = await this.rates.get(connection);
+      const { table, stale } = await this.rates.get(primary);
       facts['rates'] = table.isEmpty()
         ? 'none'
         : `${table.pairs.length} pairs, ${stale ? 'last refresh failed' : 'fresh'}`;
@@ -91,8 +105,11 @@ export class DiagnosticsService {
         (a) => table.perUnit(a.currency) === null,
       ).length;
 
-      const sync = this.sync.state(connection);
-      facts['history months requested'] = connection.historyMonths;
+      const sync = this.sync.stateForSession(session.id);
+      facts['history months requested'] = connections
+        .filter((c) => c.kind === 'api')
+        .map((c) => c.historyMonths)
+        .join(' / ');
       facts['sync'] =
         `${sync.phase}, ${sync.done} of ${sync.total} steps${sync.message ? `, note: ${sync.message}` : ''}`;
       facts['cards with history loaded'] =
@@ -103,9 +120,12 @@ export class DiagnosticsService {
     return renderDiagnostics({
       app: APP_NAME,
       version: APP_VERSION,
-      provider: connection ? `${connection.provider} (${connection.status})` : 'not connected',
+      provider:
+        connections.length > 0
+          ? connections.map((c) => `${c.provider} (${c.status})`).join(' + ')
+          : 'not connected',
       generatedAt: clock.now().toISOString(),
-      snapshot: (collector ?? new DiagnosticsCollector()).snapshot(),
+      sections,
       facts,
     });
   }

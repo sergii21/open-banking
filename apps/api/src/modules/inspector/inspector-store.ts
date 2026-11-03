@@ -36,4 +36,21 @@ export class InspectorStore {
   clear(sessionId: string): void {
     this.buffers.delete(sessionId);
   }
+
+  /**
+   * One bank was disconnected: its calls go, the other banks' calls stay. The call that checked the token was made before the
+   * connection had an id, so it is recognised by its bank instead.
+   */
+  removeConnection(sessionId: string, connectionId: string, provider: string): void {
+    const calls = this.buffers.get(sessionId);
+    if (!calls) return;
+    this.buffers.set(
+      sessionId,
+      calls.filter(
+        (call) =>
+          call.connectionId !== connectionId &&
+          !(call.connectionId === null && call.provider === provider),
+      ),
+    );
+  }
 }

@@ -5,9 +5,13 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(`axe, ${scheme}`, () => {
     test.use({ colorScheme: scheme });
 
-    test('the first-run screen', async ({ page }) => {
+    test('the first-run screen, each bank’s pane', async ({ page }) => {
       await page.goto('/');
       await expectNoViolations(page);
+      for (const name of ['PrivatBank', 'Privat24 file']) {
+        await page.getByRole('radio', { name }).click();
+        await expectNoViolations(page);
+      }
     });
 
     test('Home, Activity, Insights and the sheets', async ({ page }) => {

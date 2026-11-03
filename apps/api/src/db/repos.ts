@@ -37,7 +37,7 @@ export class SessionsRepo {
     this.db.run('UPDATE sessions SET last_seen_at = ? WHERE id = ?', now, id);
   }
 
-  /** Deletes the session and, through ON DELETE CASCADE, its connection, accounts, transactions and queued reads. */
+  /** Deletes the session and, through ON DELETE CASCADE, its connections, accounts, transactions and queued reads. */
   delete(id: string): void {
     this.db.run('DELETE FROM sessions WHERE id = ?', id);
   }
@@ -51,10 +51,13 @@ export class SessionsRepo {
 
 export type ConnectionStatus = 'active' | 'needs_reauth' | 'error';
 
+export type ConnectionKind = 'api' | 'file';
+
 export interface ConnectionRecord {
   id: string;
   sessionId: string;
   provider: ProviderId;
+  kind: ConnectionKind;
   status: ConnectionStatus;
   tokensEnc: string | null;
   lastRefreshedAt: string | null;
@@ -67,6 +70,7 @@ interface ConnectionRow {
   id: string;
   session_id: string;
   provider: string;
+  kind: string;
   status: string;
   tokens_enc: string | null;
   last_refreshed_at: string | null;
@@ -79,6 +83,7 @@ const toConnection = (row: ConnectionRow): ConnectionRecord => ({
   id: row.id,
   sessionId: row.session_id,
   provider: row.provider as ProviderId,
+  kind: row.kind as ConnectionKind,
   status: row.status as ConnectionStatus,
   tokensEnc: row.tokens_enc,
   lastRefreshedAt: row.last_refreshed_at,
@@ -108,16 +113,19 @@ export class ConnectionsRepo {
     id: string;
     sessionId: string;
     provider: ProviderId;
-    tokensEnc: string;
+    kind: ConnectionKind;
+    /** Null for an imported file: there is no credential. */
+    tokensEnc: string | null;
     historyMonths: number;
     now: string;
   }): void {
     this.db.run(
-      `INSERT INTO connections (id, session_id, provider, status, tokens_enc, history_months, created_at, updated_at)
-       VALUES (?, ?, ?, 'active', ?, ?, ?, ?)`,
+      `INSERT INTO connections (id, session_id, provider, kind, status, tokens_enc, history_months, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
       input.id,
       input.sessionId,
       input.provider,
+      input.kind,
       input.tokensEnc,
       input.historyMonths,
       input.now,
@@ -130,18 +138,38 @@ export class ConnectionsRepo {
     return row ? toConnection(row) : undefined;
   }
 
-  findBySession(sessionId: string): ConnectionRecord | undefined {
+  /** Every connection of the session, oldest first. */
+  listBySession(sessionId: string): ConnectionRecord[] {
+    return this.db
+      .all<ConnectionRow>(
+        'SELECT * FROM connections WHERE session_id = ? ORDER BY created_at, id',
+        sessionId,
+      )
+      .map(toConnection);
+  }
+
+  findForSession(sessionId: string, id: string): ConnectionRecord | undefined {
     const row = this.db.get<ConnectionRow>(
-      'SELECT * FROM connections WHERE session_id = ?',
+      'SELECT * FROM connections WHERE session_id = ? AND id = ?',
       sessionId,
+      id,
     );
     return row ? toConnection(row) : undefined;
   }
 
-  /** Connections the background loader should look at. */
+  findByProvider(sessionId: string, provider: ProviderId): ConnectionRecord | undefined {
+    const row = this.db.get<ConnectionRow>(
+      'SELECT * FROM connections WHERE session_id = ? AND provider = ?',
+      sessionId,
+      provider,
+    );
+    return row ? toConnection(row) : undefined;
+  }
+
+  /** Connections the background loader should look at: banks read through a token. A file has nothing to load. */
   listActive(): ConnectionRecord[] {
     return this.db
-      .all<ConnectionRow>(`SELECT * FROM connections WHERE status = 'active'`)
+      .all<ConnectionRow>(`SELECT * FROM connections WHERE status = 'active' AND kind = 'api'`)
       .map(toConnection);
   }
 
@@ -185,6 +213,8 @@ export interface AccountRecord {
   goalMinor: number | null;
   sort: number;
   balanceAt: string;
+  /** False when an imported file carried no balance; `balanceMinor` is then 0 and must not be counted. */
+  balanceKnown: boolean;
   coveredFrom: string | null;
   coveredTo: string | null;
   lastStatementAt: string | null;
@@ -204,6 +234,7 @@ interface AccountRow {
   goal_minor: number | null;
   sort: number;
   balance_at: string;
+  balance_known: number;
   covered_from: string | null;
   covered_to: string | null;
   last_statement_at: string | null;
@@ -223,6 +254,7 @@ const toAccount = (row: AccountRow): AccountRecord => ({
   goalMinor: row.goal_minor,
   sort: row.sort,
   balanceAt: row.balance_at,
+  balanceKnown: row.balance_known !== 0,
   coveredFrom: row.covered_from,
   coveredTo: row.covered_to,
   lastStatementAt: row.last_statement_at,
@@ -240,6 +272,8 @@ export interface AccountUpsert {
   goalMinor: number | null;
   sort: number;
   balanceAt: string;
+  /** Defaults to true: a bank always says what is in an account. */
+  balanceKnown?: boolean;
 }
 
 export class AccountsRepo {
@@ -248,12 +282,13 @@ export class AccountsRepo {
   upsert(connectionId: string, input: AccountUpsert): AccountRecord {
     this.db.run(
       `INSERT INTO accounts (id, connection_id, provider_account_id, kind, card_type, name, currency, last4,
-         credit_limit_minor, balance_minor, goal_minor, sort, balance_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         credit_limit_minor, balance_minor, goal_minor, sort, balance_at, balance_known)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (connection_id, provider_account_id) DO UPDATE SET
          kind = excluded.kind, card_type = excluded.card_type, name = excluded.name, currency = excluded.currency,
          last4 = excluded.last4, credit_limit_minor = excluded.credit_limit_minor, balance_minor = excluded.balance_minor,
-         goal_minor = excluded.goal_minor, sort = excluded.sort, balance_at = excluded.balance_at`,
+         goal_minor = excluded.goal_minor, sort = excluded.sort, balance_at = excluded.balance_at,
+         balance_known = excluded.balance_known`,
       newId('acc'),
       connectionId,
       input.providerAccountId,
@@ -267,6 +302,7 @@ export class AccountsRepo {
       input.goalMinor,
       input.sort,
       input.balanceAt,
+      input.balanceKnown === false ? 0 : 1,
     );
     const row = this.db.get<AccountRow>(
       'SELECT * FROM accounts WHERE connection_id = ? AND provider_account_id = ?',
@@ -292,6 +328,15 @@ export class AccountsRepo {
     return row ? toAccount(row) : undefined;
   }
 
+  findByProviderId(connectionId: string, providerAccountId: string): AccountRecord | undefined {
+    const row = this.db.get<AccountRow>(
+      'SELECT * FROM accounts WHERE connection_id = ? AND provider_account_id = ?',
+      connectionId,
+      providerAccountId,
+    );
+    return row ? toAccount(row) : undefined;
+  }
+
   listByConnection(connectionId: string): AccountRecord[] {
     return this.db
       .all<AccountRow>(
@@ -305,7 +350,7 @@ export class AccountsRepo {
     return this.db
       .all<AccountRow>(
         `SELECT a.* FROM accounts a JOIN connections c ON c.id = a.connection_id
-         WHERE c.session_id = ? ORDER BY a.sort, a.id`,
+         WHERE c.session_id = ? ORDER BY c.created_at, c.id, a.sort, a.id`,
         sessionId,
       )
       .map(toAccount);

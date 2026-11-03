@@ -383,6 +383,19 @@
   box-shadow: 0 1px 2px var(--shadow-color);
 }
 
+/* Three or more choices that must fit a 320 px screen: the segments share the width and may wrap their text. */
+.seg-wide {
+  display: grid;
+  grid-auto-flow: row;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+.seg-wide button {
+  padding-inline: 6px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .switch {
   position: relative;
   flex: none;

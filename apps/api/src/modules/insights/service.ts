@@ -5,6 +5,7 @@ import { detectRecurring, merchantKey, summarise } from '../../domain/insights';
 import { toUahRows } from '../../domain/uah-rows';
 import { notFound } from '../../errors';
 import type { CoreContext } from '../../types';
+import { primaryConnection } from '../connection/presenter';
 import type { RatesService } from '../rates/service';
 
 const THIRTEEN_MONTHS_MS = 400 * 86_400_000;
@@ -18,12 +19,13 @@ export class InsightsService {
 
   async build(session: SessionRecord, requested?: string): Promise<Insights> {
     const { repos, clock } = this.core;
-    const connection = repos.connections.findBySession(session.id);
-    if (!connection) throw notFound('Connection');
+    const connections = repos.connections.listBySession(session.id);
+    const primary = primaryConnection(connections);
+    if (!primary) throw notFound('Connection');
     const now = clock.now();
     const today = this.calendar.today(now);
-    const accounts = repos.accounts.listByConnection(connection.id);
-    const { table } = await this.rates.get(connection);
+    const accounts = repos.accounts.listBySession(session.id);
+    const { table } = await this.rates.get(primary);
     const records = repos.transactions.listForSession(
       session.id,
       now.getTime() - THIRTEEN_MONTHS_MS,
@@ -95,7 +97,7 @@ export class InsightsService {
       monthlyMinor: r.monthlyEquivalentMinor,
     }));
 
-    const states = repos.syncJobs.progress(connection.id);
+    const pending = connections.reduce((n, c) => n + repos.syncJobs.progress(c.id).pending, 0);
     return {
       month,
       months: monthsWithData,
@@ -121,7 +123,7 @@ export class InsightsService {
         })),
       regular,
       regularMonthlyMinor: regular.reduce((sum, r) => sum + r.monthlyMinor, 0),
-      partial: !covers(month) || (month === currentMonth && states.pending > 0),
+      partial: !covers(month) || (month === currentMonth && pending > 0),
       converted,
     };
   }

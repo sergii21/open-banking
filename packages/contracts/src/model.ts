@@ -1,4 +1,4 @@
-import type { ProviderId } from './common';
+import type { BankId, ProviderId } from './common';
 
 // ---------------------------------------------------------------------------------------------- categories
 
@@ -23,12 +23,16 @@ export type Category = (typeof CATEGORIES)[number];
 export interface ConnectionInfo {
   id: string;
   provider: ProviderId;
+  /** `api`: read with a token the person issued, kept in step with the bank. `file`: a statement the person imported. */
+  kind: 'api' | 'file';
+  bank: BankId;
   /** True for the built-in demo data: the screens say so wherever money is shown. */
   demo: boolean;
   label: string;
   status: 'active' | 'needs_reauth' | 'error';
   connectedAt: string;
   lastSyncAt: string | null;
+  /** Months of history the loader reads; 0 for an imported file. */
   historyMonths: number;
 }
 
@@ -36,19 +40,21 @@ export interface SessionInfo {
   id: string;
   createdAt: string;
   version: string;
-  /** Whether connecting a real monobank token is allowed here (it is only on this machine). */
+  /** Whether connecting a real bank is allowed here (it is only on this machine). */
   live: boolean;
   /** The IANA zone days and months are cut in; screens group by day in the same zone. */
   timeZone: string;
-  connection: ConnectionInfo | null;
+  /** Every bank connected in this session, oldest first. The demo, when it is on, is the only one. */
+  connections: ConnectionInfo[];
 }
 
 // ---------------------------------------------------------------------------------------------- sync
 
+/** The loader across every connection of the session: the busiest phase wins, steps add up, the nearest next step is shown. */
 export interface SyncState {
   /**
-   * `idle`: everything is loaded. `loading`: a step is running. `waiting`: steps are queued and the bank's one-read-a-minute
-   * limit is the reason nothing is running. `attention`: something needs the person (token rejected, bank down).
+   * `idle`: everything is loaded. `loading`: a step is running. `waiting`: steps are queued and a bank's read limit is the
+   * reason nothing is running. `attention`: something needs the person (token rejected, bank down).
    */
   phase: 'idle' | 'loading' | 'waiting' | 'attention';
   /** When data last arrived from the bank. */
@@ -71,12 +77,20 @@ export interface SyncState {
 
 export interface Account {
   id: string;
+  connectionId: string;
+  bank: BankId;
+  /** `file`: read from an imported statement, so it is only as current as the file. */
+  source: 'api' | 'file';
   kind: 'card' | 'jar';
-  /** monobank's card type (black, white, platinum, iron, fop, yellow, eAid) or `jar`. */
+  /** monobank's card type (black, white, platinum, iron, fop, yellow, eAid), `business` (PrivatBank), `privat24` (a file) or `jar`. */
   type: string;
   name: string;
   currency: string;
   last4: string | null;
+  /** False when the imported file carried no balance: the amount below is 0 and the screens say there is none. */
+  balanceKnown: boolean;
+  /** The days an imported statement covers and when it was imported; null for an account read from the bank. */
+  imported: { from: string; to: string; at: string } | null;
   /** Own money in the account currency: the balance minus any credit limit. */
   ownMinor: number;
   /** What can be spent now: own money plus unused credit. Equals `ownMinor` without a credit limit. */
@@ -105,6 +119,8 @@ export interface Home {
     availableUahMinor: number;
     /** Accounts left out of the total because there is no rate for their currency. */
     unconverted: number;
+    /** Imported accounts left out of the total because their file carried no balance. */
+    unknownBalance: number;
   };
   rates: RatesInfo;
   /** Own money per day for the last 30 days (UAH minor units, oldest first); null until every account has enough history. */
@@ -221,12 +237,34 @@ export interface InspectorCall {
   connectionId: string | null;
 }
 
+// ---------------------------------------------------------------------------------------------- import
+
+/** What reading a Privat24 statement file did. Counts and names only: no description, amount or card number. */
+export interface ImportResult {
+  /** Every connection of the session after the import (the file becomes one of them). */
+  connections: ConnectionInfo[];
+  /** The days the statement covers: the period it states, or its first and last row. */
+  period: { from: string; to: string };
+  rows: { read: number; added: number; updated: number; skipped: number };
+  /** One entry per card found in the file. */
+  cards: {
+    accountId: string;
+    last4: string | null;
+    currency: string;
+    added: number;
+    updated: number;
+    balanceKnown: boolean;
+  }[];
+  /** Things the person should know, in plain words (an assumed currency, rows that were not transactions). */
+  notes: string[];
+}
+
 // ---------------------------------------------------------------------------------------------- events
 
 /** Server-sent events on `GET /api/events`. The SSE `event:` field is the `type`. */
 export type ServerEvent =
   | { type: 'sync.updated'; sync: SyncState }
-  | { type: 'connection.updated'; connection: ConnectionInfo | null }
+  | { type: 'connection.updated'; connections: ConnectionInfo[] }
   | { type: 'inspector.call'; call: InspectorCall };
 
 export const SERVER_EVENT_TYPES = ['sync.updated', 'connection.updated', 'inspector.call'] as const;

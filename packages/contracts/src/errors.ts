@@ -15,6 +15,7 @@ export const ERROR_CODES = [
   'bank_unavailable',
   'provider_error',
   'provider_not_available',
+  'unsupported_file',
   'forbidden',
   'internal_error',
 ] as const;
@@ -29,7 +30,7 @@ export interface Problem {
   detail?: string;
   instance?: string;
   traceId?: string;
-  /** Set when waiting helps: monobank allows one read a minute, so a 429 says how long. */
+  /** Set when waiting helps: a bank that caps read speed says how long in a 429. */
   retryAfterSeconds?: number;
   errors?: { path: string; message: string }[];
 }

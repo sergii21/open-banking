@@ -76,7 +76,7 @@ test('blurring amounts is one click, covers every screen, and is remembered', as
 test('leaving the demo is one click and returns to the first-run screen', async ({ page }) => {
   await connectDemo(page);
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByRole('button', { name: /Leave the demo and connect monobank/ }).click();
+  await page.getByRole('button', { name: /Leave the demo and connect a bank/ }).click();
   await expect(page).toHaveURL(/\/welcome/);
   await expect(page.getByRole('button', { name: 'Try with demo data' })).toBeVisible();
 });

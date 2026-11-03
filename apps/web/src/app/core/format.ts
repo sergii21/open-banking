@@ -89,3 +89,6 @@ export function countdown(ms: number): string {
   if (seconds < 60) return `${seconds} s`;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
+
+/** `2026-10-31` as `31.10`: how a statement period is written in Ukraine. */
+export const ddmm = (day: string): string => `${day.slice(8, 10)}.${day.slice(5, 7)}`;

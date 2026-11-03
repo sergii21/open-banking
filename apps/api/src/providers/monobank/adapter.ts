@@ -15,6 +15,7 @@ import {
   type TokenSet,
   type TransactionWindow,
 } from '../port';
+import { normaliseToken } from '../token';
 import type { HttpRequest, HttpResult, ProviderHttp } from '../transport';
 import { currencyFromNumeric, isKnownCurrency } from './currency';
 import {
@@ -79,10 +80,7 @@ const last4 = (value: string | null | undefined): string | null => {
   return digits.length >= 4 ? digits.slice(-4) : null;
 };
 
-/** Tokens are copied from a web page: drop the whitespace, line breaks and quotes that come along. */
-export function normaliseToken(raw: string): string {
-  return raw.replace(/[\s"'`]/g, '');
-}
+export { normaliseToken };
 
 /**
  * monobank, personal API. The person pastes a read-only token issued at api.monobank.ua; everything here reads that

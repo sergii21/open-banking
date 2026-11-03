@@ -67,7 +67,7 @@
         (click)="setAccount(a.id)"
       >
         <ll-icon [name]="a.kind === 'jar' ? 'jar' : 'card'" [size]="16" />
-        {{ a.kind === 'jar' ? a.name : a.name + (a.last4 ? ' ••' + a.last4 : '') }}
+        {{ chipLabel(a) }}
       </button>
     }
     <button
@@ -258,7 +258,7 @@
     !filtering() &&
     filtered().length > 0 &&
     (live.sync()?.phase ?? 'idle') === 'idle' &&
-    (session.connection()?.historyMonths ?? 13) < 13
+    canLoadEarlier()
   ) {
     <div style="display: grid; place-items: center; padding: 24px 0 8px">
       <button type="button" class="btn btn-quiet" (click)="actions.loadEarlier()">

@@ -98,13 +98,13 @@ export class SessionService {
       version: APP_VERSION,
       live: this.core.config.live,
       timeZone: this.core.config.timeZone,
-      connection: this.connections.info(record.id),
+      connections: this.connections.infos(record.id),
     };
   }
 
-  /** "Delete all my data": forget the bank, then erase the session and everything under it. */
+  /** "Delete all my data": forget every bank, then erase the session and everything under it. */
   async deleteAll(record: SessionRecord): Promise<void> {
-    await this.connections.disconnect(record.id);
+    await this.connections.disconnectAll(record.id);
     this.core.repos.sessions.delete(record.id);
     this.core.inspector.clear(record.id);
   }

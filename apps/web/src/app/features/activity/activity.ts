@@ -30,6 +30,7 @@ import { SyncActions } from '../../core/sync';
 import { Toast } from '../../core/toast';
 import { Ui } from '../../core/ui';
 import { Amount } from '../../shared/amount';
+import { BANK_NAME } from '../../shared/banks';
 import { CATEGORY_LABEL } from '../../shared/categories';
 import { Clipboard } from '../../shared/copy';
 import { categoryIcon, Icon } from '../../shared/icon';
@@ -106,6 +107,10 @@ export class Activity {
   private handledFocus = this.ui.focusSearch();
 
   protected readonly accounts = computed(() => this.data()?.accounts ?? []);
+  /** Some bank read through a token has not reached its 13-month limit; an imported file has no "earlier" to ask for. */
+  protected readonly canLoadEarlier = computed(() =>
+    this.session.connections().some((c) => c.kind === 'api' && c.historyMonths < 13),
+  );
   private readonly accountById = computed(() => new Map(this.accounts().map((a) => [a.id, a])));
 
   protected readonly views = computed<RowView[]>(() => {
@@ -237,16 +242,27 @@ export class Activity {
     return view.row.counterparty ?? view.row.description;
   }
 
+  /** The bank is part of an account's name once there is more than one bank to tell apart. */
+  protected chipLabel(account: Account): string {
+    const name =
+      account.kind === 'jar'
+        ? account.name
+        : account.name + (account.last4 ? ` ••${account.last4}` : '');
+    return this.session.manyBanks() ? `${BANK_NAME[account.bank]} · ${name}` : name;
+  }
+
   protected cardLabel(view: RowView): string {
     const account = view.account;
     if (!account) return 'Unknown';
-    return account.last4 ? `${account.name} ••${account.last4}` : account.name;
+    return this.chipLabel(account);
   }
 
   protected subtitle(view: RowView): string {
     const parts: string[] = [CATEGORY_LABEL[view.row.category]];
-    if (view.account)
-      parts.push(view.account.last4 ? `••${view.account.last4}` : view.account.name);
+    if (view.account) {
+      const where = view.account.last4 ? `••${view.account.last4}` : view.account.name;
+      parts.push(this.session.manyBanks() ? `${BANK_NAME[view.account.bank]} ${where}` : where);
+    }
     parts.push(timeOfDay(view.row.ts));
     return parts.join(' · ');
   }
@@ -318,7 +334,11 @@ export class Activity {
       return [
         csvText(dayKey(row.ts)),
         csvText(timeOfDay(row.ts)),
-        csvText(account ? `${account.name}${account.last4 ? ` ${account.last4}` : ''}` : ''),
+        csvText(
+          account
+            ? `${BANK_NAME[account.bank]} ${account.name}${account.last4 ? ` ${account.last4}` : ''}`
+            : '',
+        ),
         csvText(row.description),
         csvText(row.counterparty ?? ''),
         csvText(row.comment ?? ''),

@@ -199,11 +199,13 @@ describe('when something goes wrong', () => {
     const state = (await client.get('/api/sync')).json();
     expect(state).toMatchObject({ phase: 'attention', needsToken: true });
     const session = (await client.get('/api/session')).json();
-    expect(session.connection.status).toBe('needs_reauth');
+    expect(session.connections[0].status).toBe('needs_reauth');
 
     revoked = false;
     clock.advance(MINUTE);
-    const replaced = await client.put('/api/connection/token', { token: DEMO_TOKEN });
+    const replaced = await client.put(`/api/connection/${session.connections[0].id}/token`, {
+      token: DEMO_TOKEN,
+    });
     expect(replaced.statusCode).toBe(200);
     expect(replaced.json().status).toBe('active');
     expect((await client.get('/api/activity')).json().rows.length).toBe(stored);
@@ -221,6 +223,6 @@ describe('when something goes wrong', () => {
       code: 'validation_failed',
       errors: [{ path: 'token' }],
     });
-    expect((await client.get('/api/session')).json().connection).toBeNull();
+    expect((await client.get('/api/session')).json().connections).toEqual([]);
   });
 });

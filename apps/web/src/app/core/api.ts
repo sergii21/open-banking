@@ -28,7 +28,13 @@ const xsrf = (): string => {
 /** The only way the app talks to the server: same origin, cookie session, CSRF header echoed on writes. */
 @Service()
 export class Api {
-  async request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    signal?: AbortSignal,
+    bytes?: ArrayBuffer,
+  ): Promise<T> {
     let response: Response;
     try {
       response = await fetch(path, {
@@ -36,10 +42,14 @@ export class Api {
         credentials: 'same-origin',
         headers: {
           accept: 'application/json',
-          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(bytes
+            ? { 'content-type': 'application/octet-stream' }
+            : body === undefined
+              ? {}
+              : { 'content-type': 'application/json' }),
           ...(method === 'GET' ? {} : { 'x-xsrf-token': xsrf() }),
         },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(bytes ? { body: bytes } : body === undefined ? {} : { body: JSON.stringify(body) }),
         ...(signal ? { signal } : {}),
       });
     } catch (error) {
@@ -81,5 +91,9 @@ export class Api {
   }
   delete(path: string): Promise<void> {
     return this.request<void>('DELETE', path);
+  }
+  /** A file's bytes as they are; the server reads them and keeps only the rows. */
+  upload<T>(path: string, bytes: ArrayBuffer): Promise<T> {
+    return this.request<T>('POST', path, undefined, undefined, bytes);
   }
 }
