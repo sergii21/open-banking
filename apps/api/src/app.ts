@@ -30,6 +30,7 @@ import { ConnectionService } from './modules/connection/service';
 import { DiagnosticsService } from './modules/diagnostics/service';
 import { EventBus } from './modules/events/event-bus';
 import { HomeService } from './modules/home/service';
+import { ImportService } from './modules/imports/service';
 import { InsightsService } from './modules/insights/service';
 import { InspectorStore } from './modules/inspector/inspector-store';
 import { RatesService } from './modules/rates/service';
@@ -175,6 +176,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const home = new HomeService(core, sync, rates, calendar);
   const insights = new InsightsService(core, rates, calendar);
   const diagnostics = new DiagnosticsService(core, providers, sync, rates);
+  const imports = new ImportService(core, providers, access, sync, rates, calendar);
   const ctx: AppContext = {
     ...core,
     providers,
@@ -186,6 +188,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     home,
     insights,
     diagnostics,
+    imports,
   };
 
   await registerApi(app, ctx);

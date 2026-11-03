@@ -17,6 +17,7 @@ import type { ConnectionService } from './modules/connection/service';
 import type { DiagnosticsService } from './modules/diagnostics/service';
 import type { EventBus } from './modules/events/event-bus';
 import type { HomeService } from './modules/home/service';
+import type { ImportService } from './modules/imports/service';
 import type { InsightsService } from './modules/insights/service';
 import type { InspectorStore } from './modules/inspector/inspector-store';
 import type { RatesService } from './modules/rates/service';
@@ -57,4 +58,5 @@ export interface AppContext extends CoreContext {
   home: HomeService;
   insights: InsightsService;
   diagnostics: DiagnosticsService;
+  imports: ImportService;
 }

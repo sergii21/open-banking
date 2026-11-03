@@ -4,5 +4,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["playwright.config.ts"]
+  "include": ["playwright.config.ts", "scripts/make-privat24-fixtures.ts"]
 }
