@@ -26,7 +26,10 @@ export class Live {
 
   private start(): void {
     if (this.source || typeof EventSource === 'undefined') return;
-    void this.api.get<SyncState>('/api/sync').then((state) => this.sync.set(state), () => undefined);
+    void this.api.get<SyncState>('/api/sync').then(
+      (state) => this.sync.set(state),
+      () => undefined,
+    );
     void this.loadCalls();
     const source = new EventSource('/api/events');
     this.source = source;
@@ -47,7 +50,8 @@ export class Live {
       this.session.setConnection(event.connection);
     });
     on('inspector.call', (event) => {
-      if (event.type === 'inspector.call') this.calls.update((list) => [event.call, ...list].slice(0, 200));
+      if (event.type === 'inspector.call')
+        this.calls.update((list) => [event.call, ...list].slice(0, 200));
     });
   }
 
@@ -60,7 +64,9 @@ export class Live {
 
   async loadCalls(): Promise<void> {
     try {
-      this.calls.set((await this.api.get<{ items: InspectorCall[] }>('/api/inspector/calls')).items);
+      this.calls.set(
+        (await this.api.get<{ items: InspectorCall[] }>('/api/inspector/calls')).items,
+      );
     } catch {
       // The drawer shows what it has.
     }

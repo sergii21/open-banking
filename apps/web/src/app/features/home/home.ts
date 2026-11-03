@@ -49,7 +49,10 @@ export class Home {
         totals.set(account.currency, (totals.get(account.currency) ?? 0) + account.ownMinor);
       }
     }
-    return [...totals].map(([currency, minor]) => ({ currency, text: formatMoney(minor, currency, { fraction: false }) }));
+    return [...totals].map(([currency, minor]) => ({
+      currency,
+      text: formatMoney(minor, currency, { fraction: false }),
+    }));
   });
 
   protected readonly credit = computed(() => {
@@ -66,13 +69,20 @@ export class Home {
     if (!home) return '';
     const parts: string[] = [];
     if (home.rates.asOf) {
-      const at = new Intl.DateTimeFormat('en-GB', { timeZone: timeZone(), hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(Date.parse(home.rates.asOf));
+      const at = new Intl.DateTimeFormat('en-GB', {
+        timeZone: timeZone(),
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(Date.parse(home.rates.asOf));
       parts.push(`monobank rates from ${at}${home.rates.stale ? ' (could not refresh)' : ''}`);
     } else if (this.foreign().length > 0) {
       parts.push('rates loading');
     }
     if (home.hero.unconverted > 0) {
-      parts.push(`${home.hero.unconverted} account${home.hero.unconverted === 1 ? '' : 's'} left out (no rate)`);
+      parts.push(
+        `${home.hero.unconverted} account${home.hero.unconverted === 1 ? '' : 's'} left out (no rate)`,
+      );
     }
     return parts.join(' · ');
   });
@@ -83,11 +93,20 @@ export class Home {
     if (!month) return null;
     if (month.previousSameDaysMinor === null) return { kind: 'loading' as const };
     if (month.previousSameDaysMinor === 0) return { kind: 'none' as const };
-    const pct = Math.round(((month.spentMinor - month.previousSameDaysMinor) / month.previousSameDaysMinor) * 100);
-    return { kind: 'pct' as const, pct, text: `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct)}%`, tone: pct <= 0 ? 'good' : 'plain' };
+    const pct = Math.round(
+      ((month.spentMinor - month.previousSameDaysMinor) / month.previousSameDaysMinor) * 100,
+    );
+    return {
+      kind: 'pct' as const,
+      pct,
+      text: `${pct > 0 ? '+' : pct < 0 ? '−' : ''}${Math.abs(pct)}%`,
+      tone: pct <= 0 ? 'good' : 'plain',
+    };
   });
 
-  protected readonly topMax = computed(() => Math.max(1, ...(this.home()?.topCategories ?? []).map((c) => c.spentMinor)));
+  protected readonly topMax = computed(() =>
+    Math.max(1, ...(this.home()?.topCategories ?? []).map((c) => c.spentMinor)),
+  );
 
   constructor() {
     this.stores.home.ensure();

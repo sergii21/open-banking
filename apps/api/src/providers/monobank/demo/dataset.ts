@@ -51,7 +51,7 @@ export interface Dataset {
   items: Map<string, DemoItem[]>;
 }
 
-export const HISTORY_DAYS = 100;
+export const DEFAULT_HISTORY_DAYS = 100;
 const UAH = 980;
 const USD = 840;
 
@@ -508,7 +508,12 @@ const dayParts = (day: string): { dom: number; weekday: number } => {
 };
 
 /** Everything a demo customer "has", relative to now: stable ids and times, so a screen looks the same tomorrow plus a day. */
-export function buildDataset(now: Date, calendar: Calendar, seed = 20_261_103, density = 1): Dataset {
+export function buildDataset(
+  now: Date,
+  calendar: Calendar,
+  seed = 20_261_103,
+  historyDays = DEFAULT_HISTORY_DAYS,
+): Dataset {
   const today = calendar.today(now);
   const nowSeconds = Math.floor(now.getTime() / 1000);
 
@@ -586,12 +591,12 @@ export function buildDataset(now: Date, calendar: Calendar, seed = 20_261_103, d
     perDay: (rng: Rng, day: string, dom: number, weekday: number, index: number) => Draft[],
   ): void => {
     const all: DemoItem[] = [];
-    for (let back = HISTORY_DAYS - 1; back >= 0; back -= 1) {
+    for (let back = historyDays - 1; back >= 0; back -= 1) {
       const day = addDays(today, -back);
       const { dom, weekday } = dayParts(day);
       const rng = mulberry32(hashSeed(`${seed}:${key}:${day}`));
       const dayStartSeconds = Math.floor(calendar.dayStart(day) / 1000);
-      perDay(rng, day, dom, weekday, HISTORY_DAYS - back).forEach((draft, i) => {
+      perDay(rng, day, dom, weekday, historyDays - back).forEach((draft, i) => {
         const time = dayStartSeconds + draft.at;
         if (time > nowSeconds) return;
         const { at: _at, ...rest } = draft;

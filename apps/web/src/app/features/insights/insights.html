@@ -1,10 +1,34 @@
 @let d = data();
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<div
+  style="
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  "
+>
   <h1 class="page-title">Insights</h1>
   <div class="month-pick" role="group" aria-label="Month">
-    <button type="button" class="icon-btn" aria-label="Earlier month" [disabled]="!hasOlder()" (click)="step('older')"><ll-icon name="chevron-left" /></button>
+    <button
+      type="button"
+      class="icon-btn"
+      aria-label="Earlier month"
+      [disabled]="!hasOlder()"
+      (click)="step('older')"
+    >
+      <ll-icon name="chevron-left" />
+    </button>
     <output aria-live="polite">{{ d ? monthLabel(d.month) : '' }}</output>
-    <button type="button" class="icon-btn" aria-label="Later month" [disabled]="!hasNewer()" (click)="step('newer')"><ll-icon name="chevron-right" /></button>
+    <button
+      type="button"
+      class="icon-btn"
+      aria-label="Later month"
+      [disabled]="!hasNewer()"
+      (click)="step('newer')"
+    >
+      <ll-icon name="chevron-right" />
+    </button>
   </div>
 </div>
 
@@ -24,23 +48,47 @@
           <dd>
             <ll-amount [minor]="d.spentMinor" currency="UAH" size="xl" [fraction]="false" />
             @if (change(); as c) {
-              <div><span class="delta" [attr.data-tone]="c.tone" style="margin-top: 6px">{{ c.text }}</span></div>
+              <div>
+                <span class="delta" [attr.data-tone]="c.tone" style="margin-top: 6px">{{
+                  c.text
+                }}</span>
+              </div>
             }
           </dd>
         </div>
         <div>
           <dt>Income</dt>
-          <dd><ll-amount [minor]="d.incomeMinor" currency="UAH" size="xl" [fraction]="false" [tone]="true" /></dd>
+          <dd>
+            <ll-amount
+              [minor]="d.incomeMinor"
+              currency="UAH"
+              size="xl"
+              [fraction]="false"
+              [tone]="true"
+            />
+          </dd>
         </div>
         <div>
           <dt>Regular payments</dt>
-          <dd><ll-amount [minor]="d.regularMonthlyMinor" currency="UAH" size="xl" [fraction]="false" /><span class="hint"> a month</span></dd>
+          <dd>
+            <ll-amount
+              [minor]="d.regularMonthlyMinor"
+              currency="UAH"
+              size="xl"
+              [fraction]="false"
+            /><span class="hint"> a month</span>
+          </dd>
         </div>
       </dl>
       @if (d.converted) {
-        <p class="hint" style="margin-top: 12px">Foreign-currency spending is counted at today's monobank rate. Transfers between people and your own accounts are not counted as spending or income.</p>
+        <p class="hint" style="margin-top: 12px">
+          Foreign-currency spending is counted at today's monobank rate. Transfers between people
+          and your own accounts are not counted as spending or income.
+        </p>
       } @else {
-        <p class="hint" style="margin-top: 12px">Transfers between people and your own accounts are not counted as spending or income.</p>
+        <p class="hint" style="margin-top: 12px">
+          Transfers between people and your own accounts are not counted as spending or income.
+        </p>
       }
     </section>
 
@@ -50,12 +98,21 @@
         <ul class="rank">
           @for (c of d.categories; track c.category) {
             <li>
-              <span class="badge" [attr.data-cat]="c.category"><ll-icon [name]="categoryIcon(c.category)" [size]="20" /></span>
+              <span class="badge" [attr.data-cat]="c.category"
+                ><ll-icon [name]="categoryIcon(c.category)" [size]="20"
+              /></span>
               <span class="rank-name">{{ labelOf[c.category] }}</span>
-              <span class="rank-val"><ll-amount [minor]="c.spentMinor" currency="UAH" [fraction]="false" /></span>
-              <span class="meter" role="presentation"><i [style.--w]="(c.spentMinor / maxCategory()) * 100 + '%'"></i></span>
+              <span class="rank-val"
+                ><ll-amount [minor]="c.spentMinor" currency="UAH" [fraction]="false"
+              /></span>
+              <span class="meter" role="presentation"
+                ><i [style.--w]="(c.spentMinor / maxCategory()) * 100 + '%'"></i
+              ></span>
               <span class="rank-sub">
-                <span>{{ c.count }} payment{{ c.count === 1 ? '' : 's' }} · {{ (c.share * 100).toFixed(0) }}%</span>
+                <span
+                  >{{ c.count }} payment{{ c.count === 1 ? '' : 's' }} ·
+                  {{ (c.share * 100).toFixed(0) }}%</span
+                >
                 <span>{{ categoryChange(c) }}</span>
               </span>
             </li>
@@ -76,22 +133,32 @@
           <ul class="regular-list">
             @for (r of d.regular; track r.key) {
               <li>
-                <span class="badge" [attr.data-cat]="r.category"><ll-icon [name]="categoryIcon(r.category)" [size]="20" /></span>
+                <span class="badge" [attr.data-cat]="r.category"
+                  ><ll-icon [name]="categoryIcon(r.category)" [size]="20"
+                /></span>
                 <span style="min-width: 0">
                   <span class="row-title" style="display: block">{{ r.merchant }}</span>
-                  <span class="row-sub" style="display: block">{{ cadence[r.cadence] }} · next around {{ shortDate(r.nextExpectedAt) }}</span>
+                  <span class="row-sub" style="display: block"
+                    >{{ cadence[r.cadence] }} · next around {{ shortDate(r.nextExpectedAt) }}</span
+                  >
                 </span>
                 <span class="row-end">
                   <ll-amount [minor]="r.amountMinor" currency="UAH" />
                   @if (r.cadence !== 'monthly') {
-                    <small>≈ <ll-amount [minor]="r.monthlyMinor" currency="UAH" [fraction]="false" /> a month</small>
+                    <small
+                      >≈ <ll-amount [minor]="r.monthlyMinor" currency="UAH" [fraction]="false" /> a
+                      month</small
+                    >
                   }
                 </span>
               </li>
             }
           </ul>
         } @else {
-          <p class="hint">Subscriptions and bills appear here once they have repeated. Load more history in Settings to find yearly ones.</p>
+          <p class="hint">
+            Subscriptions and bills appear here once they have repeated. Load more history in
+            Settings to find yearly ones.
+          </p>
         }
       </section>
 
@@ -101,11 +168,19 @@
           <ul class="rank">
             @for (m of d.merchants; track m.name) {
               <li>
-                <span class="badge" [attr.data-cat]="m.category"><ll-icon [name]="categoryIcon(m.category)" [size]="20" /></span>
+                <span class="badge" [attr.data-cat]="m.category"
+                  ><ll-icon [name]="categoryIcon(m.category)" [size]="20"
+                /></span>
                 <span class="rank-name">{{ m.name }}</span>
-                <span class="rank-val"><ll-amount [minor]="m.spentMinor" currency="UAH" [fraction]="false" /></span>
-                <span class="meter" role="presentation"><i [style.--w]="(m.spentMinor / maxMerchant()) * 100 + '%'"></i></span>
-                <span class="rank-sub"><span>{{ m.count }} payment{{ m.count === 1 ? '' : 's' }}</span></span>
+                <span class="rank-val"
+                  ><ll-amount [minor]="m.spentMinor" currency="UAH" [fraction]="false"
+                /></span>
+                <span class="meter" role="presentation"
+                  ><i [style.--w]="(m.spentMinor / maxMerchant()) * 100 + '%'"></i
+                ></span>
+                <span class="rank-sub"
+                  ><span>{{ m.count }} payment{{ m.count === 1 ? '' : 's' }}</span></span
+                >
               </li>
             }
           </ul>
@@ -118,8 +193,16 @@
     <div class="empty">
       <ll-icon name="alert" [size]="28" />
       <h3>{{ error.offline ? 'Ledger Lens is not reachable' : 'Could not load Insights' }}</h3>
-      <p>{{ error.offline ? 'Is ./start.sh still running? Start it again, then try again.' : error.message }}</p>
-      <button class="btn btn-primary" type="button" (click)="stores.insights.reload()">Try again</button>
+      <p>
+        {{
+          error.offline
+            ? 'Is ./start.sh still running? Start it again, then try again.'
+            : error.message
+        }}
+      </p>
+      <button class="btn btn-primary" type="button" (click)="stores.insights.reload()">
+        Try again
+      </button>
     </div>
   </div>
 } @else {

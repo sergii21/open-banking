@@ -62,7 +62,9 @@ export class Welcome {
       return;
     }
     if (error.offline) {
-      this.error.set('Ledger Lens is not running. Start it again with ./start.sh and reload this page.');
+      this.error.set(
+        'Ledger Lens is not running. Start it again with ./start.sh and reload this page.',
+      );
     } else if (error.code === 'rate_limited') {
       this.retryAt.set(Date.now() + (error.retryAfterSeconds ?? 60) * 1000);
       this.error.set('monobank allows one check a minute, and one was just made.');

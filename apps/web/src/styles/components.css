@@ -11,7 +11,8 @@
   align-items: center;
   gap: 6px;
   height: calc(var(--topbar) + env(safe-area-inset-top));
-  padding: env(safe-area-inset-top) max(var(--gutter), env(safe-area-inset-right)) 0 max(var(--gutter), env(safe-area-inset-left));
+  padding: env(safe-area-inset-top) max(var(--gutter), env(safe-area-inset-right)) 0
+    max(var(--gutter), env(safe-area-inset-left));
   background: var(--bg);
   transition: box-shadow var(--t-med);
 }
@@ -99,7 +100,10 @@
   height: 40px;
   border-radius: 12px;
   color: var(--text-2);
-  transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast);
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    transform var(--t-fast);
 }
 .icon-btn:hover {
   background: var(--surface-2);
@@ -149,7 +153,9 @@
 }
 
 .main {
-  padding: 4px max(var(--gutter), env(safe-area-inset-right)) calc(var(--tabbar) + 28px + env(safe-area-inset-bottom)) max(var(--gutter), env(safe-area-inset-left));
+  padding: 4px max(var(--gutter), env(safe-area-inset-right))
+    calc(var(--tabbar) + 28px + env(safe-area-inset-bottom))
+    max(var(--gutter), env(safe-area-inset-left));
 }
 .page {
   width: 100%;
@@ -206,7 +212,10 @@
   border-radius: 14px;
   font-weight: 650;
   text-decoration: none;
-  transition: transform var(--t-fast) var(--ease), background var(--t-fast), filter var(--t-fast);
+  transition:
+    transform var(--t-fast) var(--ease),
+    background var(--t-fast),
+    filter var(--t-fast);
 }
 .btn:active:not(:disabled) {
   transform: scale(0.98);
@@ -271,7 +280,9 @@
   font-size: var(--fs-sm);
   font-weight: 600;
   white-space: nowrap;
-  transition: background var(--t-fast), color var(--t-fast);
+  transition:
+    background var(--t-fast),
+    color var(--t-fast);
 }
 .chip:hover {
   background: var(--surface-2);
@@ -301,7 +312,7 @@
 }
 .pill-good {
   background: color-mix(in oklab, var(--income) 14%, transparent);
-  color: var(--income);
+  color: var(--income-text);
 }
 .pill-accent {
   background: var(--accent-soft);
@@ -326,7 +337,9 @@
   border-radius: 14px;
   background: var(--surface);
   color: var(--text);
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
 }
 .input::placeholder {
   color: var(--text-3);
@@ -404,7 +417,9 @@
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   padding: 16px 18px;
-  box-shadow: 0 1px 2px var(--shadow-color), 0 14px 32px -20px var(--shadow-color);
+  box-shadow:
+    0 1px 2px var(--shadow-color),
+    0 14px 32px -20px var(--shadow-color);
 }
 .card-head {
   display: flex;
@@ -439,6 +454,10 @@
   font-weight: 500;
   opacity: 0.62;
 }
+.amt.in .amt-frac,
+.amt.in .amt-cur {
+  opacity: 1;
+}
 .amt-cur {
   margin-left: 0.2em;
   font-size: 0.8em;
@@ -467,6 +486,9 @@
 }
 .amt.in {
   color: var(--income);
+}
+.amt.in .amt-cur {
+  opacity: 1;
 }
 html[data-private] .amt {
   filter: blur(0.42em);
@@ -550,7 +572,12 @@ html[data-private] .amt {
 .skel {
   border-radius: 8px;
   color: transparent;
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-3) 50%,
+    var(--surface-2) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }

@@ -18,7 +18,10 @@ export class SyncActions {
       this.live.sync.set(state);
       if (state.balancesNextAt) {
         const wait = Date.parse(state.balancesNextAt) - Date.now();
-        if (wait > 1000) this.toast.show(`Balances are fresh. monobank allows another read in ${countdown(wait)}.`);
+        if (wait > 1000)
+          this.toast.show(
+            `Balances are fresh. monobank allows another read in ${countdown(wait)}.`,
+          );
       }
     } catch (error) {
       if (error instanceof ApiError && error.code === 'refresh_cooldown') {

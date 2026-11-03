@@ -5,8 +5,16 @@
       <div class="empty">
         <ll-icon name="alert" [size]="28" />
         <h3>{{ error.offline ? 'Ledger Lens is not reachable' : 'Could not load Home' }}</h3>
-        <p>{{ error.offline ? 'Is ./start.sh still running? Start it again, then try again.' : error.message }}</p>
-        <button class="btn btn-primary" type="button" (click)="stores.home.reload()">Try again</button>
+        <p>
+          {{
+            error.offline
+              ? 'Is ./start.sh still running? Start it again, then try again.'
+              : error.message
+          }}
+        </p>
+        <button class="btn btn-primary" type="button" (click)="stores.home.reload()">
+          Try again
+        </button>
       </div>
     </div>
   }
@@ -19,7 +27,9 @@
         <ll-icon name="alert" [size]="18" />
         <span>{{ h.sync.message }}</span>
         @if (h.sync.needsToken) {
-          <button class="btn btn-sm btn-quiet" type="button" (click)="ui.settings.set(true)">Paste a new token</button>
+          <button class="btn btn-sm btn-quiet" type="button" (click)="ui.settings.set(true)">
+            Paste a new token
+          </button>
         }
       </p>
     }
@@ -29,14 +39,16 @@
         <h2 id="hero-title">Your money</h2>
         @if (trend(); as t) {
           <span class="delta" [attr.aria-label]="'Change over 30 days'">
-            <ll-amount [minor]="t.change" currency="UAH" [plus]="true" [fraction]="false" /> in 30 days
+            <ll-amount [minor]="t.change" currency="UAH" [plus]="true" [fraction]="false" /> in 30
+            days
           </span>
         }
       </div>
       <ll-amount [minor]="shown()" currency="UAH" size="hero" />
       <p class="hero-sub">
         @if (credit() !== null) {
-          Available with credit <ll-amount [minor]="credit() ?? 0" currency="UAH" [fraction]="false" />
+          Available with credit
+          <ll-amount [minor]="credit() ?? 0" currency="UAH" [fraction]="false" />
         } @else if (h.accounts.length > 1) {
           Across {{ h.accounts.length }} accounts, in hryvnias
         }
@@ -44,8 +56,19 @@
       @if (trend(); as t) {
         <ll-sparkline [points]="t.points" [from]="t.from" />
       } @else {
-        <div class="hero-chart" style="display: grid; place-items: center; color: var(--on-hero-2); font-size: var(--fs-sm)">
-          @if (h.sync.total > 0) { The 30-day line appears when history has loaded ({{ h.sync.done }} of {{ h.sync.total }}) }
+        <div
+          class="hero-chart"
+          style="
+            display: grid;
+            place-items: center;
+            color: var(--on-hero-2);
+            font-size: var(--fs-sm);
+          "
+        >
+          @if (h.sync.total > 0) {
+            The 30-day line appears when history has loaded ({{ h.sync.done }} of
+            {{ h.sync.total }})
+          }
         </div>
       }
       @if (foreign().length > 0) {
@@ -56,7 +79,9 @@
         </div>
       }
       @if (ratesNote()) {
-        <p class="hero-foot"><span>{{ ratesNote() }}</span></p>
+        <p class="hero-foot">
+          <span>{{ ratesNote() }}</span>
+        </p>
       }
     </section>
 
@@ -67,13 +92,21 @@
       </div>
       <div class="accounts">
         @for (account of h.accounts; track account.id; let i = $index) {
-          <a class="tile enter" [style.--i]="i + 2" [attr.href]="'/activity?card=' + account.id" (click)="nav.link($event)" [attr.aria-label]="account.name + ', open its transactions'">
+          <a
+            class="tile enter"
+            [style.--i]="i + 2"
+            [attr.href]="'/activity?card=' + account.id"
+            (click)="nav.link($event)"
+          >
             <span class="tile-top">
               <span class="badge badge-sm" [attr.data-cat]="account.kind">
                 <ll-icon [name]="account.kind === 'jar' ? 'jar' : 'card'" [size]="18" />
               </span>
-              <span class="tile-name">{{ account.name }}
-                <small>{{ account.kind === 'jar' ? 'Jar' : account.last4 ? '•••• ' + account.last4 : 'Card' }}</small>
+              <span class="tile-name"
+                ><span class="sr-only">Open transactions of </span>{{ account.name }}
+                <small>{{
+                  account.kind === 'jar' ? 'Jar' : account.last4 ? '•••• ' + account.last4 : 'Card'
+                }}</small>
               </span>
             </span>
             <span class="tile-amt">
@@ -97,7 +130,9 @@
         <ll-amount [minor]="h.month.spentMinor" currency="UAH" size="lg" [fraction]="false" />
         @if (delta(); as d) {
           @if (d.kind === 'pct') {
-            <span class="delta" [attr.data-tone]="d.tone">{{ d.text }} vs same days last month</span>
+            <span class="delta" [attr.data-tone]="d.tone"
+              >{{ d.text }} vs same days last month</span
+            >
           } @else if (d.kind === 'loading') {
             <span class="delta">Last month is still loading</span>
           } @else {
@@ -105,15 +140,27 @@
           }
         }
       </div>
-      <ll-daily-bars [values]="h.month.daily" [today]="h.month.daysElapsed" [month]="h.month.label" />
+      <ll-daily-bars
+        [values]="h.month.daily"
+        [today]="h.month.daysElapsed"
+        [month]="h.month.label"
+      />
       <p class="month-note">
         @if (h.month.projectedMinor !== null) {
-          On pace for about <ll-amount [minor]="h.month.projectedMinor" currency="UAH" [fraction]="false" /> by month end.
+          On pace for about
+          <ll-amount [minor]="h.month.projectedMinor" currency="UAH" [fraction]="false" /> by month
+          end.
         } @else {
           A pace estimate appears once the last 30 days have loaded.
         }
         @if (h.month.incomeMinor > 0) {
-          Income so far <ll-amount [minor]="h.month.incomeMinor" currency="UAH" [fraction]="false" [tone]="true" />.
+          Income so far
+          <ll-amount
+            [minor]="h.month.incomeMinor"
+            currency="UAH"
+            [fraction]="false"
+            [tone]="true"
+          />.
         }
       </p>
     </section>
@@ -128,10 +175,16 @@
           <ul class="rank">
             @for (c of h.topCategories; track c.category) {
               <li>
-                <span class="badge" [attr.data-cat]="c.category"><ll-icon [name]="categoryIcon(c.category)" [size]="20" /></span>
+                <span class="badge" [attr.data-cat]="c.category"
+                  ><ll-icon [name]="categoryIcon(c.category)" [size]="20"
+                /></span>
                 <span class="rank-name">{{ labelOf[c.category] }}</span>
-                <span class="rank-val"><ll-amount [minor]="c.spentMinor" currency="UAH" [fraction]="false" /></span>
-                <span class="meter" role="presentation"><i [style.--w]="(c.spentMinor / topMax()) * 100 + '%'"></i></span>
+                <span class="rank-val"
+                  ><ll-amount [minor]="c.spentMinor" currency="UAH" [fraction]="false"
+                /></span>
+                <span class="meter" role="presentation"
+                  ><i [style.--w]="(c.spentMinor / topMax()) * 100 + '%'"></i
+                ></span>
               </li>
             }
           </ul>
@@ -140,12 +193,15 @@
         }
       </section>
 
-      <a class="card teaser enter" style="--i: 4" href="/insights" (click)="nav.link($event)" aria-label="Regular payments, open Insights">
+      <a class="card teaser enter" style="--i: 4" href="/insights" (click)="nav.link($event)">
         <span class="badge" data-cat="subscriptions"><ll-icon name="repeat" /></span>
         <span style="flex: 1">
           @if (h.regular.count > 0) {
             <strong>{{ h.regular.count }} regular payments</strong>
-            <span><ll-amount [minor]="h.regular.monthlyMinor" currency="UAH" [fraction]="false" /> a month</span>
+            <span
+              ><ll-amount [minor]="h.regular.monthlyMinor" currency="UAH" [fraction]="false" /> a
+              month</span
+            >
           } @else {
             <strong>Regular payments</strong>
             <span>Subscriptions and bills show up here once they have repeated.</span>

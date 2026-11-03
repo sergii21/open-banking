@@ -15,7 +15,7 @@
   "scripts": {
     "check:node": "node scripts/check-node.mjs",
     "app": "node scripts/app.mjs",
-    "doctor": "node scripts/doctor.mjs",
+    "doctor": "tsx apps/api/scripts/doctor.ts",
     "dev": "npm run check:node && concurrently --kill-others-on-fail --names api,web --prefix-colors blue,magenta \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "npm run dev -w @ledger-lens/api",
     "dev:web": "npm run start -w @ledger-lens/web",

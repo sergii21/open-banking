@@ -30,7 +30,13 @@ function smooth(xs: number[], ys: number[]): string {
 @Component({
   selector: 'll-sparkline',
   template: `
-    <svg class="hero-chart" [attr.viewBox]="'0 0 ' + w + ' ' + h" preserveAspectRatio="none" role="img" [attr.aria-label]="label()">
+    <svg
+      class="hero-chart"
+      [attr.viewBox]="'0 0 ' + w + ' ' + h"
+      preserveAspectRatio="none"
+      role="img"
+      [attr.aria-label]="label()"
+    >
       <path [attr.d]="area()" fill="rgb(255 255 255 / 0.16)" />
       <path
         [attr.d]="line()"
@@ -74,7 +80,13 @@ export class Sparkline {
 @Component({
   selector: 'll-daily-bars',
   template: `
-    <svg class="bars" [attr.viewBox]="'0 0 ' + values().length + ' 100'" preserveAspectRatio="none" role="img" [attr.aria-label]="label()">
+    <svg
+      class="bars"
+      [attr.viewBox]="'0 0 ' + values().length + ' 100'"
+      preserveAspectRatio="none"
+      role="img"
+      [attr.aria-label]="label()"
+    >
       <line x1="0" y1="99.5" [attr.x2]="values().length" y2="99.5" />
       @for (v of bars(); track $index) {
         <rect
@@ -91,7 +103,9 @@ export class Sparkline {
         </rect>
       }
     </svg>
-    <div class="axis" aria-hidden="true"><span>1</span><span>{{ values().length }}</span></div>
+    <div class="axis" aria-hidden="true">
+      <span>1</span><span>{{ values().length }}</span>
+    </div>
   `,
 })
 export class DailyBars {

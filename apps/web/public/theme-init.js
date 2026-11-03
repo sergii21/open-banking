@@ -6,7 +6,7 @@
     var theme = localStorage.getItem('ll.theme');
     if (theme === 'light' || theme === 'dark') root.setAttribute('data-theme', theme);
     if (localStorage.getItem('ll.private') === '1') root.setAttribute('data-private', '');
-  } catch (e) {
+  } catch {
     /* storage can be blocked; the defaults are fine */
   }
 })();

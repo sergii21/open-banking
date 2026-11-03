@@ -7,14 +7,11 @@
     </a>
     @if (session.connected()) {
       @if (session.demo()) {
-        <span class="demo-chip" title="This is made-up data from a built-in demo bank">Demo data</span>
+        <span class="demo-chip" title="This is made-up data from a built-in demo bank"
+          >Demo data</span
+        >
       }
-      <button
-        type="button"
-        class="sync-chip"
-        (click)="refresh()"
-        [attr.aria-label]="'Sync status: ' + chip().long + '. Press to refresh.'"
-      >
+      <button type="button" class="sync-chip" (click)="refresh()" title="Refresh now">
         <span class="dot" [attr.data-state]="chip().state"></span>
         <span class="long">{{ chip().long }}</span>
         <span class="short">{{ chip().short }}</span>
@@ -45,13 +42,28 @@
 
   @if (session.connected()) {
     <nav class="tabs" aria-label="Main">
-      <a class="tab" href="/home" (click)="nav.link($event)" [attr.aria-current]="nav.page() === 'home' ? 'page' : null">
+      <a
+        class="tab"
+        href="/home"
+        (click)="nav.link($event)"
+        [attr.aria-current]="nav.page() === 'home' ? 'page' : null"
+      >
         <ll-icon name="home" /> <span>Home</span>
       </a>
-      <a class="tab" href="/activity" (click)="nav.link($event)" [attr.aria-current]="nav.page() === 'activity' ? 'page' : null">
+      <a
+        class="tab"
+        href="/activity"
+        (click)="nav.link($event)"
+        [attr.aria-current]="nav.page() === 'activity' ? 'page' : null"
+      >
         <ll-icon name="list" /> <span>Activity</span>
       </a>
-      <a class="tab" href="/insights" (click)="nav.link($event)" [attr.aria-current]="nav.page() === 'insights' ? 'page' : null">
+      <a
+        class="tab"
+        href="/insights"
+        (click)="nav.link($event)"
+        [attr.aria-current]="nav.page() === 'insights' ? 'page' : null"
+      >
         <ll-icon name="chart" /> <span>Insights</span>
       </a>
     </nav>

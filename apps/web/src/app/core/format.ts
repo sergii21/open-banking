@@ -4,7 +4,11 @@ import { signal } from '@angular/core';
 export const timeZone = signal('Europe/Kyiv');
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
-function formatter(key: string, options: Intl.DateTimeFormatOptions, locale = 'en-GB'): Intl.DateTimeFormat {
+function formatter(
+  key: string,
+  options: Intl.DateTimeFormatOptions,
+  locale = 'en-GB',
+): Intl.DateTimeFormat {
   const full = `${timeZone()}|${locale}|${key}`;
   let f = formatters.get(full);
   if (!f) {
@@ -20,7 +24,9 @@ export function dayKey(ms: number): string {
   const bucket = Math.floor(ms / 900_000);
   let key = dayCache.get(bucket);
   if (key === undefined) {
-    key = formatter('day', { year: 'numeric', month: '2-digit', day: '2-digit' }, 'en-CA').format(ms);
+    key = formatter('day', { year: 'numeric', month: '2-digit', day: '2-digit' }, 'en-CA').format(
+      ms,
+    );
     if (dayCache.size > 20_000) dayCache.clear();
     dayCache.set(bucket, key);
   }
@@ -32,7 +38,9 @@ export const timeOfDay = (ms: number): string =>
 
 export function dayLabel(key: string, today: string): string {
   if (key === today) return 'Today';
-  const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const yesterday = new Date(Date.parse(`${today}T12:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   if (key === yesterday) return 'Yesterday';
   const date = new Date(`${key}T12:00:00Z`);
   const sameYear = key.slice(0, 4) === today.slice(0, 4);
@@ -49,15 +57,19 @@ export const longDate = (ms: number): string =>
   formatter('long', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(ms);
 
 export function monthLabel(month: string): string {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' }).format(
-    new Date(`${month}-15T12:00:00Z`),
-  );
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'UTC',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(`${month}-15T12:00:00Z`));
 }
 
 export function shortDate(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(
-    new Date(`${iso.slice(0, 10)}T12:00:00Z`),
-  );
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(`${iso.slice(0, 10)}T12:00:00Z`));
 }
 
 export function ago(from: number, now: number): string {

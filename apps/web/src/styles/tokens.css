@@ -7,7 +7,9 @@
 :root {
   color-scheme: light dark;
 
-  --font: system-ui, -apple-system, 'Segoe UI Variable Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font:
+    system-ui, -apple-system, 'Segoe UI Variable Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --bg: light-dark(#f4f5f8, #0b0c11);
@@ -27,7 +29,9 @@
   --accent-strong: light-dark(#3730a3, #b9beff);
   --on-accent: light-dark(#ffffff, #0b0c11);
   --accent-soft: light-dark(#eceeff, #242654);
-  --income: light-dark(#0a7a4c, #4fdc9f);
+  --income: light-dark(#067045, #4fdc9f);
+  /* Green text on a tinted green chip: a step darker in light mode to keep 4.5:1. */
+  --income-text: light-dark(#05603a, #4fdc9f);
   --warn: light-dark(#8a5300, #f1c26b);
   --warn-soft: light-dark(#fff1d6, #3a2c0f);
   --danger: light-dark(#b3261e, #ff9189);

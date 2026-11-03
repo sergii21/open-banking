@@ -94,7 +94,9 @@ a {
 .num,
 .amt {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
 }
 
 /* The page before Angular has started: a quiet mark, so there is never a blank flash. */

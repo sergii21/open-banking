@@ -3,14 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Ledger Lens backend-for-frontend: sessions, consent, provider adapters, payments, webhooks, SSE.",
+  "description": "Ledger Lens backend-for-frontend: one session per browser, the monobank adapter (real and demo), paced loading, home, activity and insights.",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "node scripts/build.mjs",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "test:live": "vitest run --config vitest.live.config.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/compress": "^9.3.0",

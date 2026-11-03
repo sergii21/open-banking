@@ -22,6 +22,8 @@ export interface FakeMonobankOptions {
   /** Pretend the network takes this long, so loading states are visible and realistic. */
   latencyMs?: number;
   seed?: number;
+  /** How many days of history the made-up customer has (default 100); more makes a bigger list to try the app on. */
+  historyDays?: number;
 }
 
 export interface FakeReply {
@@ -73,7 +75,12 @@ export class FakeMonobank {
     const now = this.options.clock.now();
     const day = this.options.calendar.today(now);
     if (!this.data || this.dataDay !== day) {
-      this.data = buildDataset(now, this.options.calendar, this.options.seed);
+      this.data = buildDataset(
+        now,
+        this.options.calendar,
+        this.options.seed,
+        this.options.historyDays,
+      );
       this.dataDay = day;
     }
     return this.data;

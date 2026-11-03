@@ -92,7 +92,10 @@ export class Settings {
     try {
       await this.session.disconnect();
       this.ui.settings.set(false);
-      this.toast.show('Disconnected. Everything read from the bank was deleted from this computer.', 4500);
+      this.toast.show(
+        'Disconnected. Everything read from the bank was deleted from this computer.',
+        4500,
+      );
     } catch {
       this.toast.show('Could not disconnect. Try again.');
     }

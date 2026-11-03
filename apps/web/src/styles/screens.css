@@ -200,7 +200,7 @@
 }
 .delta[data-tone='good'] {
   background: color-mix(in oklab, var(--income) 14%, transparent);
-  color: var(--income);
+  color: var(--income-text);
 }
 .hero .delta {
   background: rgb(255 255 255 / 0.18);
@@ -225,7 +225,9 @@
   text-decoration: none;
   color: inherit;
   box-shadow: 0 1px 2px var(--shadow-color);
-  transition: transform var(--t-fast) var(--ease), background var(--t-fast);
+  transition:
+    transform var(--t-fast) var(--ease),
+    background var(--t-fast);
 }
 .tile:hover {
   background: var(--surface-2);
@@ -389,7 +391,9 @@
   border-radius: 16px;
   background: var(--surface);
   color: var(--text-3);
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
 }
 .search-box:focus-within {
   border-color: var(--accent);
@@ -413,10 +417,6 @@
   border-radius: 6px;
   font: 650 11px/18px var(--mono);
   color: var(--text-3);
-}
-.day {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 360px;
 }
 .day-head {
   display: flex;
@@ -559,8 +559,12 @@
 select.input {
   appearance: none;
   padding-right: 34px;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
-  background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-3) 50%),
+    linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 50%,
+    calc(100% - 14px) 50%;
   background-size: 6px 6px;
   background-repeat: no-repeat;
 }
@@ -745,7 +749,8 @@ aside.api-drawer {
   box-shadow: 0 6px 20px -4px var(--shadow-color);
   color: var(--accent);
   opacity: var(--ptr, 0);
-  transform: translate(-50%, calc(var(--ptr-y, 0) * 1px - 40px)) rotate(calc(var(--ptr-y, 0) * 4deg));
+  transform: translate(-50%, calc(var(--ptr-y, 0) * 1px - 40px))
+    rotate(calc(var(--ptr-y, 0) * 4deg));
   pointer-events: none;
 }
 

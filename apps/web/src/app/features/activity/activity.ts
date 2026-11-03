@@ -1,4 +1,13 @@
-import { Component, computed, effect, ElementRef, inject, linkedSignal, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  linkedSignal,
+  signal,
+  viewChild,
+} from '@angular/core';
 import {
   CATEGORIES,
   csvNumber,
@@ -47,7 +56,7 @@ const HIDDEN_FROM_SPENDING: ReadonlySet<Category> = new Set<Category>(['transfer
 
 /** "450", "450,5" or "1 234.50" as minor units, or null for anything else. */
 function parseAmount(text: string): number | null {
-  const cleaned = text.replace(/[\s ]/g, '').replace(',', '.');
+  const cleaned = text.replace(/[\s\u00a0]/g, '').replace(',', '.');
   if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
   return Math.round(Number(cleaned) * 100);
 }
@@ -129,7 +138,8 @@ export class Activity {
     return this.views().filter(({ row, hay, day }) => {
       if (account && row.accountId !== account) return false;
       if (needle && !hay.includes(needle)) return false;
-      if (scope === 'spending' && (row.amountMinor >= 0 || HIDDEN_FROM_SPENDING.has(row.category))) return false;
+      if (scope === 'spending' && (row.amountMinor >= 0 || HIDDEN_FROM_SPENDING.has(row.category)))
+        return false;
       if (scope === 'income' && row.amountMinor <= 0) return false;
       if (scope === 'month' && !day.startsWith(month)) return false;
       if (category && row.category !== category) return false;
@@ -142,7 +152,10 @@ export class Activity {
     });
   });
 
-  private readonly limit = linkedSignal<unknown, number>({ source: this.filtered, computation: () => PAGE });
+  private readonly limit = linkedSignal<unknown, number>({
+    source: this.filtered,
+    computation: () => PAGE,
+  });
   protected readonly hasMore = computed(() => this.filtered().length > this.limit());
 
   protected readonly groups = computed<DayGroup[]>(() => {
@@ -168,7 +181,9 @@ export class Activity {
   protected readonly summary = computed(() => {
     const count = this.filtered().length;
     const total = this.views().length;
-    return count === total ? `${total.toLocaleString('en-GB')} transactions` : `${count.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`;
+    return count === total
+      ? `${total.toLocaleString('en-GB')} transactions`
+      : `${count.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`;
   });
 
   protected readonly selectedAccount = computed(() => {
@@ -177,7 +192,11 @@ export class Activity {
   });
 
   protected readonly filtering = computed(
-    () => this.q().trim() !== '' || this.scope() !== 'all' || this.account() !== null || this.activeFilters() > 0,
+    () =>
+      this.q().trim() !== '' ||
+      this.scope() !== 'all' ||
+      this.account() !== null ||
+      this.activeFilters() > 0,
   );
 
   constructor() {
@@ -219,7 +238,8 @@ export class Activity {
 
   protected subtitle(view: RowView): string {
     const parts: string[] = [CATEGORY_LABEL[view.row.category]];
-    if (view.account) parts.push(view.account.last4 ? `••${view.account.last4}` : view.account.name);
+    if (view.account)
+      parts.push(view.account.last4 ? `••${view.account.last4}` : view.account.name);
     parts.push(timeOfDay(view.row.ts));
     return parts.join(' · ');
   }
@@ -268,7 +288,12 @@ export class Activity {
       await this.api.patch(`/api/transactions/${view.row.id}`, { category });
       this.stores.activity.data.update((activity) =>
         activity
-          ? { ...activity, rows: activity.rows.map((r) => (r.id === view.row.id ? { ...r, category, chosen: true as const } : r)) }
+          ? {
+              ...activity,
+              rows: activity.rows.map((r) =>
+                r.id === view.row.id ? { ...r, category, chosen: true as const } : r,
+              ),
+            }
           : activity,
       );
       const changed = this.views().find((v) => v.row.id === view.row.id);
@@ -297,12 +322,32 @@ export class Activity {
         csvNumber(row.mcc ? String(row.mcc) : ''),
         csvNumber(minorToDecimalString(row.cashbackMinor ?? 0, row.currency)),
         csvNumber(minorToDecimalString(row.commissionMinor ?? 0, row.currency)),
-        csvNumber(row.balanceAfterMinor === undefined ? '' : minorToDecimalString(row.balanceAfterMinor, row.currency)),
+        csvNumber(
+          row.balanceAfterMinor === undefined
+            ? ''
+            : minorToDecimalString(row.balanceAfterMinor, row.currency),
+        ),
         csvText(date.toISOString()),
       ];
     });
     const csv = toCsv(
-      ['Date', 'Time', 'Card', 'Description', 'Counterparty', 'Comment', 'Category', 'Amount', 'Currency', 'Status', 'MCC', 'Cashback', 'Commission', 'Balance after', 'UTC timestamp'],
+      [
+        'Date',
+        'Time',
+        'Card',
+        'Description',
+        'Counterparty',
+        'Comment',
+        'Category',
+        'Amount',
+        'Currency',
+        'Status',
+        'MCC',
+        'Cashback',
+        'Commission',
+        'Balance after',
+        'UTC timestamp',
+      ],
       rows,
     );
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

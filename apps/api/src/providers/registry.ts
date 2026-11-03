@@ -112,6 +112,7 @@ export function buildRegistry({
     clock,
     calendar,
     latencyMs: demoLatencyMs,
+    historyDays: config.demo.historyDays,
     limits:
       config.demo.statementIntervalMs > 0
         ? { statementMs: config.demo.statementIntervalMs, infoMs: config.demo.infoIntervalMs }

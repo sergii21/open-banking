@@ -132,6 +132,11 @@ export default defineConfig(
     rules: { 'no-console': 'off' },
   },
   {
+    // Runs in the browser before the first paint (apps/web/public).
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+  {
     // Playwright specs: `page.evaluate` bodies and test helpers use a few dynamic APIs.
     files: ['e2e/**/*.ts'],
     rules: { 'no-console': 'off' },

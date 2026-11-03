@@ -30,7 +30,9 @@ export class Remote<T> {
     } catch (error) {
       if (this.controller !== controller) return;
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      this.error.set(error instanceof ApiError ? error : new ApiError(0, 'offline', 'Something went wrong.'));
+      this.error.set(
+        error instanceof ApiError ? error : new ApiError(0, 'offline', 'Something went wrong.'),
+      );
     } finally {
       if (this.controller === controller) {
         this.loading.set(false);

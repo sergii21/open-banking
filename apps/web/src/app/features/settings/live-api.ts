@@ -10,26 +10,48 @@ import { Icon } from '../../shared/icon';
   imports: [Icon],
   template: `
     @if (ui.liveApi()) {
-      <aside class="api-drawer" role="complementary" aria-labelledby="api-title" (keydown.escape)="ui.liveApi.set(false)">
+      <aside
+        class="api-drawer"
+        role="complementary"
+        aria-labelledby="api-title"
+        (keydown.escape)="ui.liveApi.set(false)"
+      >
         <div class="sheet-head">
           <h2 id="api-title">Live API</h2>
-          <button type="button" class="btn btn-sm btn-quiet" (click)="live.clearCalls()" [disabled]="live.calls().length === 0">Clear</button>
-          <button type="button" class="icon-btn" aria-label="Close" (click)="ui.liveApi.set(false)"><ll-icon name="x" /></button>
+          <button
+            type="button"
+            class="btn btn-sm btn-quiet"
+            (click)="live.clearCalls()"
+            [disabled]="live.calls().length === 0"
+          >
+            Clear
+          </button>
+          <button type="button" class="icon-btn" aria-label="Close" (click)="ui.liveApi.set(false)">
+            <ll-icon name="x" />
+          </button>
         </div>
         <p class="hint" style="padding: 0 20px 8px">
-          What this app asked monobank, and what it answered. The token is replaced by [redacted], and so are card numbers.
+          What this app asked monobank, and what it answered. The token is replaced by [redacted],
+          and so are card numbers.
         </p>
         <div class="call-list">
           @for (call of live.calls(); track call.id) {
             <div class="call">
-              <button type="button" [attr.aria-expanded]="open() === call.id" (click)="open.set(open() === call.id ? null : call.id)">
+              <button
+                type="button"
+                [attr.aria-expanded]="open() === call.id"
+                (click)="open.set(open() === call.id ? null : call.id)"
+              >
                 <span class="method">{{ call.method }}</span>
                 <span style="min-width: 0">
                   <span class="row-title" style="display: block">{{ call.label }}</span>
                   <code class="row-sub" style="display: block">{{ path(call) }}</code>
                 </span>
                 <span class="row-end" style="font-weight: 600">
-                  <span [class]="call.status !== null && call.status < 400 ? 'status-ok' : 'status-bad'">{{ call.status ?? 'failed' }}</span>
+                  <span
+                    [class]="call.status !== null && call.status < 400 ? 'status-ok' : 'status-bad'"
+                    >{{ call.status ?? 'failed' }}</span
+                  >
                   <span class="amt-sub">{{ call.durationMs }} ms</span>
                 </span>
               </button>

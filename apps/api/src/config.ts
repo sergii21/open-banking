@@ -49,7 +49,12 @@ export interface AppConfig {
   /** The demo asks the real bank for its public rates before falling back to the fake's. Off in tests. */
   demoRealRates: boolean;
   /** The demo runs the same adapter against the in-process fake; pacing is off so history appears at once. */
-  demo: { statementIntervalMs: number; infoIntervalMs: number; historyMonths: number };
+  demo: {
+    statementIntervalMs: number;
+    infoIntervalMs: number;
+    historyMonths: number;
+    historyDays: number;
+  };
   warnings: string[];
 }
 
@@ -88,6 +93,7 @@ const EnvSchema = z.object({
   MONOBANK_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(600).default(61),
   /** 0 (the default) shows the whole demo history at once; a value shows what the paced real thing feels like. */
   DEMO_REAL_RATES: z.stringbool().optional(),
+  DEMO_HISTORY_DAYS: z.coerce.number().int().min(30).max(800).default(100),
   DEMO_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(600).default(0),
 });
 
@@ -201,6 +207,7 @@ export function loadConfig(
       statementIntervalMs: e.DEMO_INTERVAL_SECONDS * 1000,
       infoIntervalMs: e.DEMO_INTERVAL_SECONDS * 1000,
       historyMonths: Math.max(e.MONOBANK_HISTORY_MONTHS, 3),
+      historyDays: e.DEMO_HISTORY_DAYS,
     },
     warnings,
   };

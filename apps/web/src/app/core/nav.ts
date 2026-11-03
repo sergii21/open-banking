@@ -1,4 +1,13 @@
-import { ApplicationRef, computed, effect, inject, Service, signal, untracked, type Type } from '@angular/core';
+import {
+  ApplicationRef,
+  computed,
+  effect,
+  inject,
+  Service,
+  signal,
+  untracked,
+  type Type,
+} from '@angular/core';
 import { Session } from './session';
 
 export type Page = 'welcome' | 'home' | 'activity' | 'insights';
@@ -101,14 +110,23 @@ export class Nav {
       this.app.tick();
       window.scrollTo(0, 0);
     };
-    const start = (document as { startViewTransition?: (cb: () => void) => unknown }).startViewTransition;
+    const start = (document as { startViewTransition?: (cb: () => void) => unknown })
+      .startViewTransition;
     if (start && !reducedMotion()) start.call(document, apply);
     else apply();
   }
 
   /** `(click)` handler for `<a href>` links: stay in the app unless the person wants a new tab. */
   link(event: MouseEvent): void {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
     const anchor = (event.currentTarget as HTMLAnchorElement | null) ?? null;
     const href = anchor?.getAttribute('href');
     if (!href || anchor?.target === '_blank') return;

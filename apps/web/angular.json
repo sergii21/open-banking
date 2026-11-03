@@ -25,9 +25,7 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles/main.css"
-            ]
+            "styles": ["src/styles/main.css"]
           },
           "configurations": {
             "production": {

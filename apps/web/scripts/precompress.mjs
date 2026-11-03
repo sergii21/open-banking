@@ -25,4 +25,6 @@ function walk(dir) {
   }
 }
 walk(root);
-process.stdout.write(`precompressed ${files} files, ${(saved / 1024).toFixed(0)} kB saved with brotli\n`);
+process.stdout.write(
+  `precompressed ${files} files, ${(saved / 1024).toFixed(0)} kB saved with brotli\n`,
+);

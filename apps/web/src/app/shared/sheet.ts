@@ -13,7 +13,8 @@ let nextId = 0;
       class="sheet"
       [attr.aria-labelledby]="id"
       (close)="open.set(false)"
-      (click)="onBackdrop($event)"
+      (pointerdown)="pressedOutside = $event.target === dialog"
+      (pointerup)="onBackdrop($event)"
     >
       <div class="sheet-head">
         <h2 [id]="id">{{ title() }}</h2>
@@ -39,8 +40,11 @@ export class Sheet {
     });
   }
 
-  /** A click on the dimmed area outside the sheet lands on the <dialog> element itself. */
-  protected onBackdrop(event: MouseEvent): void {
-    if (event.target === this.dialog().nativeElement) this.open.set(false);
+  protected pressedOutside = false;
+
+  /** A press and release on the dimmed area outside the sheet land on the <dialog> element itself. */
+  protected onBackdrop(event: PointerEvent): void {
+    if (this.pressedOutside && event.target === this.dialog().nativeElement) this.open.set(false);
+    this.pressedOutside = false;
   }
 }

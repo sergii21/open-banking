@@ -10,13 +10,24 @@
       <ol class="steps">
         <li>
           <span>
-            <strong>Open
-              <a href="https://api.monobank.ua/" target="_blank" rel="noopener noreferrer">api.monobank.ua</a></strong>
+            <strong
+              >Open
+              <a href="https://api.monobank.ua/" target="_blank" rel="noopener noreferrer"
+                >api.monobank.ua</a
+              ></strong
+            >
             in a new tab.
           </span>
         </li>
-        <li><span><strong>Scan the QR code</strong> with the monobank app on your phone and confirm.</span></li>
-        <li><span><strong>Copy the token</strong> the page shows and paste it here.</span></li>
+        <li>
+          <span
+            ><strong>Scan the QR code</strong> with the monobank app on your phone and
+            confirm.</span
+          >
+        </li>
+        <li>
+          <span><strong>Copy the token</strong> the page shows and paste it here.</span>
+        </li>
       </ol>
 
       <form class="field" style="margin-top: 18px" (submit)="$event.preventDefault(); connect()">
@@ -45,11 +56,14 @@
         @if (error(); as message) {
           <p class="error-text" id="token-error" role="alert">
             {{ message }}
-            @if (wait() > 0) { Try again in {{ waitText() }}. }
+            @if (wait() > 0) {
+              Try again in {{ waitText() }}.
+            }
           </p>
         } @else {
           <p class="hint" id="token-hint">
-            Balances show up in a couple of seconds. History then loads one step a minute, because that is monobank's limit.
+            Balances show up in a couple of seconds. History then loads one step a minute, because
+            that is monobank's limit.
           </p>
         }
         <button
@@ -58,12 +72,21 @@
           style="margin-top: 6px"
           [disabled]="!token().trim() || busy() !== null || wait() > 0"
         >
-          @if (busy() === 'token') { Checking with monobank… } @else if (wait() > 0) { Wait {{ waitText() }} } @else { Connect monobank }
+          @if (busy() === 'token') {
+            Checking with monobank…
+          } @else if (wait() > 0) {
+            Wait {{ waitText() }}
+          } @else {
+            Connect monobank
+          }
         </button>
       </form>
       <p class="privacy" style="margin-top: 14px">
         <ll-icon name="lock" [size]="16" />
-        <span>Read-only: the token can see balances and transactions, never move money. It stays on this computer, encrypted.</span>
+        <span
+          >Read-only: the token can see balances and transactions, never move money. It stays on
+          this computer, encrypted.</span
+        >
       </p>
     </section>
 
@@ -71,7 +94,10 @@
   } @else {
     <p class="banner enter" style="--i: 1">
       <ll-icon name="info" [size]="18" />
-      <span>This is a public demo, so real accounts cannot be connected here. Run Ledger Lens on your own computer for that.</span>
+      <span
+        >This is a public demo, so real accounts cannot be connected here. Run Ledger Lens on your
+        own computer for that.</span
+      >
     </p>
   }
 
@@ -82,7 +108,11 @@
     (click)="demo()"
     [disabled]="busy() !== null"
   >
-    @if (busy() === 'demo') { Opening the demo… } @else { Try with demo data }
+    @if (busy() === 'demo') {
+      Opening the demo…
+    } @else {
+      Try with demo data
+    }
   </button>
   @if (!session.live() && error()) {
     <p class="error-text" role="alert">{{ error() }}</p>

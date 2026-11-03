@@ -107,7 +107,10 @@ export class App {
   }
 
   protected pullStart(event: TouchEvent): void {
-    this.pullFrom = window.scrollY <= 0 && event.touches.length === 1 ? (event.touches[0]?.clientY ?? null) : null;
+    this.pullFrom =
+      window.scrollY <= 0 && event.touches.length === 1
+        ? (event.touches[0]?.clientY ?? null)
+        : null;
   }
   protected pullMove(event: TouchEvent): void {
     if (this.pullFrom === null) return;
