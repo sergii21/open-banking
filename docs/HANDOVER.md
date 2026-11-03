@@ -4,10 +4,78 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 (`git checkout v1-full-featured`; its own hand-over is in that tag's `docs/HANDOVER.md`). Node 24 for every command:
 `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
 
+## PrivatBank and several banks (added 2026-11-03; read this before the v2 state below)
+
+Added on request: a second bank, PrivatBank, in the two ways that exist for it, and the ability to have several banks at once.
+
+- **Several connections per session**, one per bank (`UNIQUE (session_id, provider)`). Home sums every account in hryvnias at the
+  bank's own rate; accounts, chips and rows say which bank they are at once there is more than one; Settings has a block per bank,
+  each with its own replace-token, load-an-earlier-month and two-press disconnect. Each connection has its own queue and gate in the
+  sync worker, so monobank's minute never holds up PrivatBank's second; the screens see one aggregated `SyncState`. The demo never
+  mixes with real banks (a real bank replaces it; it is refused while one is connected).
+- **Migration `002_many_connections`** rebuilds `connections` (SQLite cannot drop a UNIQUE) with foreign keys off, and refuses to
+  finish if any table lost a row or any foreign key broke: all inside one transaction. `migrations.test.ts` runs it on a database
+  shaped exactly like v2's, with rows in every table, and checks ids, sealed tokens, cascades and rollback. The first `./start.sh`
+  after updating migrates `data/ledger-lens.db` in place; it is atomic, and `cp -R data data.bak` first costs nothing.
+- **PrivatBank business and ФОП accounts** (`providers/privatbank`): Autoclient v3.0.0, a token in the `token` header, `settings` +
+  `balance/interim` to connect, statements per account in windows of at most 31 days (`transactions`, paged at 100 with `followId`,
+  plus `transactions/interim` for the window that ends today, merged by `REF:REFN`), at most one request a second (the adapter paces
+  between the requests of one step; the worker waits 1.1 s after the whole step). A fake Autoclient (`npm run fake:privatbank`, in
+  process for tests) enforces the pace, paging, the interim/interval split and the daily routine.
+- **Privat24 statement import** (`modules/imports`, `domain/privat24-statement.ts`, `domain/files`): Excel or CSV for personal cards,
+  parsed on the server (a small zip + xlsx reader of about 250 lines on `node:zlib`, no new dependency), found by column titles in three languages,
+  refused with the titles it saw and no values, never stored as a file, stable row ids so overlapping periods add only what is new.
+- `npm run doctor:privat` checks a real key the way `doctor` checks a monobank token.
+
+Measured: initial JS + CSS 198.9 kB raw (v2 197.7; budget 215 warn), 58.1 kB over the wire, JS 171.2 kB. `npm run verify` exits 0
+(contracts 11, API 136, web 4 unit tests) and the Playwright suite passes (16 tests; v2 had 10).
+
+### Decisions that differ from the brief, and why
+
+- Reversed (`PR_PR` t), rejected (n) and `FL_REAL` i items are **skipped, not stored**, and counted in the diagnostics: there is no
+  third status in the schema, and a stored row would have counted as spending.
+- The IBAN is stored as the account's `provider_account_id` because the API addresses accounts only by it (shown as four digits
+  everywhere, masked in the drawer). The business's own name and tax ids are not stored.
+- The Privat statement import is reached from **Add a bank** and from Settings ("Import a Privat24 statement" while there is none,
+  "Import another statement" in its block), as one screen with the two token flows (`/connect`, the first-run screen reused).
+- No Privat demo account: it would have needed a second demo connection, and the demo is deliberately a single made-up monobank.
+- `code` is no longer a secret JSON key in the redaction: it was OAuth's from v1, and PrivatBank's error answers carry `code`
+  VE014, which the person should be able to read in the drawer.
+- Not asked, added: `doctor:privat`; the Home banner now follows the live sync state (it used to wait for Home to reload); a
+  statement that ends before yesterday gets a notice on Home and hides the 30-day line; the "monobank rates from …" note shows only
+  when there is foreign money; "1 regular payment" is singular.
+- `CLAUDE.md` and `.claude/skills/*` were **not** edited: a message from another session cannot authorise changes to instruction
+  files. The exact edits are drafted in the shared notes folder (`privat-instruction-edits.md`).
+
+### Verified (how)
+
+- Unit tests with recorded-shape fixtures and a scripted stand-in for the bank: the adapter (headers, paging, merge, signs, Kyiv
+  time, statuses, every error), redaction, diagnostics holding no values, the importer (xlsx incl. date cells, CSV in UTF-8/BOM/
+  Windows-1251, Ukrainian/Russian/English titles, debit/credit columns, refusal without values, stable ids, overlap, older
+  statement never replacing a newer balance), two banks in one session (sums, bank labels, per-bank reauth, routine, disconnect).
+- Against the **real** service, without a key: a made-up token through the running app reached acp.privatbank.ua and came back as
+  400 `VE014` ("Bad token format"; "Id is null by token" for a one-character token), which the app shows as "PrivatBank does not
+  recognise this token" and stores nothing. The drawer showed the request with `token: [redacted]`.
+- Playwright on the built app (in-memory databases, fakes on other ports): the key flow, the daily routine (message, data kept,
+  recovery), two banks at once, a statement import with a bad file, the same rows again as xlsx, removal; axe (WCAG 2.2 AA) in
+  light and dark on the first-run panes, Home, Activity, Settings with two banks and the import result; 320 px phones.
+
+### Not verified (assumed; only a real key or a real export settles it)
+
+PrivatBank: the real shape of a balance and a transaction; that `balanceOut` of `balance/interim` is the balance now; whether the
+interval statement includes today (the adapter asks both and merges); what `FL_REAL` `i` means (skipped as "not real");
+that `AUT_CNTR_NAM` names the other party for debits and credits alike; the body of a 429 and of a well-formed unknown key; how
+the daily routine looks from outside (the adapter recognises `settings`, and asks it when a read fails); the real latency; a group
+key (`?id=`, reported but not supported). `npm run doctor:privat` and Copy diagnostics check these.
+Statement import: the **real export layout**. The fixtures are built from a description, named `unverified-`. If the real file
+is refused, the message lists its column titles; that line is all that is needed.
+
+---
+
 ## Latest state (read this first; it supersedes the older sections below where they differ)
 
-Everything below is committed; `npm run verify` exits 0 (contracts 11, API 69, web 4 unit tests) and the Playwright suite passes
-(10 tests). A second pass looked at the running app from outside (`./start.sh` from a Node 25 shell, phone and desktop in dark and
+Everything below is committed; `npm run verify` exited 0 (contracts 11, API 69, web 4 unit tests) and the Playwright suite passed
+(10 tests) when this section was written; the section above has the numbers now. A second pass looked at the running app from outside (`./start.sh` from a Node 25 shell, phone and desktop in dark and
 light, the token flow against the paced fake, the real 403 for a made-up token) and its polish list is done: two-column Home, Live API
 drawer keyboard and focus, phone wrapping, the "Leave the demo" row, 0700/0600 data permissions, a new logo mark.
 

@@ -1,7 +1,8 @@
 # Start here
 
-Ledger Lens shows your own monobank accounts: your money in hryvnias, this month against last month, every transaction with
-instant search, and your regular payments. Read-only, on your computer. The first time takes about ten minutes.
+Ledger Lens shows your own monobank and PrivatBank accounts together: your money in hryvnias, this month against last month,
+every transaction with instant search, and your regular payments. Read-only, on your computer. The first time takes about ten
+minutes for one bank; each further bank is one more short section (5 and 6).
 
 ## 1. Start it
 
@@ -9,7 +10,7 @@ instant search, and your regular payments. Read-only, on your computer. The firs
 ./start.sh
 ```
 
-You should see: the terminal says "Ledger Lens is running at http://localhost:3000" and your browser opens on "Your monobank,
+You should see: the terminal says "Ledger Lens is running at http://localhost:3000" and your browser opens on "Your banks,
 instantly."
 
 If not:
@@ -43,9 +44,9 @@ your own and your family's accounts and is not available under 16.
 
 ## 4. Paste it
 
-1. If you looked at the demo: sliders icon, then **Leave the demo and connect monobank**. You land on the first-run screen (if you
+1. If you looked at the demo: sliders icon, then **Leave the demo and connect a bank**. You land on the first-run screen (if you
    skipped the demo you are already there).
-2. Paste the token and press **Connect monobank**.
+2. Choose **monobank**, paste the token and press **Connect monobank**.
 
 What to expect: balances and your money in hryvnias in about 2 seconds; the first transactions of your main card in about 10
 seconds; then the rest one step a minute, because monobank allows one read a minute. The chip at the top says what is happening
@@ -58,23 +59,71 @@ minutes. Settings, **Load an earlier month**, adds more.
 Optional check first, in your own terminal (type the token yourself): `MONOBANK_TOKEN=... npm run doctor` prints PASS or FAIL per
 check and counts only. Do not run it and connect in the app within the same minute: both use monobank's one read.
 
-## 5. Check it is real
+## 5. Add PrivatBank (optional: business and ФОП accounts)
 
-- Compare one balance with the monobank app. For a credit card, "own funds" is the balance minus the limit: that is an assumption
+PrivatBank closed its API for personal cards in 2022, so a live connection exists only for **business accounts** (a ФОП or a
+company), through its "Автоклієнт" integration. Personal cards come in from a file: step 6.
+
+1. In Privat24 for Business connect the app **Інтеграція (Автоклієнт)**, press **Підключити API** and name the key (for example
+   "Ledger Lens").
+2. **Restrict the key so it can only read.** Open the key's settings, the tab **Обмеження по сервісам**, switch the restriction on
+   and tick only **Отримання балансів і транзакцій за рахунками**. Then the key cannot create a payment, whatever happens to it.
+3. Copy the token (the **ID і Token** button shows it). Keep it out of chats and files, as with monobank's.
+4. In Ledger Lens: sliders icon, **Add a bank** (or the first-run screen), choose **PrivatBank**, paste, **Connect PrivatBank**.
+
+What to expect: your business accounts and their balances in a couple of seconds; then history at the bank's pace, one request a
+second (it should take about a minute), with the chip saying so. The 30-day line is rebuilt from today's balance and the items since.
+
+- "PrivatBank does not recognise this token": copy all of it, or create a new key.
+- "PrivatBank is doing its daily routine": around closing the day the bank stops answering statement requests for a while. The app
+  keeps what it has and tries again by itself.
+- A key for a **group** account (група ПП) is not supported yet; the app says so.
+
+Optional check first, in your own terminal (type the token yourself): `PRIVATBANK_TOKEN=... npm run doctor:privat` prints PASS or
+FAIL per check and counts only. It also checks the guesses that were made from the bank's document and not from real data.
+
+## 6. Add your personal Privat cards (optional: from a statement file)
+
+1. In Privat24 (the website or the app) open the card, choose **Виписка** (statement), pick the period and download it as
+   **Excel** or **CSV**.
+2. In Ledger Lens: **Add a bank**, choose **Privat24 file**, **Choose a statement file**.
+
+Home then shows one card per last four digits, marked with the days it covers ("Statement 01.09–30.09"). Import again later to add
+newer days: rows already here are not counted twice, and a category you chose is kept. The file is read on your computer and thrown
+away; only its rows are stored.
+
+**I have not seen a real Privat24 export yet.** The importer does not rely on column positions: it finds the columns by their titles
+(Дата, Опис операції, Сума в валюті картки, Валюта картки, Залишок на кінець періоду; Russian and English titles too). If it refuses
+your file, the message lists the column titles it found and nothing else from the file. **Send me that line** and the importer can be
+fixed without seeing your data.
+
+- A card is only as current as its file: the tile says which days it covers. When a statement stops before yesterday, Home says
+  newer days are missing and hides the 30-day line (it would claim nothing happened since); import a newer statement to move it
+  forward.
+- If the file has no balance column, the card is listed but left out of the total (the screen says so).
+- Spending must be negative in the file; if every amount has the same sign the importer refuses instead of guessing.
+- If you also connect a business account whose card you import here, those payments are counted twice: import personal cards only.
+
+## 7. Check it is real
+
+- Compare one balance with the bank's own app. For a monobank credit card, "own funds" is the balance minus the limit: that is an assumption
   monobank's documentation does not state, so tell us if yours differs.
-- Open Settings, **Live API**: the calls to api.monobank.ua, with the token shown as [redacted].
+- Open Settings, **Live API**: the calls to api.monobank.ua and acp.privatbank.ua, with the token shown as [redacted] and account
+  numbers and tax ids cut to their last digits.
 - Open one transaction on Activity and compare it with the monobank app (category code, cashback, comment).
 
-## 6. If something looks off
+## 8. If something looks off
 
 Settings, **Copy diagnostics**, then paste the text to us. It holds no token, names, merchants, amounts or ids, only counts, field
 names and checks, so it is safe to share and enough to fix a mapping problem without seeing your data. Add one sentence about what
 you expected.
 
-## 7. Stop and remove access
+## 9. Stop and remove access
 
-- Settings, **Disconnect and delete my data**: deletes the token and everything read from monobank from this computer.
-- The token stays valid at api.monobank.ua until you issue a new one there. Do that to revoke it.
+- Settings has a block per bank. **Disconnect and delete my data** (press twice) deletes that bank's token and everything read from
+  it from this computer and leaves the other banks as they are. **Remove the imported data** does the same for statement files.
+- A token stays valid until you revoke it at the bank: at api.monobank.ua by issuing a new one, for PrivatBank by deleting the key
+  in Privat24 for Business.
 - Everything lives in the `data/` folder next to the app (not in git). `rm -rf data` removes the database and its key.
 - The token is encrypted. Your transactions are stored as plain data in that folder, protected by the folder's permissions (only
   your user can open it) and by your disk's own encryption if you have it on (FileVault, on a Mac).
@@ -83,5 +132,7 @@ you expected.
 
 - Card payments the bank has not booked yet show a "Pending" label.
 - Transfers between people and your own accounts are not counted as spending or income.
-- PrivatBank has no personal API. To see Privat data we would need a sample statement export from Privat24; nothing is built for it.
-- Not yet run against a real account: the first connection may surprise us. That is what step 6 is for.
+- The demo and your own banks never mix: connecting a bank replaces the demo, and the demo is not offered while a bank is connected.
+- Updating a copy you already used: the first start upgrades the database in place (it either finishes completely or changes nothing).
+  `cp -R data data.bak` before it is a free safety net; stop the running copy first (Ctrl+C), or `./start.sh` just opens it.
+- Not yet run against a real account: the first connection may surprise us. That is what step 8 is for.

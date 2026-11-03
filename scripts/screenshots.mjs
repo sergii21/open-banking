@@ -1,7 +1,8 @@
 // Takes the small screenshots in docs/screenshots from a running app. Start the servers first (see the header of
 // playwright.config.ts for the environment), then: node scripts/screenshots.mjs
 //   DEMO  http://localhost:4300   the built app on the demo bank
-//   LIVE  http://localhost:4301   the real-token flow against the paced fake monobank on :4310 (one read per few seconds)
+//   LIVE  http://localhost:4301   the real-token flows against the paced fake monobank on :4310 (one read per few seconds)
+//                                 and the fake PrivatBank Autoclient on :4311 (one request a second)
 /* global document */
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
@@ -12,7 +13,12 @@ const { chromium } = require('@playwright/test');
 const DEMO = process.env.DEMO_URL ?? 'http://localhost:4300';
 const LIVE = process.env.LIVE_URL ?? 'http://localhost:4301';
 const FAKE = process.env.FAKE_URL ?? 'http://127.0.0.1:4310';
+const FAKE_PRIVAT = process.env.FAKE_PRIVAT_URL ?? 'http://127.0.0.1:4311';
 const TOKEN = 'demo-token-ledger-lens-not-a-real-bank';
+const PRIVAT_TOKEN = 'privat-autoclient-fake-token-not-a-real-bank';
+// Built from the layout of a Privat24 export as it was described: UNVERIFIED against a real one.
+const STATEMENT = new URL('../fixtures/privat24/unverified-statement.csv', import.meta.url)
+  .pathname;
 const out = new URL('../docs/screenshots/', import.meta.url).pathname;
 mkdirSync(out, { recursive: true });
 
@@ -159,6 +165,74 @@ process.stdout.write('real-token flow against the paced fake monobank\n');
   await page.waitForTimeout(800);
   await shot(page, '18-bank-down');
   await fetch(`${FAKE}/__admin/up`);
+  await ctx.close();
+}
+
+process.stdout.write('PrivatBank, two banks, statement files\n');
+const idle = (page) =>
+  page.waitForFunction(
+    () => /Updated/.test(document.querySelector('.sync-chip')?.textContent ?? ''),
+    null,
+    { timeout: 90000 },
+  );
+{
+  const { ctx, page } = await context(LIVE, D);
+  await page.goto('/');
+  await page.getByRole('radio', { name: 'PrivatBank' }).click();
+  await shot(page, '20-privatbank-pane');
+  await page.getByLabel('Your PrivatBank token').fill(PRIVAT_TOKEN);
+  await page.getByRole('button', { name: 'Connect PrivatBank' }).click();
+  await page.waitForURL(/home/);
+  await idle(page);
+  await page.waitForTimeout(600);
+  await shot(page, '21-privatbank-home');
+
+  // The bank in its daily routine: the screen says so, in words.
+  await fetch(`${FAKE_PRIVAT}/__admin/routine`, { method: 'POST' });
+  await page.locator('.sync-chip').click();
+  await page.getByRole('alert').first().waitFor({ timeout: 20000 });
+  await shot(page, '22-privatbank-routine');
+  await fetch(`${FAKE_PRIVAT}/__admin/work`, { method: 'POST' });
+
+  // Add monobank beside it (the fake monobank allows one check per few seconds, so let the earlier sections' budget pass).
+  await page.waitForTimeout(6000);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Add a bank/ }).click();
+  await page.getByRole('radio', { name: 'monobank' }).click();
+  await page.getByLabel('Your monobank token').fill(TOKEN);
+  await page.getByRole('button', { name: 'Connect monobank' }).click();
+  await page.waitForURL(/home/);
+  await page.locator('.tile').nth(7).waitFor();
+  await page.waitForTimeout(25000);
+  await shot(page, '23-two-banks-home');
+  await page.getByRole('link', { name: 'Activity' }).click();
+  await page.locator('.row').first().waitFor();
+  await shot(page, '24-two-banks-activity');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await shot(page, '25-two-banks-settings');
+  await ctx.close();
+}
+{
+  const { ctx, page } = await context(DEMO, D);
+  await page.goto('/');
+  await page.getByRole('radio', { name: 'Privat24 file' }).click();
+  await shot(page, '26-statement-pane');
+  await page.locator('input[type=file]').setInputFiles(STATEMENT);
+  await page.waitForURL(/home/);
+  await page.locator('.hero > .amt').waitFor();
+  await page.waitForTimeout(900);
+  await shot(page, '27-statement-home');
+  await ctx.close();
+}
+{
+  const { ctx, page } = await context(DEMO, P);
+  await page.goto('/');
+  await page.getByRole('radio', { name: 'Privat24 file' }).click();
+  await page.locator('input[type=file]').setInputFiles(STATEMENT);
+  await page.waitForURL(/home/);
+  await page.locator('.hero > .amt').waitFor();
+  await page.waitForTimeout(900);
+  await shot(page, '28-statement-phone');
   await ctx.close();
 }
 
