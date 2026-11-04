@@ -13,11 +13,11 @@ Numbered steps, with what you should see at each one: [docs/START_HERE.md](docs/
 ## What it is
 
 Your banks, instantly: a small, fast personal-finance app on your own real bank data. It runs on your computer, reads with a
-token you issue yourself (the app only ever reads: it has no code that moves money) and keeps everything in a local SQLite file.
+token you issue yourself (it has no code that moves money: the one write is an unpaid Wise draft you ask for and pay in Wise) and keeps everything in a local SQLite file.
 
 - **Banks**: monobank (a personal token), PrivatBank business and ФОП accounts (an "Автоклієнт" key restricted to balances and
   transactions), and Privat24 personal cards from an exported statement file (PrivatBank closed its personal-card API in 2022).
-  Wise balances (a personal API token; balances only, its transactions are not read: see START_HERE). Connect any mix; everything adds up in hryvnias and every account says which bank it is at.
+  Wise balances (a personal API token; its transactions are not read, and it can prepare an unpaid transfer you pay in Wise: see START_HERE). Connect any mix; everything adds up in hryvnias and every account says which bank it is at.
 
 - **Home**: your money in hryvnias (every card and jar, foreign currencies at monobank's own rates), a 30-day line, this month
   against the same days last month, accounts, top categories, regular payments.
@@ -76,7 +76,7 @@ docs                 START_HERE.md, HANDOVER.md (state of the work), UKRAINE.md,
 | Home page weight                       | 1181 kB             | **101 kB**                    |
 | Keystroke to filtered list, 5,892 rows | n/a                 | about one frame (26 to 33 ms) |
 | Source lines (no tests)                | 19,589              | 13,141                        |
-| Tests                                  | 513                 | 162 unit + 20 Playwright      |
+| Tests                                  | 513                 | 178 unit + 23 Playwright      |
 
 Measured on the production build, with Lighthouse 13.6 on `/home` with a session cookie, three runs, median, before PrivatBank was
 added (which made the initial JS + CSS 198.9 kB raw, 58 kB over the wire, and the tests 151 unit + 16 Playwright). Details and
@@ -92,7 +92,7 @@ Node 24 (`.nvmrc`; `./start.sh` finds it through nvm), then `npm ci`.
 | `npm run e2e`                                  | build, then Playwright: demo bank (:4300), the token flows against the paced fakes (:4301, :4310, :4311, :4312), statement import, axe, phones |
 | `npm run fake:monobank`                        | a stand-in for api.monobank.ua with the same one-read-a-minute limit, for trying the paced loading                                             |
 | `npm run fake:privatbank`                      | a stand-in for acp.privatbank.ua (one request a second, paging, a daily-routine switch); `PRIVATBANK_API_URL=http://127.0.0.1:4311`            |
-| `npm run fake:wise`                            | a stand-in for api.wise.com (balances only, a strong-authentication switch); `WISE_API_URL=http://127.0.0.1:4312/2026Q4`                       |
+| `npm run fake:wise`                            | a stand-in for api.wise.com (balances, draft transfers, a strong-authentication switch); `WISE_API_URL=http://127.0.0.1:4312/2026Q4`           |
 | `PUBLIC_URL=http://localhost:4200 npm run dev` | API on :3000 (watch) and the Angular dev server on :4200; the API must be told the origin the browser uses. Not exercised in the v2 pass       |
 | `node scripts/screenshots.mjs`                 | retakes `docs/screenshots` from running servers (its header says which)                                                                        |
 

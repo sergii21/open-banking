@@ -52,7 +52,7 @@ side by side, and `wise` **depends on `privat`**, because the fakes' buckets are
   the bank's pace with an honest progress chip, and "Disconnect and delete my data" returns to the first-run screen.
 - `privat.spec.ts` (serial): the PrivatBank key flow with the Live API drawer's redaction, the daily routine explained in words, two
   banks at once, and axe plus 320 px on each connect pane.
-- `wise.spec.ts`: the Wise token flow, the strong-authentication 403 explained in words, the drawer's redaction and three banks at once.
+- `wise.spec.ts` (also draft transfers: priced, created unpaid, the fake's `/__admin/log` shows no funding call; a token that may not write; 320 px): the Wise token flow, the strong-authentication 403 explained in words, the drawer's redaction and three banks at once.
 - `import.spec.ts` (`chromium`, on :4300): uploads `fixtures/privat24/unverified-statement.{csv,xlsx}`: a bad file is refused with its
   column titles, a statement imports, the same rows again as xlsx add nothing, and removal works; 320 px.
 - `a11y.spec.ts`: axe (WCAG 2.0 A/AA, 2.1 A/AA, 2.2 AA) on the first-run screen (the Wise pane too), Home, Activity, Insights and every sheet, in light and dark.

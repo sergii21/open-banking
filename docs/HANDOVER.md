@@ -4,13 +4,34 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 (`git checkout v1-full-featured`; its own hand-over is in that tag's `docs/HANDOVER.md`). Node 24 for every command:
 `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
 
+## Wise draft transfers (added 2026-11-04, at the person's request)
+
+The first write in v2. The person chooses a saved recipient and an amount, sees Wise's price and creates the transfer **unpaid**; they pay
+it in Wise. `WISE_WRITE_PATHS` in `providers/wise/adapter.ts` allows exactly `POST /profiles/{id}/quotes` and `POST /transfers`, `post()`
+refuses anything else, and the funding call is nowhere in the adapter: `wise-drafts.test.ts` checks the list, the refusal, the source
+text and the requests the fake saw, and the e2e reads the fake's log. The fake answers the funding call as Wise would, so a bug would
+succeed there and be caught. `modules/wise-drafts` holds no state: Wise holds the transfer, nothing is stored, no migration. The profile
+comes from an account in the session, never from the browser. A retry uses the same `customerTransactionId`, so it cannot duplicate.
+A refusal on a draft call never marks the token rejected: a token that may read but not write keeps working for balances. Redaction
+gained recipient names, account summaries, references, recipient and profile ids and the idempotency key.
+
+Left out on purpose: adding a recipient (Wise's forms differ per route; the person adds them in Wise), cancelling (a third write; Wise
+does it), `POST /transfer-requirements` (a route that needs a purpose shows Wise's refusal), a deep link to the transfer (no documented
+URL; the button opens wise.com).
+
+Not verified, none of these calls has reached the real service, only the fake built from docs.wise.com: whether a real token may
+draft at all; the real answers; that `GET /accounts` needs `profileId` and pages as documented; that Wise accepts `preferredPayIn:
+'BALANCE'`; that a draft shows up in the person's transactions as the sheet says; Wise's real refusal bodies.
+
+---
+
 ## Wise, balances only (added 2026-11-04)
 
 `providers/wise`: a personal API token as Bearer, `GET /profiles` then `GET /profiles/{id}/balances?types=STANDARD,SAVINGS` on
 `https://api.wise.com/2026Q4` (`WISE_API_URL`); one account per balance (jars for SAVINGS), amounts read as the text Wise wrote
 (`parseKeepingAmounts`, never a float), `last4` null. **No statement, payment or other write endpoint exists in the adapter**: its
-only network function is a GET, `fetchTransactions` returns nothing without touching the network, and `wise.test.ts` proves only GETs
-to the two read paths. `limits.balancesOnly` makes the sync plan no history, so the chip reads "Updated", tiles say "Balance only ·
+background reads are GETs to two paths, `fetchTransactions` returns nothing without touching the network, and `wise.test.ts` proves it
+(the drafts above are the only writes, and only when asked). `limits.balancesOnly` makes the sync plan no history, so the chip reads "Updated", tiles say "Balance only ·
 history not read", Home and Settings and the connect pane say why, and Wise is left out of the spending, delta and category figures
 (its balances count in Your money and as a flat line in the 30-day line). 401 and a plain 403 are a rejected token; a 403 with
 `X-2FA-Approval` is explained in words (never signed); 429 honours Retry-After; 5xx is "not responding". Redaction: the whole

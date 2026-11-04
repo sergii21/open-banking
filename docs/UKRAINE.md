@@ -117,14 +117,21 @@ Not a Ukrainian bank, added because it is the one place with a self-serve person
 - Retrieving balance statements (and funding transfers) with a personal token is "not supported except for accounts based in the US,
   Canada, Australia, New Zealand, Singapore, and Malaysia", and the statement endpoint is SCA protected for every profile registered
   elsewhere: a 403 with `X-2FA-Approval` headers and a signed one-time-token retry. Ledger Lens does not implement that, so it reads
-  **balances only**: `GET /profiles` and `GET /profiles/{id}/balances?types=STANDARD,SAVINGS` (savings balances are jars). The
-  adapter can only send those two GETs.
+  **balances only** in the background: `GET /profiles` and `GET /profiles/{id}/balances?types=STANDARD,SAVINGS` (savings balances are
+  jars).
+- Draft transfers, when the person asks: `GET /accounts?profileId=` (saved recipients, 20 a page, `seekPositionForNext`),
+  `POST /profiles/{id}/quotes`, `POST /transfers` (`targetAccount`, `quoteUuid`, `customerTransactionId` so a retry never duplicates,
+  `details.reference`), `GET /transfers?profile=&status=incoming_payment_waiting`. Funding,
+  `POST /profiles/{id}/transfers/{id}/payments`, is the call a personal token may not make outside those six countries, and the adapter
+  has no such call. A created transfer's `sourceValue` reads 0 in Wise's sample, so the app shows the target amount. Wise says a
+  transfer usually must be funded within fourteen days or it is cancelled. Some routes need `details.transferPurpose` and the like
+  (`POST /transfer-requirements`); the app does not ask for those and shows Wise's refusal.
 - Statements, for the record: `GET /profiles/{id}/balance-statements/{balanceId}/statement.json`, at most 469 days, signed amounts,
   a running balance. Not used. A 429 carries `Retry-After`; no numeric limit is documented.
 - Checked against the real service without a token on 2026-11-04: a made-up Bearer token gets `401 {"error":"invalid_token"}` on both
   the versioned and the legacy paths, which the app shows as "Wise does not recognise this token".
 - Wise balances are valued in hryvnias at monobank's public rates like every other bank, not at Wise's own rate (they differ a little).
-- **Not verified:** whether the user's account type can create a token at all, what the token form offers, what `/profiles` returns.
+- **Not verified:** whether the user's account type can create a token at all, what the token form offers, what `/profiles` returns, and every draft call: none has been sent to the real service.
 
 ## No other Ukrainian bank has a self-serve API (2026-11-03)
 

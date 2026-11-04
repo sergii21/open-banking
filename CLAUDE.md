@@ -1,8 +1,8 @@
 # Ledger Lens — project rules
 
 A personal-finance app for a person's own monobank and PrivatBank accounts (monobank and PrivatBank business/ФОП accounts live, with a
-token the person issues; personal Privat cards from a Privat24 statement file) and Wise balances (a personal token; balances only): their money in hryvnias, this month against the same
-days last month, every transaction with instant search, and their regular payments. Read-only, on their own computer, and fast. How to run it:
+token the person issues; personal Privat cards from a Privat24 statement file) and Wise balances (a personal token; it can also draft a transfer the person pays in Wise): their money in hryvnias, this month against the same
+days last month, every transaction with instant search, and their regular payments. It never moves money, on their own computer, and fast. How to run it:
 `README.md`; the person's own steps: `docs/START_HERE.md`; current state, measurements and what is **not** verified:
 `docs/HANDOVER.md`. `docs/V2_BRIEF.md` and `docs/PLAN.md` are history. The full v1 (payments, TrueLayer, mock bank, Material UI)
 is the git tag `v1-full-featured`.
@@ -40,7 +40,7 @@ not word-split unquoted variables and macOS has no `timeout`; keep scripts POSIX
 | `PRIVATBANK_TOKEN=… npm run doctor:privat`     | Checks a real PrivatBank business key (settings, balance/interim, one 31-day statement) and prints PASS, FAIL or NOTE per check, counts only. The person types the key in their own terminal                                                                                                                |
 | `npm run fake:privatbank`                      | A stand-in for acp.privatbank.ua on :4311: one request a second, paging, the interim/interval split and a daily-routine switch (`/__admin/routine`, `/__admin/work`). Point the app at it with `PRIVATBANK_API_URL=http://127.0.0.1:4311` (key: `FAKE_PRIVAT_TOKEN` in `providers/privatbank/demo/fake.ts`) |
 | `WISE_TOKEN=… npm run doctor:wise`             | Checks a real Wise personal token (profiles, balances) and prints PASS, FAIL or NOTE per check, counts only. The person types the token in their own terminal                                                                                                                                               |
-| `npm run fake:wise`                            | A stand-in for api.wise.com on :4312 (balances only, a strong-authentication switch). Point the app at it with `WISE_API_URL=http://127.0.0.1:4312/2026Q4` (token: `FAKE_WISE_TOKEN` in `providers/wise/demo/fake.ts`)                                                                                      |
+| `npm run fake:wise`                            | A stand-in for api.wise.com on :4312 (balances, draft transfers, a strong-authentication switch). Point the app at it with `WISE_API_URL=http://127.0.0.1:4312/2026Q4` (token: `FAKE_WISE_TOKEN` in `providers/wise/demo/fake.ts`)                                                                          |
 | `npm run verify`                               | check:node, ESLint, Prettier, typecheck, unit tests (contracts, API, web), production build                                                                                                                                                                                                                 |
 | `npm run e2e`                                  | Build, then Playwright (see Testing). `e2e:only` skips the build, `e2e:report` opens the last report                                                                                                                                                                                                        |
 | `node scripts/screenshots.mjs`                 | Retakes `docs/screenshots` from running servers (its header says which)                                                                                                                                                                                                                                     |
@@ -133,6 +133,10 @@ Project specifics on top of it (ESLint enforces what it can):
   the screens say so. `privat24` is not a provider: it is a statement file read by
   `modules/imports` (zip, xlsx and CSV readers in `domain/files`, no dependency), so it has no token, no sync and no adapter. See the
   `provider-adapter` skill.
+- **The one write**: Wise draft transfers (`modules/wise-drafts`), only when the person asks. `WISE_WRITE_PATHS` allows exactly
+  `POST /profiles/{id}/quotes` and `POST /transfers`. The funding call must never exist in the adapter: the person pays in Wise, and a test
+  checks the list, the source text and the requests the fake saw. A refusal on a draft call must not mark the token rejected. Every other
+  provider stays read-only: no write without the person asking for it.
 - **Several connections per session**, one per bank (`UNIQUE (session_id, provider)`), each with its own queue and gate in `modules/sync`;
   the screens see one aggregated `SyncState` (`stateForSession`). The demo never sits beside a real bank: connecting one replaces it, and
   the demo is refused while one is connected.
@@ -177,7 +181,7 @@ Project specifics on top of it (ESLint enforces what it can):
   interim one), what `FL_REAL` `i` means (skipped), the 429 body (`npm run doctor:privat` covers the first four), and the whole real
   Privat24 export layout (the fixtures are named unverified). For Wise: the real field shapes, that this account type can complete
   creating a token (the docs describe personal tokens for business accounts and mention no read-only type), what `/profiles` returns, that a
-  balance `amount` is the balance to show, and that balances need no strong authentication (`npm run doctor:wise` covers the shapes).
+  balance `amount` is the balance to show, and that balances need no strong authentication (`npm run doctor:wise` covers the shapes), and every draft call: none has reached the real service.
   `docs/HANDOVER.md` keeps the list.
 
 ## Secrets and git

@@ -1,7 +1,7 @@
 # Start here
 
 Ledger Lens shows your own monobank and PrivatBank accounts together: your money in hryvnias, this month against last month,
-every transaction with instant search, and your regular payments. Read-only, on your computer. The first time takes about ten
+every transaction with instant search, and your regular payments. It never moves money, and it stays on your computer. The first time takes about ten
 minutes for one bank; each further bank is one more short section (5 and 6).
 
 ## 1. Start it
@@ -104,7 +104,7 @@ fixed without seeing your data.
 - Spending must be negative in the file; if every amount has the same sign the importer refuses instead of guessing.
 - If you also connect a business account whose card you import here, those payments are counted twice: import personal cards only.
 
-## 7. Add Wise (optional: balances only)
+## 7. Add Wise (optional: balances, and drafts you pay in Wise)
 
 Ledger Lens can read your **Wise balances** (every currency, and jars) with a personal API token and count them in Your money. It
 does **not** read Wise transactions: Wise requires strong authentication for statements outside the US, Canada, Australia, New
@@ -114,7 +114,8 @@ out of spending, categories and Insights (the screens say so).
 1. In Wise open **Your account**, then **Integrations and tools**, then **API tokens** (Wise asks for 2-step login there).
 2. **Add a new token** and choose the **narrowest permission the form offers**, read-only if it is there. Wise's documentation shows
    no read-only token type and nobody has yet seen the form for your account, so assume the token may be able to do more than Ledger
-   Lens uses. The app only ever sends read requests (two GETs, a test proves it), and you can revoke the token in Wise any time.
+   Lens uses. The app reads balances, and writes only when you ask it to draft a transfer (below). You can revoke the token in Wise
+   any time. A token that cannot create transfers still reads balances; only drafts need more.
 3. Copy the token (Wise shows it once) and paste it in **Add a bank**, **Wise**, **Connect Wise**.
 
 Wise's own documentation describes personal tokens for business accounts, so whether your account type can create one at all is
@@ -123,7 +124,20 @@ unconfirmed: if Wise will not create it, there is nothing more this app can do f
 - "Wise does not recognise this token": copy all of it, or create a new one.
 - "Wise asks for strong customer authentication": Wise wants a step this app does not do. Nothing is lost; balances read earlier stay.
 
-Optional check first, in your own terminal: `WISE_TOKEN=... npm run doctor:wise` (prints counts only).
+Optional check first, in your own terminal: `WISE_TOKEN=... npm run doctor:wise` (prints counts only; it only reads).
+
+### Draft a Wise transfer
+
+Ledger Lens cannot pay anyone. It can prepare a transfer so you only have to pay it in Wise: **Draft a Wise transfer** on Home (or in
+Settings), choose a balance, a recipient you already saved in Wise and an amount, check Wise's price, and create the draft. Then open
+Wise and pay it there. Wise's API does not let a personal token fund a transfer outside the US, Canada, Australia, New Zealand,
+Singapore and Malaysia, and this app never sends that call anywhere.
+
+- A draft sits in Wise waiting for payment. Wise cancels it if it stays unpaid, usually within 14 days. Cancel one sooner in Wise itself.
+- New recipients are added in Wise; the app only lists the ones saved there.
+- "Wise does not let this token do that": the token may not create transfers. Make the transfer in Wise, or issue a token that allows it.
+- Some routes need more details than this form asks for (a transfer purpose, for example). Wise then refuses and the sheet shows its
+  words; make that one in Wise.
 
 ## 8. Check it is real
 

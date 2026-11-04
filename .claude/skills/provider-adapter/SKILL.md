@@ -33,7 +33,8 @@ apps/api/src/providers/
   privatbank/adapter.ts    PrivatBankProvider: pages of 100, its own pacing between pages, the daily-routine window, outage wording
   privatbank/dto.ts        tolerant DTOs for balances and transactions, the known-field lists
   privatbank/demo/         dataset.ts, fake.ts (in process: 1 request a second, paging, routine switch), server.ts (`npm run fake:privatbank`)
-  wise/adapter.ts          WiseProvider: Bearer token, profiles then balances, balances only, the strong-authentication 403 in words
+  wise/adapter.ts          WiseProvider: Bearer token, profiles then balances, the strong-authentication 403 in words; draft transfers
+                           through `post()`, limited to `WISE_WRITE_PATHS` (the funding call must never be added)
   wise/dto.ts              tolerant DTOs; amounts kept as the text Wise wrote (`parseKeepingAmounts`)
   wise/demo/               fake.ts and server.ts (`npm run fake:wise`)
 apps/api/src/modules/imports/               the Privat24 statement import route and service (no token, no sync)
@@ -107,7 +108,8 @@ of a paged, rate-limited bank with a header token. A bank with no API at all is 
 - `apps/api/test/privatbank.test.ts` runs the PrivatBank adapter against its fake: paging, pacing, the routine window, VE014, redaction.
   `privat-domain.test.ts` and `import.test.ts` cover the statement reader and the import (refusals, re-import adds only new rows);
   `multi.test.ts` two banks in one session; `migrations.test.ts` the 002 rebuild on a v2-shaped database.
-- `apps/api/test/wise.test.ts` runs the Wise adapter against its fake, including that it only ever sends the two GETs.
+- `apps/api/test/wise.test.ts` runs the Wise adapter against its fake, including that background reads only ever send the two GETs.
+  `wise-drafts.test.ts` covers drafts, and proves the adapter cannot fund one.
 - `apps/api/test/monobank.test.ts` runs the adapter against the scripted `FakeMonobank` through a stubbed `Transport`: mapping of cards,
   credit cards and jars, holds, foreign-currency purchases, transfers with comments, skipped rows, every status → error, token cleaning,
   rates.
