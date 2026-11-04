@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { NBSP, currencyExponent, formatMoney, minorToDecimalString, moneyParts } from './money';
+import {
+  NBSP,
+  currencyExponent,
+  formatMoney,
+  minorToDecimalString,
+  moneyParts,
+  parseAmountToMinor,
+} from './money';
+
+describe('parseAmountToMinor', () => {
+  it('reads what a person types, with integer arithmetic', () => {
+    expect(parseAmountToMinor('1 234,50', 'UAH')).toBe(123450);
+    expect(parseAmountToMinor('1234.5', 'EUR')).toBe(123450);
+    expect(parseAmountToMinor('19.99', 'EUR')).toBe(1999);
+    expect(parseAmountToMinor('5', 'JPY')).toBe(5);
+    expect(parseAmountToMinor('1.234', 'KWD')).toBe(1234);
+  });
+  it('refuses anything that is not a plain positive amount', () => {
+    for (const typed of ['', '0', '0.00', '-5', 'abc', '1.234', '1,2,3', '1e5']) {
+      expect(parseAmountToMinor(typed, 'EUR')).toBeNull();
+    }
+    expect(parseAmountToMinor('1.5', 'JPY')).toBeNull();
+    expect(parseAmountToMinor('99999999999999999', 'EUR')).toBeNull();
+  });
+});
 
 describe('currencyExponent', () => {
   it('knows zero and three decimal currencies and defaults to two', () => {

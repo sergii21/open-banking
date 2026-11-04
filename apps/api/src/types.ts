@@ -14,6 +14,7 @@ import type { Calendar } from './domain/calendar';
 import type { TokenVault } from './domain/crypto';
 import type { ConnectionAccess } from './modules/connection/access';
 import type { ConnectionService } from './modules/connection/service';
+import type { WiseDraftService } from './modules/wise-drafts/service';
 import type { DiagnosticsService } from './modules/diagnostics/service';
 import type { EventBus } from './modules/events/event-bus';
 import type { HomeService } from './modules/home/service';
@@ -59,4 +60,5 @@ export interface AppContext extends CoreContext {
   insights: InsightsService;
   diagnostics: DiagnosticsService;
   imports: ImportService;
+  wiseDrafts: WiseDraftService;
 }

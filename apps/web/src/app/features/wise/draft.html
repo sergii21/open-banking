@@ -1,0 +1,217 @@
+<ll-sheet
+  title="Draft a Wise transfer"
+  [open]="ui.wiseDraft()"
+  (openChange)="ui.wiseDraft.set($event)"
+>
+  @switch (step()) {
+    @case ('form') {
+      <p class="hint" style="margin-bottom: 14px">
+        Ledger Lens prepares the transfer in your Wise account. No money moves until you pay it
+        yourself in Wise.
+      </p>
+
+      @if (overview(); as o) {
+        @if (o.recipients.length === 0) {
+          <p class="hint">
+            There are no saved recipients on this Wise profile. Add one in Wise, then come back.
+          </p>
+        } @else {
+          <form style="display: grid; gap: 12px" (submit)="$event.preventDefault(); price()">
+            <div class="field">
+              <label for="draft-source">From</label>
+              <select
+                id="draft-source"
+                class="input"
+                [value]="accountId()"
+                (change)="chooseSource($any($event.target).value)"
+              >
+                @for (s of o.sources; track s.accountId) {
+                  <option [value]="s.accountId" [selected]="s.accountId === accountId()">
+                    {{ s.name }}
+                  </option>
+                }
+              </select>
+            </div>
+            <div class="field">
+              <label for="draft-recipient">To</label>
+              <select
+                id="draft-recipient"
+                class="input"
+                [value]="recipientId()"
+                (change)="recipientId.set($any($event.target).value); error.set(null)"
+              >
+                <option value="">Choose a recipient</option>
+                @for (r of o.recipients; track r.id) {
+                  <option [value]="r.id">
+                    {{ r.name }} · {{ r.currency }}
+                    @if (r.summary) {
+                      · {{ r.summary }}
+                    }
+                  </option>
+                }
+              </select>
+              @if (o.moreRecipients) {
+                <p class="hint">Only your first recipients are listed. Use Wise for the others.</p>
+              }
+            </div>
+            <div class="field">
+              <label for="draft-amount"
+                >You send{{ source() ? ', ' + source()!.currency : '' }}</label
+              >
+              <input
+                id="draft-amount"
+                class="input"
+                type="text"
+                inputmode="decimal"
+                autocomplete="off"
+                [value]="amount()"
+                [attr.aria-invalid]="amountInvalid() ? 'true' : null"
+                [attr.aria-describedby]="
+                  amountInvalid() || overBalance() ? 'draft-amount-note' : null
+                "
+                (input)="amount.set($any($event.target).value); error.set(null)"
+              />
+              @if (amountInvalid()) {
+                <p class="error-text" id="draft-amount-note">
+                  Enter an amount, for example 120.50.
+                </p>
+              } @else if (overBalance()) {
+                <p class="hint" id="draft-amount-note">
+                  That is more than this balance. Wise will ask for another way to pay.
+                </p>
+              }
+            </div>
+            <div class="field">
+              <label for="draft-reference">Reference (optional)</label>
+              <input
+                id="draft-reference"
+                class="input"
+                type="text"
+                maxlength="140"
+                autocomplete="off"
+                [value]="reference()"
+                (input)="reference.set($any($event.target).value)"
+              />
+            </div>
+            @if (error()) {
+              <p class="error-text" role="alert">{{ error() }}</p>
+            }
+            <button type="submit" class="btn btn-primary btn-block" [disabled]="!canPrice()">
+              {{ busy() ? 'Asking Wise…' : 'See the price' }}
+            </button>
+          </form>
+        }
+
+        @if (o.waiting.length > 0) {
+          <h3 class="card-title" style="margin: 18px 0 8px">Waiting for payment in Wise</h3>
+          <dl class="kv">
+            @for (t of o.waiting; track t.id) {
+              <div>
+                <dt>
+                  {{ t.recipientName ?? 'Recipient' }}{{ t.createdOn ? ' · ' + t.createdOn : '' }}
+                </dt>
+                <dd>
+                  <ll-amount [minor]="t.targetMinor" [currency]="t.targetCurrency" size="sm" />
+                </dd>
+              </div>
+            }
+          </dl>
+        }
+      } @else if (error()) {
+        <p class="error-text" role="alert">{{ error() }}</p>
+      } @else if (loading()) {
+        <p class="hint" role="status">Reading your recipients from Wise…</p>
+      }
+    }
+
+    @case ('review') {
+      @if (quote(); as q) {
+        <dl class="kv">
+          <div>
+            <dt>To</dt>
+            <dd>{{ recipient()?.name }}</dd>
+          </div>
+          <div>
+            <dt>You send</dt>
+            <dd><ll-amount [minor]="q.sourceMinor" [currency]="q.sourceCurrency" size="sm" /></dd>
+          </div>
+          @if (q.feeMinor !== null) {
+            <div>
+              <dt>Wise's fee, included</dt>
+              <dd><ll-amount [minor]="q.feeMinor" [currency]="q.sourceCurrency" size="sm" /></dd>
+            </div>
+          }
+          @if (q.rate) {
+            <div>
+              <dt>Rate</dt>
+              <dd>{{ q.rate }}</dd>
+            </div>
+          }
+          <div>
+            <dt>They get</dt>
+            <dd><ll-amount [minor]="q.targetMinor" [currency]="q.targetCurrency" size="sm" /></dd>
+          </div>
+          @if (reference().trim()) {
+            <div>
+              <dt>Reference</dt>
+              <dd>{{ reference().trim() }}</dd>
+            </div>
+          }
+        </dl>
+        <p class="hint" style="margin-top: 12px">
+          @if (!q.fromBalance) {
+            Wise priced this for paying another way than from a balance.
+          }
+          @if (holdsUntil()) {
+            Wise holds this price until {{ holdsUntil() }}.
+          }
+          This creates a transfer waiting for payment. It is not paid, and only you can pay it, in
+          Wise.
+        </p>
+        @if (error()) {
+          <p class="error-text" role="alert" style="margin-top: 12px">{{ error() }}</p>
+        }
+        <div style="display: grid; gap: 8px; margin-top: 14px">
+          <button
+            type="button"
+            class="btn btn-primary btn-block"
+            [disabled]="busy()"
+            (click)="create()"
+          >
+            {{ busy() ? 'Creating…' : 'Create the draft' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-quiet btn-block"
+            [disabled]="busy()"
+            (click)="back()"
+          >
+            Back
+          </button>
+        </div>
+      }
+    }
+
+    @case ('done') {
+      <p class="banner banner-ok" role="status">
+        <span>The draft is in Wise, not paid. No money has moved.</span>
+      </p>
+      <p class="hint" style="margin-top: 12px">
+        To send it, open Wise and pay it: it waits in your transactions. Wise cancels a transfer
+        that is not paid, usually within 14 days, and you can cancel it there yourself.
+      </p>
+      <div style="display: grid; gap: 8px; margin-top: 14px">
+        <a
+          class="btn btn-primary btn-block"
+          href="https://wise.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Open Wise</a
+        >
+        <button type="button" class="btn btn-quiet btn-block" (click)="another()">
+          Draft another
+        </button>
+      </div>
+    }
+  }
+</ll-sheet>

@@ -44,6 +44,11 @@ export class Settings {
   protected readonly confirming = signal<string | null>(null);
   private confirmTimer: ReturnType<typeof setTimeout> | undefined;
 
+  protected draftWise(): void {
+    this.ui.settings.set(false);
+    this.ui.wiseDraft.set(true);
+  }
+
   protected readonly hasStatement = computed(() =>
     this.session.connections().some((c) => c.kind === 'file'),
   );

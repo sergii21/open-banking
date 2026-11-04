@@ -204,6 +204,16 @@
             </a>
           }
         </div>
+        @if (canDraftWise()) {
+          <button
+            type="button"
+            class="btn btn-soft btn-block"
+            style="margin-top: 10px"
+            (click)="ui.wiseDraft.set(true)"
+          >
+            Draft a Wise transfer
+          </button>
+        }
       </section>
 
       <div class="side-stack a-side">

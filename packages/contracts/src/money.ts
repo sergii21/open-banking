@@ -17,6 +17,20 @@ export function minorToDecimalString(amountMinor: number, currency: string): str
   return `${amountMinor < 0 ? '-' : ''}${whole}${fraction}`;
 }
 
+/**
+ * What a person typed as an amount, to minor units with integer arithmetic: "1 234,50" or "1234.5" in hryvnias is 123450. Null for
+ * anything that is not a plain positive amount or has more decimals than the currency has.
+ */
+export function parseAmountToMinor(typed: string, currency: string): number | null {
+  const exponent = currencyExponent(currency);
+  const match = /^(\d+)(?:\.(\d*))?$/.exec(typed.replace(/[\s\u00a0]/g, '').replace(',', '.'));
+  if (!match) return null;
+  const fraction = match[2] ?? '';
+  if (fraction.length > exponent) return null;
+  const minor = Number(`${match[1]}${fraction.padEnd(exponent, '0')}`);
+  return Number.isSafeInteger(minor) && minor > 0 ? minor : null;
+}
+
 const SYMBOLS: Readonly<Record<string, string>> = {
   UAH: '₴',
   USD: '$',

@@ -3,6 +3,7 @@ import { registerEventRoutes } from './modules/events/routes';
 import { registerImportRoutes } from './modules/imports/routes';
 import { registerInspectorRoutes } from './modules/inspector/routes';
 import { registerAppRoutes } from './modules/routes';
+import { registerWiseDraftRoutes } from './modules/wise-drafts/routes';
 import { registerSessionRoutes } from './modules/session/routes';
 import { registerSessionHooks } from './plugins/session';
 import type { App, AppContext } from './types';
@@ -32,6 +33,7 @@ export async function registerApi(app: App, ctx: AppContext): Promise<void> {
       registerConnectionRoutes(api, ctx);
       registerImportRoutes(api, ctx);
       registerAppRoutes(api, ctx);
+      registerWiseDraftRoutes(api, ctx);
       registerInspectorRoutes(api, ctx);
       registerEventRoutes(api, ctx);
       done();

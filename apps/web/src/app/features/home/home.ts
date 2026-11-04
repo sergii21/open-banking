@@ -182,6 +182,9 @@ export class Home {
     this.ui.imported.set(null);
   }
 
+  protected readonly canDraftWise = computed(() =>
+    this.session.connections().some((c) => c.bank === 'wise' && c.status === 'active'),
+  );
   protected readonly hasWise = computed(() =>
     (this.home()?.accounts ?? []).some((a) => a.bank === 'wise'),
   );

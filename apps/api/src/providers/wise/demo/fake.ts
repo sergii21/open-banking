@@ -24,13 +24,26 @@ const VERSION = '/2026Q4';
 /**
  * A stand-in for api.wise.com, shaped by docs.wise.com (version 2026Q4): Bearer auth with the real 401 bodies (`invalid_token`,
  * `missing_token`), `GET /profiles`, `GET /profiles/{id}/balances?types=…` with numbers as JSON numbers, 429 with Retry-After, and
- * the SCA answer (`strongAuth`: 403 with X-2FA-Approval headers). It answers only GET; anything else is a 405 and is recorded in
- * `requests`, so a test can prove the app never sends one. There is no statement endpoint here on purpose: the app never asks.
+ * the SCA answer (`strongAuth`: 403 with X-2FA-Approval headers). For drafts: `GET /accounts`, `POST /profiles/{id}/quotes`,
+ * `POST /transfers` (idempotent on `customerTransactionId`, a quote used once, the created transfer's `sourceValue` 0 as in Wise's
+ * sample), `GET /transfers`. The funding call answers as Wise would, so a bug that sent it would succeed here and show up in
+ * `requests`, where a test looks for it. Any other write is a 405. There is no statement endpoint: the app never asks.
  */
 export class FakeWise {
   down = false;
   /** Balances answer 403 with the SCA headers, as Wise does when it wants strong authentication. */
   strongAuth = false;
+  /** The token may read but not write: quotes and transfers answer a plain 403. */
+  writesForbidden = false;
+  /** Wise's words when a business account has payment approvals on. */
+  needsApproval = false;
+  /** How many saved recipients beyond the three named ones. */
+  extraRecipients = 0;
+  private readonly quotes = new Map<
+    string,
+    { used: boolean; recipient: number; target: string; targetValue: number }
+  >();
+  private readonly transfers = new Map<string, Record<string, unknown>>();
   private lastCall: number | undefined;
   readonly requests: {
     method: string;
@@ -55,10 +68,10 @@ export class FakeWise {
     pathname: string,
     query: URLSearchParams,
     headers: Record<string, string>,
+    body?: unknown,
   ): FakeReply {
     const at = this.options.clock.now().getTime();
     this.requests.push({ method, path: pathname, query: query.toString(), headers, at });
-    if (method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' } };
     if (!pathname.startsWith(`${VERSION}/`)) return { status: 404, body: { error: 'not_found' } };
 
     const auth = headers['authorization'];
@@ -79,6 +92,14 @@ export class FakeWise {
     this.lastCall = at;
 
     const rest = pathname.slice(VERSION.length);
+    if (method !== 'GET') return this.write(method, rest, body);
+    if (rest === '/accounts') return this.accounts(query);
+    if (rest === '/transfers') {
+      const waiting = [...this.transfers.values()].filter(
+        (t) => t['status'] === query.get('status'),
+      );
+      return { status: 200, body: waiting };
+    }
     if (rest === '/profiles') {
       return {
         status: 200,
@@ -150,6 +171,156 @@ export class FakeWise {
     return { status: 404, body: { error: 'not_found' } };
   }
 
+  private accounts(query: URLSearchParams): FakeReply {
+    if (query.get('profileId') !== String(FAKE_WISE_PROFILE_ID)) {
+      return { status: 200, body: { content: [], seekPositionForNext: 0, size: 20 } };
+    }
+    const recipient = (id: number, fullName: string, currency: string, summary: string) => ({
+      id,
+      name: { fullName },
+      currency,
+      country: 'GB',
+      type: 'sort_code',
+      active: true,
+      accountSummary: summary,
+      longAccountSummary: `${currency} account ending ${summary.slice(-4)} of ${fullName}`,
+      displayFields: [{ key: 'accountNumber', label: 'Account number', value: '12345678' }],
+      ownedByCustomer: false,
+      hash: 'made-up-hash',
+      profileId: FAKE_WISE_PROFILE_ID,
+    });
+    const all = [
+      recipient(700001, 'Olena Vigada', 'GBP', '(23-14-70) 12345678'),
+      recipient(700002, 'Taras Made-Up', 'EUR', 'BE68 •••• 0794'),
+      { ...recipient(700003, 'Closed Account', 'EUR', 'BE11 •••• 0000'), active: false },
+      ...Array.from({ length: this.extraRecipients }, (_, i) =>
+        recipient(710000 + i, `Extra ${i}`, 'USD', `(0) ${i}`),
+      ),
+    ];
+    const from = Number(query.get('seekPosition') ?? 0);
+    const size = Number(query.get('size') ?? 20);
+    const content = all.slice(from, from + size);
+    return { status: 200, body: { content, seekPositionForNext: from + content.length, size } };
+  }
+
+  private write(method: string, rest: string, body: unknown): FakeReply {
+    if (method !== 'POST') return { status: 405, body: { error: 'method_not_allowed' } };
+    const funding = /^\/profiles\/\d+\/transfers\/\d+\/payments$/.exec(rest);
+    if (funding) return { status: 201, body: { type: 'BALANCE', status: 'COMPLETED' } };
+    const isQuote = rest === `/profiles/${FAKE_WISE_PROFILE_ID}/quotes`;
+    if (!isQuote && rest !== '/transfers')
+      return { status: 405, body: { error: 'method_not_allowed' } };
+    if (this.writesForbidden) return { status: 403, body: { error: 'forbidden' } };
+    return isQuote ? this.quote(body) : this.transfer(body);
+  }
+
+  private quote(body: unknown): FakeReply {
+    const input = body as {
+      sourceCurrency?: string;
+      targetCurrency?: string;
+      sourceAmount?: number;
+      targetAccount?: number;
+    };
+    if (
+      !input.sourceCurrency ||
+      !input.targetCurrency ||
+      !input.sourceAmount ||
+      !input.targetAccount
+    ) {
+      return { status: 422, body: { errors: [{ code: 'invalid', message: 'Missing a field.' }] } };
+    }
+    const id = `11144c35-9fe8-4c32-b7fd-${String(this.quotes.size + 1).padStart(12, '0')}`;
+    const rate = input.sourceCurrency === input.targetCurrency ? 1 : 0.85;
+    const fee = Math.round(input.sourceAmount * 0.5) / 100;
+    const targetAmount = Math.round((input.sourceAmount - fee) * rate * 100) / 100;
+    this.quotes.set(id, {
+      used: false,
+      recipient: input.targetAccount,
+      target: input.targetCurrency,
+      targetValue: targetAmount,
+    });
+    const option = (payIn: string, disabled: boolean) => ({
+      payIn,
+      payOut: 'BANK_TRANSFER',
+      sourceAmount: input.sourceAmount,
+      targetAmount,
+      fee: { total: fee },
+      disabled,
+      price: { total: { value: { amount: fee, currency: input.sourceCurrency } } },
+    });
+    return {
+      status: 200,
+      body: {
+        id,
+        sourceCurrency: input.sourceCurrency,
+        targetCurrency: input.targetCurrency,
+        sourceAmount: input.sourceAmount,
+        targetAmount,
+        payOut: 'BANK_TRANSFER',
+        preferredPayIn: 'BALANCE',
+        rate,
+        expirationTime: new Date(this.options.clock.now().getTime() + 1_800_000).toISOString(),
+        paymentOptions: [option('BANK_TRANSFER', false), option('BALANCE', false)],
+      },
+    };
+  }
+
+  private transfer(body: unknown): FakeReply {
+    const input = body as {
+      targetAccount?: number;
+      quoteUuid?: string;
+      customerTransactionId?: string;
+      details?: { reference?: string };
+    };
+    if (!input.customerTransactionId) {
+      return { status: 422, body: { errors: [{ code: 'invalid', message: 'Missing an id.' }] } };
+    }
+    const repeat = this.transfers.get(input.customerTransactionId);
+    if (repeat) return { status: 200, body: repeat };
+    if (this.needsApproval) {
+      return {
+        status: 422,
+        body: {
+          errors: [
+            {
+              code: 'error.approval',
+              message: 'Quote cannot be accepted with this request due to missing approval',
+            },
+          ],
+        },
+      };
+    }
+    const quote = this.quotes.get(input.quoteUuid ?? '');
+    if (!quote || quote.used || quote.recipient !== input.targetAccount) {
+      return {
+        status: 422,
+        body: { errors: [{ code: 'quote', message: 'This quote cannot be used.' }] },
+      };
+    }
+    quote.used = true;
+    const transfer = {
+      id: 16_521_632 + this.transfers.size,
+      user: 9889627,
+      targetAccount: input.targetAccount,
+      sourceAccount: null,
+      quoteUuid: input.quoteUuid,
+      status: 'incoming_payment_waiting',
+      reference: input.details?.reference ?? '',
+      rate: 0.85,
+      created: this.options.clock.now().toISOString().slice(0, 19).replace('T', ' '),
+      details: { reference: input.details?.reference ?? '' },
+      hasActiveIssues: false,
+      sourceCurrency: 'EUR',
+      sourceValue: 0,
+      targetCurrency: quote.target,
+      targetValue: quote.targetValue,
+      customerTransactionId: input.customerTransactionId,
+      payinSessionId: '23330542-8e9e-419f-95eb-312b880f92ad',
+    };
+    this.transfers.set(input.customerTransactionId, transfer);
+    return { status: 200, body: transfer };
+  }
+
   readonly transport: Transport = async (url, init) => {
     const latency = this.options.latencyMs ?? 0;
     if (latency > 0) await new Promise((resolve) => setTimeout(resolve, latency));
@@ -163,6 +334,7 @@ export class FakeWise {
       parsed.pathname,
       parsed.searchParams,
       headers,
+      typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
     );
     return new Response(JSON.stringify(reply.body), {
       status: reply.status,

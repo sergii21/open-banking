@@ -11,11 +11,12 @@ import { Ui } from './core/ui';
 import { Nav } from './core/nav';
 import { Icon } from './shared/icon';
 import { LiveApi } from './features/settings/live-api';
+import { WiseDraft } from './features/wise/draft';
 import { Settings } from './features/settings/settings';
 
 @Component({
   selector: 'll-root',
-  imports: [NgComponentOutlet, Icon, Settings, LiveApi],
+  imports: [NgComponentOutlet, Icon, Settings, LiveApi, WiseDraft],
   templateUrl: './app.html',
   host: {
     '(window:scroll)': 'onScroll()',

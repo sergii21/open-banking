@@ -150,7 +150,7 @@ export function buildRegistry({
       }),
     );
     rateSources.set('privatbank', [live]);
-    // Wise: balances only, valued at monobank's public rates like every other bank.
+    // Wise: balances in the background (drafts only when the person asks), valued at monobank's public rates like every other bank.
     const wiseDiagnostics = new DiagnosticsCollector();
     collectors.set('wise', wiseDiagnostics);
     providers.set(

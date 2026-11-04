@@ -9,7 +9,7 @@ import {
   watchCsp,
 } from './support';
 
-// Wise as a balances-only bank, against a local fake of api.wise.com (docs.wise.com, version 2026Q4).
+// Wise (balances, and draft transfers the person pays in Wise), against a local fake of api.wise.com (docs.wise.com, version 2026Q4).
 test.describe.configure({ mode: 'serial' });
 
 test.afterEach(async ({ request }) => {
@@ -84,6 +84,119 @@ test('Wise asking for strong authentication is explained in words, and the balan
     timeout: 20_000,
   });
   await expect(page.locator('.tile')).toHaveCount(4);
+});
+
+test('drafting a transfer: priced, created unpaid, explained, and Wise is never asked to fund it', async ({
+  page,
+  request,
+}) => {
+  const violations = await watchCsp(page);
+  await connectWise(page);
+  await page.getByRole('button', { name: 'Draft a Wise transfer' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Draft a Wise transfer' });
+  await expect(sheet.getByText('No money moves until you pay it yourself')).toBeVisible();
+
+  const to = sheet.getByLabel('To', { exact: true });
+  await expect(to).toBeVisible({ timeout: 20_000 });
+  await settle(page);
+  await expectNoViolations(page);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expectNoViolations(page);
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // A closed recipient is not offered, and nothing can be priced until the form is filled in.
+  await expect(to.locator('option', { hasText: 'Closed Account' })).toHaveCount(0);
+  const price = sheet.getByRole('button', { name: 'See the price' });
+  await expect(price).toBeDisabled();
+  await to.selectOption(String(700002));
+  await sheet.getByLabel(/You send/).fill('abc');
+  await expect(sheet.getByText('Enter an amount')).toBeVisible();
+  await sheet.getByLabel(/You send/).fill('5000');
+  await expect(sheet.getByText('more than this balance')).toBeVisible();
+  await sheet.getByLabel(/You send/).fill('100');
+  await sheet.getByLabel(/Reference/).fill('November rent');
+  await price.click();
+
+  // The price, before anything exists.
+  await expect(sheet.getByText('They get')).toBeVisible({ timeout: 20_000 });
+  await expect(sheet.getByText('Taras Made-Up')).toBeVisible();
+  await expect(sheet.getByText(/It is not paid, and only you can pay it/)).toBeVisible();
+  await settle(page);
+  await expectNoViolations(page);
+  await sheet.getByRole('button', { name: 'Back' }).click();
+  await expect(sheet.getByLabel(/You send/)).toHaveValue('100');
+  await price.click();
+
+  await sheet.getByRole('button', { name: 'Create the draft' }).click();
+  await expect(sheet.getByText(/in Wise, not paid. No money has moved/)).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(sheet.getByRole('link', { name: 'Open Wise' })).toHaveAttribute(
+    'href',
+    'https://wise.com/',
+  );
+  await settle(page);
+  await expectNoViolations(page);
+
+  // Wise holds it, waiting; it shows when the form comes back.
+  await sheet.getByRole('button', { name: 'Draft another' }).click();
+  await expect(sheet.getByText('Waiting for payment in Wise')).toBeVisible({ timeout: 20_000 });
+  await expect(sheet.locator('dl').getByText(/Taras Made-Up/)).toBeVisible();
+  await expectNothingPastTheEdge(page);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+
+  // What was sent: the two writes, never the call that pays.
+  const log = (await (await request.get(`${FAKE_WISE_URL}/__admin/log`)).json()) as string[];
+  const writes = new Set(log.filter((line) => !line.startsWith('GET ')));
+  expect(writes.has('POST /2026Q4/transfers')).toBe(true);
+  expect([...writes].every((line) => /\/quotes$|\/transfers$/.test(line))).toBe(true);
+  expect(log.some((line) => line.includes('payments'))).toBe(false);
+
+  // And the drawer hides who it was for.
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Live API/ }).click();
+  const drawer = page.getByRole('complementary', { name: 'Live API' });
+  await expect(drawer.getByText('Create a draft transfer').first()).toBeVisible();
+  await drawer.getByText('Create a draft transfer').first().click();
+  const text = await drawer.innerText();
+  for (const secret of [FAKE_WISE_TOKEN, 'Taras', 'November rent', '700002', '14575282']) {
+    expect(text).not.toContain(secret);
+  }
+  await page.keyboard.press('Escape');
+  expect(await violations()).toEqual([]);
+});
+
+test('a token that may not create transfers is explained, and balances stay', async ({
+  page,
+  request,
+}) => {
+  await connectWise(page);
+  await request.post(`${FAKE_WISE_URL}/__admin/readonly`);
+  await page.getByRole('button', { name: 'Draft a Wise transfer' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Draft a Wise transfer' });
+  const to = sheet.getByLabel('To', { exact: true });
+  await expect(to).toBeVisible({ timeout: 20_000 });
+  await to.selectOption(String(700002));
+  await sheet.getByLabel(/You send/).fill('10');
+  await sheet.getByRole('button', { name: 'See the price' }).click();
+  await expect(sheet.getByRole('alert')).toContainText(/does not let this token/, {
+    timeout: 20_000,
+  });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.tile')).toHaveCount(4);
+  await expect(page.locator('.sync-chip')).not.toContainText(/New token/);
+});
+
+test('the draft sheet fits a 320 px phone', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await connectWise(page);
+  await page.getByRole('button', { name: 'Draft a Wise transfer' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Draft a Wise transfer' });
+  await expect(sheet.getByLabel('To', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await settle(page);
+  await expectNothingPastTheEdge(page);
+  await expectNoViolations(page);
 });
 
 test('three banks at once: Wise, PrivatBank and a statement file in one number, each leaving on its own', async ({

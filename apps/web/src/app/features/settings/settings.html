@@ -109,6 +109,15 @@
               <ll-icon name="chevron-right" />
             </button>
           }
+          @if (connection.bank === 'wise' && connection.status === 'active') {
+            <button type="button" class="setting" (click)="draftWise()">
+              <span
+                ><b>Draft a transfer</b
+                ><small>Prepared in Wise. Nothing moves until you pay it there</small></span
+              >
+              <ll-icon name="chevron-right" />
+            </button>
+          }
           @if (connection.bank === 'wise') {
             <p class="hint" style="padding: 4px 16px 10px">
               Transaction history is not read: Wise requires strong authentication for statements

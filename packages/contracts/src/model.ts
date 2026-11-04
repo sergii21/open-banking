@@ -259,6 +259,63 @@ export interface ImportResult {
   notes: string[];
 }
 
+// ---------------------------------------------------------------------------------------------- Wise draft transfers
+
+/** A Wise balance a draft can be priced from. `group` is the same for balances of one Wise profile, which share recipients. */
+export interface WiseDraftSource {
+  accountId: string;
+  name: string;
+  currency: string;
+  balanceMinor: number;
+  group: number;
+}
+
+export interface WiseDraftRecipient {
+  id: number;
+  name: string;
+  currency: string;
+  summary: string | null;
+}
+
+/** A transfer waiting for payment in Wise. Its amount is what the recipient gets: Wise's source value can read 0 until it is paid. */
+export interface WiseWaitingDraft {
+  id: number;
+  targetMinor: number;
+  targetCurrency: string;
+  recipientName: string | null;
+  createdOn: string | null;
+}
+
+export interface WiseDraftOverview {
+  sources: WiseDraftSource[];
+  /** The balance the recipients and waiting transfers below were read for. */
+  accountId: string;
+  recipients: WiseDraftRecipient[];
+  /** There are more recipients in Wise than were read. */
+  moreRecipients: boolean;
+  waiting: WiseWaitingDraft[];
+}
+
+export interface WiseDraftQuote {
+  quoteId: string;
+  /** Sent back to create the draft: a repeat with the same key never creates a second transfer. */
+  draftKey: string;
+  sourceMinor: number;
+  sourceCurrency: string;
+  targetMinor: number;
+  targetCurrency: string;
+  feeMinor: number | null;
+  rate: string | null;
+  expiresAt: string | null;
+  /** False when the price shown is for another way of paying than a Wise balance. */
+  fromBalance: boolean;
+}
+
+export interface WiseDraftCreated {
+  /** Null when Wise said yes in an answer that could not be read: the transfer exists, look for it in Wise. */
+  transferId: number | null;
+}
+
 // ---------------------------------------------------------------------------------------------- events
 
 /** Server-sent events on `GET /api/events`. The SSE `event:` field is the `type`. */

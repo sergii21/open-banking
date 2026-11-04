@@ -6,7 +6,8 @@
     } @else {
       <h1>Your banks,<br />instantly.</h1>
       <p>
-        Real balances, spending and subscriptions in one calm place. Read-only, on this computer.
+        Real balances, spending and subscriptions in one calm place. It never moves money, and it
+        stays on this computer.
       </p>
     }
   </div>
@@ -87,7 +88,8 @@
               <span
                 ><strong>Add a new token</strong> and choose the narrowest permission the form
                 offers, read-only if it is there. Wise's own documentation shows no read-only type,
-                so this token may be able to do more than Ledger Lens uses. You can revoke it in
+                so this token may be able to do more than Ledger Lens uses. A token that cannot
+                create transfers still reads balances; only drafts need more. You can revoke it in
                 Wise at any time.</span
               >
             </li>
@@ -220,8 +222,9 @@
             Nothing is sent anywhere but this computer. The file is read and thrown away; the rows
             stay here.
           } @else if (source() === 'wise') {
-            Ledger Lens only ever sends read requests to Wise, and only for balances. The token
-            stays on this computer, encrypted.
+            Ledger Lens reads your Wise balances. It writes to Wise only when you ask it to draft a
+            transfer, and it cannot pay one: you do that in Wise. The token stays on this computer,
+            encrypted.
           } @else {
             Read-only: the token can see balances and transactions, never move money. It stays on
             this computer, encrypted.

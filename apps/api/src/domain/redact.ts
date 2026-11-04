@@ -51,10 +51,13 @@ const IDENTIFIER_KEYS = new Set([
   'autcntrcrf',
   'autmynam',
   'nameacc',
+  // Wise: which recipient a quote or a transfer goes to.
+  'targetaccount',
+  'sourceaccount',
 ]);
 
 /** Query parameters that name an account; masked like the same fields in a body. */
-const IDENTIFIER_QUERY_PARAMS = new Set(['acc']);
+const IDENTIFIER_QUERY_PARAMS = new Set(['acc', 'profile', 'profileId']);
 
 export interface RedactOptions {
   maskIdentifiers: boolean;
@@ -76,7 +79,7 @@ export function maskIpAddress(value: string): string {
   return octets.length === 4 ? `${octets.slice(0, 3).join('.')}.•••` : REDACTED;
 }
 
-/** Personal details a Wise profile answer carries (names, birth date, contact, address): hidden in every mode. */
+/** Personal details a Wise profile or recipient answer carries (names, birth date, contact, address, account): hidden in every mode. */
 const PERSONAL_KEYS = new Set([
   'firstname',
   'lastname',
@@ -95,11 +98,32 @@ const PERSONAL_KEYS = new Set([
   'contactdetails',
   'secondaryaddresses',
   'accountholder',
+  'accountholdername',
+  'givenname',
+  'familyname',
+  'middlename',
+  'patronymicname',
+  'accountsummary',
+  'longaccountsummary',
+  'displayfields',
+  'commonfieldmap',
+  'hash',
+  'reference',
+  'originator',
+  'customertransactionid',
+  'payinsessionid',
+  'quoteuuid',
+  'profileid',
+  'profile',
+  'creatorid',
+  'user',
 ]);
 
 const isProfile = (value: object): boolean => {
   const type = (value as { type?: unknown }).type;
-  return (type === 'PERSONAL' || type === 'BUSINESS') && 'id' in value;
+  return (
+    ((type === 'PERSONAL' || type === 'BUSINESS') && 'id' in value) || 'accountSummary' in value
+  );
 };
 
 export function redactJson(value: unknown, options: RedactOptions): unknown {

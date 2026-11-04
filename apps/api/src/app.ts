@@ -27,6 +27,7 @@ import { AppError } from './errors';
 import { loggerOptions, stripQuery } from './logging';
 import { ConnectionAccess } from './modules/connection/access';
 import { ConnectionService } from './modules/connection/service';
+import { WiseDraftService } from './modules/wise-drafts/service';
 import { DiagnosticsService } from './modules/diagnostics/service';
 import { EventBus } from './modules/events/event-bus';
 import { HomeService } from './modules/home/service';
@@ -177,8 +178,10 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const insights = new InsightsService(core, rates, calendar);
   const diagnostics = new DiagnosticsService(core, providers, sync, rates);
   const imports = new ImportService(core, providers, access, sync, rates, calendar);
+  const wiseDrafts = new WiseDraftService(core, access);
   const ctx: AppContext = {
     ...core,
+    wiseDrafts,
     providers,
     access,
     sync,
