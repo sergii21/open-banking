@@ -3,7 +3,7 @@ import type { ConnectionInfo, ImportResult, SessionInfo } from '@ledger-lens/con
 import { Api } from './api';
 import { timeZone } from './format';
 
-export type TokenBank = 'monobank' | 'privatbank';
+export type TokenBank = 'monobank' | 'privatbank' | 'wise';
 
 /** Who is looking and what they have connected. Loaded before the first screen, so routing knows where to start. */
 @Service()

@@ -13,6 +13,7 @@ const SOURCES: { id: Source; label: string }[] = [
   { id: 'monobank', label: 'monobank' },
   { id: 'privatbank', label: 'PrivatBank' },
   { id: 'privat24', label: 'Privat24 file' },
+  { id: 'wise', label: 'Wise' },
 ];
 
 /** 5 MB: more than years of one person's card statements, and the most the server reads. */
@@ -35,11 +36,13 @@ export class Welcome {
   protected readonly source = signal<Source>(
     ((): Source => {
       const wanted = this.nav.query().get('source');
-      return wanted === 'privatbank' || wanted === 'privat24' ? wanted : 'monobank';
+      return wanted === 'privatbank' || wanted === 'privat24' || wanted === 'wise'
+        ? wanted
+        : 'monobank';
     })(),
   );
   protected readonly bank = computed(() =>
-    this.source() === 'privatbank' ? 'PrivatBank' : 'monobank',
+    this.source() === 'privatbank' ? 'PrivatBank' : this.source() === 'wise' ? 'Wise' : 'monobank',
   );
 
   protected readonly token = signal('');

@@ -28,8 +28,12 @@
                 } @else {
                   Needs a new token
                 }
-                · last update {{ lastSync(connection) }} · {{ connection.historyMonths }} months of
-                history
+                · last update {{ lastSync(connection) }}
+                @if (connection.bank === 'wise') {
+                  · balances only
+                } @else {
+                  · {{ connection.historyMonths }} months of history
+                }
               }
             </small>
           </span>
@@ -95,6 +99,8 @@
                 ><small>
                   @if (connection.bank === 'privatbank') {
                     Create a new key in Privat24 for Business and paste it here
+                  } @else if (connection.bank === 'wise') {
+                    Create a new token in Wise (Your account, API tokens) and paste it here
                   } @else {
                     Issue a new one at api.monobank.ua and paste it here
                   }
@@ -103,24 +109,33 @@
               <ll-icon name="chevron-right" />
             </button>
           }
-          <button
-            type="button"
-            class="setting"
-            (click)="actions.loadEarlier(connection.id)"
-            [disabled]="connection.historyMonths >= 13"
-          >
-            <span
-              ><b>Load an earlier month</b
-              ><small>
-                @if (connection.bank === 'privatbank') {
-                  PrivatBank asks for one request a second, so a month takes a minute or so
-                } @else {
-                  monobank allows one read a minute, so each month takes a few minutes
-                }
-              </small></span
+          @if (connection.bank === 'wise') {
+            <p class="hint" style="padding: 4px 16px 10px">
+              Transaction history is not read: Wise requires strong authentication for statements
+              outside the US, Canada, Australia, New Zealand, Singapore and Malaysia, and Ledger
+              Lens does not implement it. Wise counts in Your money but not in spending, categories
+              or Insights.
+            </p>
+          } @else {
+            <button
+              type="button"
+              class="setting"
+              (click)="actions.loadEarlier(connection.id)"
+              [disabled]="connection.historyMonths >= 13"
             >
-            <ll-icon name="chevron-right" />
-          </button>
+              <span
+                ><b>Load an earlier month</b
+                ><small>
+                  @if (connection.bank === 'privatbank') {
+                    PrivatBank asks for one request a second, so a month takes a minute or so
+                  } @else {
+                    monobank allows one read a minute, so each month takes a few minutes
+                  }
+                </small></span
+              >
+              <ll-icon name="chevron-right" />
+            </button>
+          }
         }
         <button
           type="button"
@@ -143,6 +158,9 @@
               } @else if (connection.bank === 'privatbank') {
                 Deletes the token and everything read from PrivatBank from this computer. The key
                 itself stays valid until you delete it in Privat24 for Business.
+              } @else if (connection.bank === 'wise') {
+                Deletes the token and the balances read from Wise from this computer. The token
+                itself stays valid until you revoke it in Wise (Your account, API tokens).
               } @else {
                 Deletes the token and everything read from the bank from this computer. The token
                 itself stays valid at monobank until you issue a new one at api.monobank.ua.

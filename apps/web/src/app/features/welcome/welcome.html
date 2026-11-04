@@ -75,6 +75,37 @@
             </li>
           </ol>
         }
+        @case ('wise') {
+          <ol class="steps">
+            <li>
+              <span
+                ><strong>In Wise</strong> open Your account, then Integrations and tools, then API
+                tokens (Wise asks for 2-step login there).</span
+              >
+            </li>
+            <li>
+              <span
+                ><strong>Add a new token</strong> and choose the narrowest permission the form
+                offers, read-only if it is there. Wise's own documentation shows no read-only type,
+                so this token may be able to do more than Ledger Lens uses. You can revoke it in
+                Wise at any time.</span
+              >
+            </li>
+            <li>
+              <span><strong>Copy the token</strong> (Wise shows it once) and paste it here.</span>
+            </li>
+          </ol>
+          <p class="banner" style="margin-top: 14px">
+            <ll-icon name="info" [size]="18" />
+            <span
+              >Balances only. Ledger Lens reads your Wise balances, jars included, and counts them
+              in Your money. It does not read transactions: Wise requires strong authentication for
+              statements outside the US, Canada, Australia, New Zealand, Singapore and Malaysia, and
+              this app does not implement that. Wise is not in spending, categories or
+              Insights.</span
+            >
+          </p>
+        }
         @case ('privat24') {
           <ol class="steps">
             <li>
@@ -158,6 +189,8 @@
               @if (source() === 'privatbank') {
                 Business and ФОП accounts. Balances show up in a couple of seconds; history then
                 loads at the bank’s pace of one request a second.
+              } @else if (source() === 'wise') {
+                Balances show up in a couple of seconds. There is no history to wait for.
               } @else {
                 Balances show up in a couple of seconds. History then loads one step a minute,
                 because that is monobank's limit.
@@ -186,6 +219,9 @@
           @if (source() === 'privat24') {
             Nothing is sent anywhere but this computer. The file is read and thrown away; the rows
             stay here.
+          } @else if (source() === 'wise') {
+            Ledger Lens only ever sends read requests to Wise, and only for balances. The token
+            stays on this computer, encrypted.
           } @else {
             Read-only: the token can see balances and transactions, never move money. It stays on
             this computer, encrypted.

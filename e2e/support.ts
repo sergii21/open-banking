@@ -4,6 +4,9 @@ import { expect, type Page } from '@playwright/test';
 export const DEMO_TOKEN = 'demo-token-ledger-lens-not-a-real-bank';
 export const FAKE_PRIVAT_TOKEN = 'privat-autoclient-fake-token-not-a-real-bank';
 /** The fake PrivatBank Autoclient started by playwright.config.ts: its admin switches. */
+export const FAKE_WISE_TOKEN = 'wise-fake-personal-token-not-a-real-bank';
+/** The fake Wise started by playwright.config.ts: its admin switches. */
+export const FAKE_WISE_URL = 'http://127.0.0.1:4312';
 export const FAKE_PRIVAT_URL = 'http://127.0.0.1:4311';
 
 /** Starts recording Content-Security-Policy violations; call the returned function at the end to read them. */

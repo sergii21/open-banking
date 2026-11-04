@@ -4,4 +4,5 @@ import type { BankId } from '@ledger-lens/contracts';
 export const BANK_NAME: Record<BankId, string> = {
   monobank: 'monobank',
   privatbank: 'PrivatBank',
+  wise: 'Wise',
 };

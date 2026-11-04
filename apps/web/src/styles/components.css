@@ -388,7 +388,7 @@
   margin-bottom: 16px;
   display: grid;
   grid-auto-flow: row;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
   width: 100%;
 }
 .seg-wide button {

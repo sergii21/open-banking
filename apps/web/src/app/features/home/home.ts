@@ -166,7 +166,14 @@ export class Home {
 
   /** What sits under a tile's name: the kind of account, and the bank once there is more than one. */
   protected tileLabel(account: Account): string {
-    const kind = account.kind === 'jar' ? 'Jar' : account.last4 ? `•••• ${account.last4}` : 'Card';
+    const kind =
+      account.kind === 'jar'
+        ? 'Jar'
+        : account.last4
+          ? `•••• ${account.last4}`
+          : account.bank === 'wise'
+            ? 'Balance'
+            : 'Card';
     // The digits come first: on a narrow tile the bank's name is what gets cut, never the card.
     return this.session.manyBanks() ? `${kind} · ${BANK_NAME[account.bank]}` : kind;
   }
@@ -175,7 +182,12 @@ export class Home {
     this.ui.imported.set(null);
   }
 
+  protected readonly hasWise = computed(() =>
+    (this.home()?.accounts ?? []).some((a) => a.bank === 'wise'),
+  );
+
   protected tileNote(account: Account): string {
+    if (account.bank === 'wise') return 'Balance only · history not read';
     if (account.imported) {
       const span = `Statement ${ddmm(account.imported.from)}–${ddmm(account.imported.to)} · imported ${ddmm(dayKey(Date.parse(account.imported.at)))}`;
       return account.balanceKnown ? span : `${span} · no balance in the file`;

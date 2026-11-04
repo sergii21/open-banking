@@ -8,7 +8,7 @@ for (const scheme of ['light', 'dark'] as const) {
     test('the first-run screen, each bank’s pane', async ({ page }) => {
       await page.goto('/');
       await expectNoViolations(page);
-      for (const name of ['PrivatBank', 'Privat24 file']) {
+      for (const name of ['PrivatBank', 'Privat24 file', 'Wise']) {
         await page.getByRole('radio', { name }).click();
         await expectNoViolations(page);
       }

@@ -7,6 +7,7 @@ const PORT = 4300;
 const LIVE_PORT = 4301;
 const FAKE_PORT = 4310;
 const FAKE_PRIVAT_PORT = 4311;
+const FAKE_WISE_PORT = 4312;
 
 // Set PLAYWRIGHT_BASE_URL to run against a server you started yourself (for example `npm run app`). Otherwise Playwright
 // starts the built app on its own port, backed by an in-memory database and the demo bank, so runs are deterministic and
@@ -65,6 +66,13 @@ export default defineConfig({
           },
         },
         {
+          command: 'npx tsx apps/api/src/providers/wise/demo/server.ts',
+          url: `http://127.0.0.1:${FAKE_WISE_PORT}/health`,
+          reuseExistingServer: false,
+          timeout: 60_000,
+          env: { FAKE_WISE_PORT: String(FAKE_WISE_PORT) },
+        },
+        {
           command: 'node apps/api/dist/server.js',
           url: `${liveBaseURL}/readyz`,
           reuseExistingServer: !process.env['CI'],
@@ -76,6 +84,7 @@ export default defineConfig({
             PRIVATBANK_API_URL: `http://127.0.0.1:${FAKE_PRIVAT_PORT}`,
             PRIVATBANK_MIN_INTERVAL_MS: '1100',
             PRIVATBANK_HISTORY_MONTHS: '2',
+            WISE_API_URL: `http://127.0.0.1:${FAKE_WISE_PORT}/2026Q4`,
           }),
         },
       ],
@@ -83,7 +92,12 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: ['**/*.mobile.spec.ts', '**/monobank.spec.ts', '**/privat.spec.ts'],
+      testIgnore: [
+        '**/*.mobile.spec.ts',
+        '**/monobank.spec.ts',
+        '**/privat.spec.ts',
+        '**/wise.spec.ts',
+      ],
     },
     { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: '**/*.mobile.spec.ts' },
     {
@@ -97,6 +111,13 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: liveBaseURL },
       testMatch: '**/privat.spec.ts',
       dependencies: ['monobank'],
+    },
+    {
+      // Beside PrivatBank in one test, so after the project that shares that fake's single limit.
+      name: 'wise',
+      use: { ...devices['Desktop Chrome'], baseURL: liveBaseURL },
+      testMatch: '**/wise.spec.ts',
+      dependencies: ['privat'],
     },
   ],
 });

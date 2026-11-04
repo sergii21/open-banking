@@ -10,6 +10,7 @@ import { SyncActions } from '../../core/sync';
 import { Ticker } from '../../core/ticker';
 import { Toast } from '../../core/toast';
 import { Ui } from '../../core/ui';
+import { BANK_NAME } from '../../shared/banks';
 import { Icon } from '../../shared/icon';
 import { Sheet } from '../../shared/sheet';
 
@@ -54,7 +55,7 @@ export class Settings {
   }
 
   protected bankName(connection: ConnectionInfo): string {
-    return connection.bank === 'privatbank' ? 'PrivatBank' : 'monobank';
+    return BANK_NAME[connection.bank];
   }
 
   protected openLiveApi(): void {
