@@ -28,17 +28,19 @@ in-memory databases and nothing touches `data/`.
 
 ## What starts (playwright.config.ts)
 
-| Port  | What                                                                                                              | Used by                              |
-| ----- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| :4300 | the built app on the demo bank, in-memory database, rate limits lifted                                            | `chromium` and `mobile` projects     |
-| :4310 | `FakeMonobank` over HTTP, one read per 4 s and a 429 for a second one (`providers/monobank/demo/server.ts`)       | the app on :4301                     |
-| :4311 | the fake PrivatBank Autoclient over HTTP, one request a second (`providers/privatbank/demo/server.ts`)            | the app on :4301                     |
-| :4301 | a second copy of the app with both live providers pointed at the fakes (`MONOBANK_API_URL`, `PRIVATBANK_API_URL`) | the `monobank` and `privat` projects |
+| Port  | What                                                                                                                             | Used by                                      |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| :4300 | the built app on the demo bank, in-memory database, rate limits lifted                                                           | `chromium` and `mobile` projects             |
+| :4310 | `FakeMonobank` over HTTP, one read per 4 s and a 429 for a second one (`providers/monobank/demo/server.ts`)                      | the app on :4301                             |
+| :4311 | the fake PrivatBank Autoclient over HTTP, one request a second (`providers/privatbank/demo/server.ts`)                           | the app on :4301                             |
+| :4312 | the fake Wise over HTTP, balances only (`providers/wise/demo/server.ts`)                                                         | the app on :4301                             |
+| :4301 | a second copy of the app with the live providers pointed at the fakes (`MONOBANK_API_URL`, `PRIVATBANK_API_URL`, `WISE_API_URL`) | the `monobank`, `privat` and `wise` projects |
 
 The fakes are never reused (`reuseExistingServer: false`): another process answering 200 on :4310 or :4311 would pass for the bank. The
 monobank fake keeps **one** limit for everything that talks to it, so a leftover loader from an earlier run makes a new session's first
 statement wait out a 429. For the same reason the `privat` project **depends on `monobank`**: both use the monobank fake and must not run
-side by side. After a killed run, check for strays: `lsof -nP -iTCP:4300 -iTCP:4301 -iTCP:4310 -iTCP:4311 -sTCP:LISTEN`.
+side by side, and `wise` **depends on `privat`**, because the fakes' buckets are shared. After a killed run, check for strays:
+`lsof -nP -iTCP:4300 -iTCP:4301 -iTCP:4310 -iTCP:4311 -iTCP:4312 -sTCP:LISTEN`.
 
 ## The specs
 
@@ -50,14 +52,15 @@ side by side. After a killed run, check for strays: `lsof -nP -iTCP:4300 -iTCP:4
   the bank's pace with an honest progress chip, and "Disconnect and delete my data" returns to the first-run screen.
 - `privat.spec.ts` (serial): the PrivatBank key flow with the Live API drawer's redaction, the daily routine explained in words, two
   banks at once, and axe plus 320 px on each connect pane.
+- `wise.spec.ts`: the Wise token flow, the strong-authentication 403 explained in words, the drawer's redaction and three banks at once.
 - `import.spec.ts` (`chromium`, on :4300): uploads `fixtures/privat24/unverified-statement.{csv,xlsx}`: a bad file is refused with its
   column titles, a statement imports, the same rows again as xlsx add nothing, and removal works; 320 px.
-- `a11y.spec.ts`: axe (WCAG 2.0 A/AA, 2.1 A/AA, 2.2 AA) on the first-run screen, Home, Activity, Insights and every sheet, in light and dark.
+- `a11y.spec.ts`: axe (WCAG 2.0 A/AA, 2.1 A/AA, 2.2 AA) on the first-run screen (the Wise pane too), Home, Activity, Insights and every sheet, in light and dark.
 - `phone.mobile.spec.ts`: a Pixel 7 and a 320 px screen: every tab fits, nothing sticks out past the right edge, axe passes.
 
 `e2e/support.ts` has the helpers: `connectDemo(page)` (first-run screen → Home on the demo), `settle(page)` (waits out entry animations,
 because contrast and positions are only meaningful afterwards), `expectNoViolations(page)`, `expectNothingPastTheEdge(page)`,
-`watchCsp(page)`, `DEMO_TOKEN`, `FAKE_PRIVAT_TOKEN` (the fakes' own constants, not credentials) and `FAKE_PRIVAT_URL`.
+`watchCsp(page)`, `DEMO_TOKEN`, `FAKE_PRIVAT_TOKEN`, `FAKE_WISE_TOKEN` (the fakes' own constants, not credentials) and `FAKE_PRIVAT_URL`.
 
 ## Conventions
 
@@ -73,7 +76,7 @@ because contrast and positions are only meaningful afterwards), `expectNoViolati
 
 ## Not covered by the suite
 
-The real monobank and PrivatBank services (they need the person's own token: `npm run doctor`, `npm run doctor:privat`), a real Privat24
+The real monobank, PrivatBank and Wise services (they need the person's own token: `npm run doctor`, `npm run doctor:privat`, `npm run doctor:wise`), a real Privat24
 statement (the fixtures are built from a description, not from an export), the `./start.sh` first run, and visual quality beyond axe and
 the edge check. For those, run the app and look at it on a phone width and a desktop width in dark and light mode;
 `node scripts/screenshots.mjs` retakes `docs/screenshots` from the four servers above if you start them as `playwright.config.ts` does.

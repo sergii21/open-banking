@@ -11,7 +11,8 @@ tools: Read, Bash, Edit, Write
 # Changing or adding a provider adapter
 
 Everything outside `apps/api/src/providers/<id>/` is bank-agnostic: an adapter owns its provider's wire format, hands the core the
-normalised types from `port.ts`, and never touches the database. There are two real adapters. monobank's personal API is also the
+normalised types from `port.ts`, and never touches the database. There are three real adapters; `wise/` is the example of a bank read
+for balances only (`limits.balancesOnly`). monobank's personal API is also the
 demo: the `demo` provider is the same class with its transport pointed at an in-process fake bank, so everything the demo shows has gone
 through the code a real connection uses. PrivatBank's Autoclient API (business and ФОП accounts) is the worked example of a paged,
 rate-limited bank with a header token and no OAuth. Personal Privat cards have no API: they come from a Privat24 statement file through
@@ -32,6 +33,9 @@ apps/api/src/providers/
   privatbank/adapter.ts    PrivatBankProvider: pages of 100, its own pacing between pages, the daily-routine window, outage wording
   privatbank/dto.ts        tolerant DTOs for balances and transactions, the known-field lists
   privatbank/demo/         dataset.ts, fake.ts (in process: 1 request a second, paging, routine switch), server.ts (`npm run fake:privatbank`)
+  wise/adapter.ts          WiseProvider: Bearer token, profiles then balances, balances only, the strong-authentication 403 in words
+  wise/dto.ts              tolerant DTOs; amounts kept as the text Wise wrote (`parseKeepingAmounts`)
+  wise/demo/               fake.ts and server.ts (`npm run fake:wise`)
 apps/api/src/modules/imports/               the Privat24 statement import route and service (no token, no sync)
 apps/api/src/domain/privat24-statement.ts   finds the columns by title (Ukrainian, Russian, English) and maps rows
 apps/api/src/domain/files/{zip,xlsx,csv}.ts small readers on node:zlib, no dependency
@@ -64,14 +68,17 @@ worker paces itself from it and asks for the rest of a window when a response re
    `diagnostics.warn` takes field names and codes only, never data.
 4. **Map statuses to the states the screens know.** 401 and 403 → `TokenRejectedError` (the loader stops and the app asks for a new
    token); 429 → `AppError('rate_limited', 429, …, { retryAfterSeconds })` (the worker waits as long as the bank says, else 60 s);
-   5xx and network failures → `bank_unavailable`; anything else → `provider_error` with the status. PrivatBank also maps 400 `VE014`
+   5xx and network failures → `bank_unavailable`; anything else → `provider_error` with the status. Wise: a 403 with `X-2FA-Approval` is `bank_unavailable` with its own message (never signed; Home shows it, balances stay), 429
+   honours `Retry-After`. PrivatBank also maps 400 `VE014`
    (bad token format) to `TokenRejectedError`, a `settings` answer with `phase` ≠ `WRK` or `work_balance` `Y` to `bank_unavailable`
-   with the daily-routine message, and waits 5 s on a 429 that names no time.
+   with the daily-routine message, and waits 5 s on a 429 that names no time. Wise maps 401 and 403 to `TokenRejectedError`, except a 403
+   with `X-2FA-Approval`, which is `bank_unavailable` with its own message in words (never signed; Home shows it, balances stay); its 429
+   honours `Retry-After`.
 5. **No caching, no retries in the adapter.** The sync worker owns pacing; an adapter that retries on its own can burn the one read a
    minute. If an endpoint is cheap to share (the account list is the balance call), the worker shares it. The one exception: when a
    window needs several requests (PrivatBank's pages), the adapter paces itself between them, and the worker measures its wait from the
    end of the step. A bank with one limit for every endpoint sets `limits.sharedLimit`, which joins the gates.
-6. **The token stays out of everything.** It is sent only in the bank's token header (`X-Token` for monobank, `token` for PrivatBank),
+6. **The token stays out of everything.** It is sent only in the bank's token header (`X-Token` for monobank, `token` for PrivatBank, `Authorization` for Wise, redacted whole),
    through `ProviderHttp`; `connect` strips whitespace and quotes from what the person pasted (`providers/token.ts`). monobank's also
    refuses anything that does not look like a token before calling the bank; PrivatBank's lets the bank answer, because its real
    `VE014` is the better message. `domain/redact.ts` masks those headers, and for a live provider card
@@ -100,6 +107,7 @@ of a paged, rate-limited bank with a header token. A bank with no API at all is 
 - `apps/api/test/privatbank.test.ts` runs the PrivatBank adapter against its fake: paging, pacing, the routine window, VE014, redaction.
   `privat-domain.test.ts` and `import.test.ts` cover the statement reader and the import (refusals, re-import adds only new rows);
   `multi.test.ts` two banks in one session; `migrations.test.ts` the 002 rebuild on a v2-shaped database.
+- `apps/api/test/wise.test.ts` runs the Wise adapter against its fake, including that it only ever sends the two GETs.
 - `apps/api/test/monobank.test.ts` runs the adapter against the scripted `FakeMonobank` through a stubbed `Transport`: mapping of cards,
   credit cards and jars, holds, foreign-currency purchases, transfers with comments, skipped rows, every status → error, token cleaning,
   rates.
