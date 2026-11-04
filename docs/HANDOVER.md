@@ -4,6 +4,28 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 (`git checkout v1-full-featured`; its own hand-over is in that tag's `docs/HANDOVER.md`). Node 24 for every command:
 `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
 
+## Wise, balances only (added 2026-11-04)
+
+`providers/wise`: a personal API token as Bearer, `GET /profiles` then `GET /profiles/{id}/balances?types=STANDARD,SAVINGS` on
+`https://api.wise.com/2026Q4` (`WISE_API_URL`); one account per balance (jars for SAVINGS), amounts read as the text Wise wrote
+(`parseKeepingAmounts`, never a float), `last4` null. **No statement, payment or other write endpoint exists in the adapter**: its
+only network function is a GET, `fetchTransactions` returns nothing without touching the network, and `wise.test.ts` proves only GETs
+to the two read paths. `limits.balancesOnly` makes the sync plan no history, so the chip reads "Updated", tiles say "Balance only ·
+history not read", Home and Settings and the connect pane say why, and Wise is left out of the spending, delta and category figures
+(its balances count in Your money and as a flat line in the 30-day line). 401 and a plain 403 are a rejected token; a 403 with
+`X-2FA-Approval` is explained in words (never signed); 429 honours Retry-After; 5xx is "not responding". Redaction: the whole
+Authorization header (also changed for every provider: not even the last four characters show), `X-2FA-Approval`, the profile
+number in the path and body, and a profile's names, birth date, contact and address. Migration `003_wise` rebuilds `connections` to
+allow the new provider (tested on a database shaped like the one now in use). `npm run fake:wise` (:4312), `npm run doctor:wise`.
+
+Not verified, what the first real token will confirm: that this account type can create a token at all (Wise's docs describe personal
+tokens for business accounts and mention no read-only type; the form was never opened); what the permission options are; what
+`/profiles` returns for this account (only `id`, `type` and `currentState` are read); that `amount` is the balance to show; that
+balances work with such a token without strong authentication; the version path `2026Q4` staying available; Wise's rate limit
+(none documented). `npm run doctor:wise` reports the field names and counts. Wise is not in spending, categories or Insights.
+
+---
+
 ## PrivatBank and several banks (added 2026-11-03; read this before the v2 state below)
 
 Added on request: a second bank, PrivatBank, in the two ways that exist for it, and the ability to have several banks at once.

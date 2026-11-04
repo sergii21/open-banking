@@ -48,7 +48,7 @@ Against the live service, without any token (through the running app):
 - Foreign-currency purchases: `operationAmount` has no currency in the spec, so the app shows the amount in the account's
   currency.
 
-How: START_HERE steps 4 to 8, and `MONOBANK_TOKEN=... npm run doctor` in your own terminal.
+How: START_HERE steps 4 to 9, and `MONOBANK_TOKEN=... npm run doctor` in your own terminal.
 
 ## PrivatBank
 
@@ -106,6 +106,35 @@ appear would mean they disagree); what `FL_REAL` `i` means (the app treats it as
 prints how many); the real body of a 429 and of a well-formed key the bank does not know (the app reacts to the status and to
 `VE014`); how the bank behaves in its daily routine; the real latency. `PRIVATBANK_TOKEN=... npm run doctor:privat` in your own
 terminal checks these and prints counts only.
+
+## Wise
+
+Not a Ukrainian bank, added because it is the one place with a self-serve personal API. Read from docs.wise.com on 2026-11-04 (version
+2026Q4, `https://api.wise.com/2026Q4`):
+
+- Auth is `Authorization: Bearer <token>`. Personal API tokens are documented for **business** accounts (Your account > Connect and
+  manage apps > API tokens, 2-step login, shown once); no read-only token type is mentioned anywhere in the docs.
+- Retrieving balance statements (and funding transfers) with a personal token is "not supported except for accounts based in the US,
+  Canada, Australia, New Zealand, Singapore, and Malaysia", and the statement endpoint is SCA protected for every profile registered
+  elsewhere: a 403 with `X-2FA-Approval` headers and a signed one-time-token retry. Ledger Lens does not implement that, so it reads
+  **balances only**: `GET /profiles` and `GET /profiles/{id}/balances?types=STANDARD,SAVINGS` (savings balances are jars). The
+  adapter can only send those two GETs.
+- Statements, for the record: `GET /profiles/{id}/balance-statements/{balanceId}/statement.json`, at most 469 days, signed amounts,
+  a running balance. Not used. A 429 carries `Retry-After`; no numeric limit is documented.
+- Checked against the real service without a token on 2026-11-04: a made-up Bearer token gets `401 {"error":"invalid_token"}` on both
+  the versioned and the legacy paths, which the app shows as "Wise does not recognise this token".
+- Wise balances are valued in hryvnias at monobank's public rates like every other bank, not at Wise's own rate (they differ a little).
+- **Not verified:** whether the user's account type can create a token at all, what the token form offers, what `/profiles` returns.
+
+## No other Ukrainian bank has a self-serve API (2026-11-03)
+
+Found by the person who asked: besides monobank and PrivatBank's business Autoclient API, no Ukrainian bank gives a person a token to
+read their own accounts. The National Bank's open-banking APIs (in force since 1 August 2025) are for NBU-authorised providers and need
+a QWAC certificate, and PrivatBank's Open Banking API likewise needs a QWAC. Sources:
+https://privatbank.ua/handbook/openbanking-for-developers,
+https://www.wolftheiss.com/insights/open-banking-in-ukraine-ais-pis-providers-and-their-regulatory-status/,
+https://lb.ua/economics/2026/11/01/777336_usi_rahunki_zastosunku_scho.html. Wise's own Open Banking API is likewise for regulated
+providers (Open Banking Directory or eIDAS certificate).
 
 ## Other routes, not built
 

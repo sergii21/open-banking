@@ -104,7 +104,28 @@ fixed without seeing your data.
 - Spending must be negative in the file; if every amount has the same sign the importer refuses instead of guessing.
 - If you also connect a business account whose card you import here, those payments are counted twice: import personal cards only.
 
-## 7. Check it is real
+## 7. Add Wise (optional: balances only)
+
+Ledger Lens can read your **Wise balances** (every currency, and jars) with a personal API token and count them in Your money. It
+does **not** read Wise transactions: Wise requires strong authentication for statements outside the US, Canada, Australia, New
+Zealand, Singapore and Malaysia, and this app does not implement that. So Wise shows as tiles marked "Balance only", and it is left
+out of spending, categories and Insights (the screens say so).
+
+1. In Wise open **Your account**, then **Integrations and tools**, then **API tokens** (Wise asks for 2-step login there).
+2. **Add a new token** and choose the **narrowest permission the form offers**, read-only if it is there. Wise's documentation shows
+   no read-only token type and nobody has yet seen the form for your account, so assume the token may be able to do more than Ledger
+   Lens uses. The app only ever sends read requests (two GETs, a test proves it), and you can revoke the token in Wise any time.
+3. Copy the token (Wise shows it once) and paste it in **Add a bank**, **Wise**, **Connect Wise**.
+
+Wise's own documentation describes personal tokens for business accounts, so whether your account type can create one at all is
+unconfirmed: if Wise will not create it, there is nothing more this app can do for Wise.
+
+- "Wise does not recognise this token": copy all of it, or create a new one.
+- "Wise asks for strong customer authentication": Wise wants a step this app does not do. Nothing is lost; balances read earlier stay.
+
+Optional check first, in your own terminal: `WISE_TOKEN=... npm run doctor:wise` (prints counts only).
+
+## 8. Check it is real
 
 - Compare one balance with the bank's own app. For a monobank credit card, "own funds" is the balance minus the limit: that is an assumption
   monobank's documentation does not state, so tell us if yours differs.
@@ -112,13 +133,13 @@ fixed without seeing your data.
   numbers and tax ids cut to their last digits.
 - Open one transaction on Activity and compare it with the monobank app (category code, cashback, comment).
 
-## 8. If something looks off
+## 9. If something looks off
 
 Settings, **Copy diagnostics**, then paste the text to us. It holds no token, names, merchants, amounts or ids, only counts, field
 names and checks, so it is safe to share and enough to fix a mapping problem without seeing your data. Add one sentence about what
 you expected.
 
-## 9. Stop and remove access
+## 10. Stop and remove access
 
 - Settings has a block per bank. **Disconnect and delete my data** (press twice) deletes that bank's token and everything read from
   it from this computer and leaves the other banks as they are. **Remove the imported data** does the same for statement files.
@@ -135,4 +156,4 @@ you expected.
 - The demo and your own banks never mix: connecting a bank replaces the demo, and the demo is not offered while a bank is connected.
 - Updating a copy you already used: the first start upgrades the database in place (it either finishes completely or changes nothing).
   `cp -R data data.bak` before it is a free safety net; stop the running copy first (Ctrl+C), or `./start.sh` just opens it.
-- Not yet run against a real account: the first connection may surprise us. That is what step 8 is for.
+- Not yet run against a real account: the first connection may surprise us. That is what step 9 is for.
