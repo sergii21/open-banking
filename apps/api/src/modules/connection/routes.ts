@@ -8,7 +8,7 @@ const ConnectBody = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('demo') }),
   z.object({
     mode: z.literal('token'),
-    provider: z.enum(['monobank', 'privatbank']).default('monobank'),
+    provider: z.enum(['monobank', 'privatbank', 'wise']).default('monobank'),
     token: Token,
   }),
 ]);

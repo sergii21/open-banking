@@ -109,7 +109,7 @@ describe('redaction', () => {
         accept: 'application/json',
       }),
     ).toEqual({
-      Authorization: 'Bearer ••••cdef',
+      Authorization: 'Bearer [redacted]',
       Cookie: '[redacted]',
       'Tl-Signature': '[redacted]',
       'Idempotency-Key': 'abc',

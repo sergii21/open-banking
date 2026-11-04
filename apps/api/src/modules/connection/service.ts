@@ -11,7 +11,7 @@ import type { ConnectionAccess } from './access';
 import { BANK_NAME, primaryConnection, toConnectionInfo } from './presenter';
 
 export type ConnectInput =
-  { mode: 'demo' } | { mode: 'token'; provider: 'monobank' | 'privatbank'; token: string };
+  { mode: 'demo' } | { mode: 'token'; provider: 'monobank' | 'privatbank' | 'wise'; token: string };
 
 export class ConnectionService {
   constructor(
@@ -115,7 +115,11 @@ export class ConnectionService {
     if (record.kind !== 'api' || record.provider === 'demo') {
       throw new AppError('conflict', 409, 'This connection has no token to replace.');
     }
-    if (record.provider !== 'monobank' && record.provider !== 'privatbank') {
+    if (
+      record.provider !== 'monobank' &&
+      record.provider !== 'privatbank' &&
+      record.provider !== 'wise'
+    ) {
       throw new AppError('conflict', 409, 'This connection has no token to replace.');
     }
     return this.connect(session, { mode: 'token', provider: record.provider, token });

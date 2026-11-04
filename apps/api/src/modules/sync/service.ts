@@ -198,6 +198,7 @@ export class SyncService {
     months: number,
   ): number {
     const limits = this.limitsOf(connection);
+    if (limits.balancesOnly) return 0;
     const nowIso = this.core.clock.now().toISOString();
     const today = this.calendar.today(this.core.clock.now());
     const windows = planWindows(today, months, limits.maxWindowDays);
@@ -347,6 +348,7 @@ export class SyncService {
   ): void {
     const today = this.calendar.today(this.core.clock.now());
     const limits = this.limitsOf(connection);
+    if (limits.balancesOnly) return;
     const latest = this.core.repos.transactions.latestTs(account.id);
     const earliest = addDays(today, -(limits.maxWindowDays - 1));
     const wanted = latest ? addDays(this.calendar.dayKey(latest), -TOPUP_OVERLAP_DAYS) : earliest;

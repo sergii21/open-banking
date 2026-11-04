@@ -24,7 +24,8 @@ export class HomeService {
 
   /** Whether every card's loaded history reaches back to `day` (jars do not matter for spending). */
   private cardsCover(accounts: readonly AccountRecord[], day: string): boolean {
-    const cards = accounts.filter((a) => a.kind === 'card');
+    // A bank read for balances only (Wise) has no history to wait for.
+    const cards = accounts.filter((a) => a.kind === 'card' && a.cardType !== 'wise');
     return cards.length > 0 && cards.every((a) => a.coveredFrom !== null && a.coveredFrom <= day);
   }
 
@@ -137,7 +138,8 @@ export class HomeService {
         currency: account.currency,
         creditLimitMinor: account.creditLimitMinor,
         currentBalanceMinor: account.balanceMinor,
-        coveredFrom: account.coveredFrom,
+        // No history is read for Wise: its balance counts as it is now, all along the line.
+        coveredFrom: account.cardType === 'wise' ? '0000-01-01' : account.coveredFrom,
         isJar: account.kind === 'jar',
         // Records come newest first; the trend walks forward in time.
         rows: [...(rowsByAccount.get(account.id) ?? [])].reverse(),

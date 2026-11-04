@@ -51,7 +51,7 @@ export class InsightsService {
       to: `${previousMonth}-${String(previousLastDay).padStart(2, '0')}`,
     })[0];
 
-    const cards = accounts.filter((a) => a.kind === 'card');
+    const cards = accounts.filter((a) => a.kind === 'card' && a.cardType !== 'wise');
     const covers = (m: string): boolean =>
       cards.length > 0 && cards.every((a) => a.coveredFrom !== null && a.coveredFrom <= `${m}-01`);
     const previousKnown = covers(previousMonth);

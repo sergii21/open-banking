@@ -88,6 +88,8 @@ export interface ProviderLimits {
   historyMonths: number;
   /** The bank documents one limit for every endpoint, so the two gates start joined instead of learning it from a 429. */
   sharedLimit?: boolean;
+  /** Only balances are read: no history is planned, no statement is ever requested, and the loader reads as finished. */
+  balancesOnly?: boolean;
 }
 
 /**

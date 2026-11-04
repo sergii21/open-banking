@@ -4,6 +4,7 @@ import { fixedClock } from '../src/clock';
 import { loadConfig } from '../src/config';
 import { Db } from '../src/db/database';
 import { DEMO_TOKEN, FakeMonobank, type FakeLimits } from '../src/providers/monobank/demo/fake';
+import { FAKE_WISE_TOKEN, FakeWise, type FakeWiseOptions } from '../src/providers/wise/demo/fake';
 import {
   FAKE_PRIVAT_TOKEN,
   FakeAutoclient,
@@ -73,6 +74,14 @@ export const pauseOn =
     return Promise.resolve();
   };
 
+/** A fake Wise, to hand to the app as its transport. */
+export function wise(
+  clock: ReturnType<typeof fixedClock>,
+  options: Partial<FakeWiseOptions> = {},
+): FakeWise {
+  return new FakeWise({ clock, token: FAKE_WISE_TOKEN, ...options });
+}
+
 /** A browser as far as the API can tell: it keeps the cookies and sends the CSRF token a real page would. */
 export class Client {
   private cookies = new Map<string, string>();
@@ -136,4 +145,4 @@ export class Client {
   }
 }
 
-export { DEMO_TOKEN, FAKE_PRIVAT_TOKEN };
+export { DEMO_TOKEN, FAKE_PRIVAT_TOKEN, FAKE_WISE_TOKEN };

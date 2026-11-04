@@ -7,6 +7,7 @@ export const BANK_OF: Readonly<Record<ProviderId, BankId>> = {
   demo: 'monobank',
   privatbank: 'privatbank',
   privat24: 'privatbank',
+  wise: 'wise',
 };
 
 /** What a connection is called in lists. */
@@ -15,6 +16,7 @@ export const LABEL_OF: Readonly<Record<ProviderId, string>> = {
   demo: 'Demo data',
   privatbank: 'PrivatBank business',
   privat24: 'Privat24 statement',
+  wise: 'Wise',
 };
 
 /** What the person calls the bank inside a sentence ("PrivatBank no longer accepts your token"). */
@@ -23,6 +25,7 @@ export const BANK_NAME: Readonly<Record<ProviderId, string>> = {
   demo: 'The demo bank',
   privatbank: 'PrivatBank',
   privat24: 'Privat24',
+  wise: 'Wise',
 };
 
 export function toConnectionInfo(record: ConnectionRecord): ConnectionInfo {

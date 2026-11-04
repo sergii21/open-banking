@@ -137,6 +137,33 @@ export const migrations: Migration[] = [
       ALTER TABLE accounts ADD COLUMN balance_known INTEGER NOT NULL DEFAULT 1;
     `,
   },
+  {
+    // Wise joins the banks a connection may belong to. SQLite cannot widen a CHECK in place, so `connections` is rebuilt the way
+    // 002 did it: every row, id and sealed token carried over, row counts and foreign keys verified inside the transaction.
+    id: '003_wise',
+    rebuild: true,
+    sql: `
+      CREATE TABLE connections_new (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL CHECK (provider IN ('monobank','demo','privatbank','privat24','wise')),
+        kind TEXT NOT NULL DEFAULT 'api' CHECK (kind IN ('api','file')),
+        status TEXT NOT NULL CHECK (status IN ('active','needs_reauth','error')),
+        tokens_enc TEXT,
+        last_refreshed_at TEXT,
+        history_months INTEGER NOT NULL DEFAULT 2,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (session_id, provider)
+      );
+      INSERT INTO connections_new
+        (id, session_id, provider, kind, status, tokens_enc, last_refreshed_at, history_months, created_at, updated_at)
+        SELECT id, session_id, provider, kind, status, tokens_enc, last_refreshed_at, history_months, created_at, updated_at
+        FROM connections;
+      DROP TABLE connections;
+      ALTER TABLE connections_new RENAME TO connections;
+    `,
+  },
 ];
 
 const tableNames = (db: Db): string[] =>

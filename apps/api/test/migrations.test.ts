@@ -77,7 +77,7 @@ describe('002_many_connections', () => {
       jobs: db.all('SELECT * FROM sync_jobs'),
     };
 
-    expect(migrate(db)).toEqual(['002_many_connections']);
+    expect(migrate(db, migrations.slice(0, 2))).toEqual(['002_many_connections']);
 
     // Fresh SQL text: a statement prepared before the migration keeps the column list it was prepared with.
     expect(db.get('SELECT * FROM connections WHERE 1 = 1')).toEqual({

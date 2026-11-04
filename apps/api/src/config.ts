@@ -27,6 +27,14 @@ export interface PrivatbankConfig {
   historyMonths: number;
 }
 
+/** Wise's public API (balances only). */
+export interface WiseConfig {
+  /** https://api.wise.com/2026Q4 except in tests and when pointed at the stand-alone fake. */
+  apiUrl: string;
+  /** Gap between two requests; Wise documents no number, a 429 carries Retry-After. */
+  intervalMs: number;
+}
+
 export interface AppConfig {
   env: NodeEnv;
   isProd: boolean;
@@ -57,6 +65,7 @@ export interface AppConfig {
   /** Real provider settings, used when `live` is on. */
   monobank: MonobankConfig;
   privatbank: PrivatbankConfig;
+  wise: WiseConfig;
   /** The demo asks the real bank for its public rates before falling back to the fake's. Off in tests. */
   demoRealRates: boolean;
   /** The demo runs the same adapter against the in-process fake; pacing is off so history appears at once. */
@@ -104,6 +113,8 @@ const EnvSchema = z.object({
   MONOBANK_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(600).default(61),
   PRIVATBANK_API_URL: z.url().default('https://acp.privatbank.ua'),
   PRIVATBANK_MIN_INTERVAL_MS: z.coerce.number().int().min(0).max(60_000).default(1100),
+  WISE_API_URL: z.url().default('https://api.wise.com/2026Q4'),
+  WISE_MIN_INTERVAL_MS: z.coerce.number().int().min(0).max(60_000).default(1000),
   PRIVATBANK_HISTORY_MONTHS: z.coerce.number().int().min(1).max(13).default(2),
   /** 0 (the default) shows the whole demo history at once; a value shows what the paced real thing feels like. */
   DEMO_REAL_RATES: z.stringbool().optional(),
@@ -196,6 +207,11 @@ export function loadConfig(
     );
   }
 
+  const wiseUrl = e.WISE_API_URL.replace(/\/+$/, '');
+  if (!wiseUrl.startsWith('https://') && !isLoopbackUrl(wiseUrl)) {
+    throw new ConfigError('WISE_API_URL must be https (plain http is only allowed for localhost).');
+  }
+
   return {
     env: e.NODE_ENV,
     isProd,
@@ -228,6 +244,7 @@ export function loadConfig(
       intervalMs: e.PRIVATBANK_MIN_INTERVAL_MS,
       historyMonths: e.PRIVATBANK_HISTORY_MONTHS,
     },
+    wise: { apiUrl: wiseUrl, intervalMs: e.WISE_MIN_INTERVAL_MS },
     demoRealRates: e.DEMO_REAL_RATES ?? e.NODE_ENV !== 'test',
     demo: {
       statementIntervalMs: e.DEMO_INTERVAL_SECONDS * 1000,

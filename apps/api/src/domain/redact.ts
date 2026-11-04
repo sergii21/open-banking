@@ -76,6 +76,32 @@ export function maskIpAddress(value: string): string {
   return octets.length === 4 ? `${octets.slice(0, 3).join('.')}.•••` : REDACTED;
 }
 
+/** Personal details a Wise profile answer carries (names, birth date, contact, address): hidden in every mode. */
+const PERSONAL_KEYS = new Set([
+  'firstname',
+  'lastname',
+  'fullname',
+  'preferredname',
+  'dateofbirth',
+  'email',
+  'phonenumber',
+  'publicid',
+  'userid',
+  'addressfirstline',
+  'postcode',
+  'businessname',
+  'registrationnumber',
+  'address',
+  'contactdetails',
+  'secondaryaddresses',
+  'accountholder',
+]);
+
+const isProfile = (value: object): boolean => {
+  const type = (value as { type?: unknown }).type;
+  return (type === 'PERSONAL' || type === 'BUSINESS') && 'id' in value;
+};
+
 export function redactJson(value: unknown, options: RedactOptions): unknown {
   // A link inside a value can carry a secret in its query or fragment (a payment's hosted page does): mask it there too.
   if (typeof value === 'string') {
@@ -87,6 +113,12 @@ export function redactJson(value: unknown, options: RedactOptions): unknown {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       const normalised = normalise(key);
       if (SECRET_KEYS.has(normalised) && child !== null && child !== undefined) {
+        result[key] = REDACTED;
+      } else if (
+        (PERSONAL_KEYS.has(normalised) || (key === 'id' && isProfile(value))) &&
+        child !== null &&
+        child !== undefined
+      ) {
         result[key] = REDACTED;
       } else if (
         isUltimateParty(normalised) &&
@@ -116,9 +148,11 @@ export function redactHeaders(headers: Record<string, string>): Record<string, s
   for (const [name, value] of Object.entries(headers)) {
     const key = normalise(name);
     if (key === 'authorization') {
+      // The scheme stays readable, the credential never shows, not even its last characters (a personal API token is long-lived).
       const [scheme, credential] = value.split(' ');
-      result[name] = credential ? `${scheme} ••••${credential.slice(-4)}` : REDACTED;
+      result[name] = credential ? `${scheme} ${REDACTED}` : REDACTED;
     } else if (
+      key === 'x2faapproval' ||
       key === 'cookie' ||
       key === 'setcookie' ||
       key === 'xtoken' ||
@@ -191,6 +225,10 @@ export function redactUrl(
 ): string {
   try {
     const parsed = new URL(url);
+    // Wise addresses a profile by number in the path: hidden for a live bank.
+    if (options.maskIdentifiers) {
+      parsed.pathname = parsed.pathname.replace(/\/profiles\/\d+/, '/profiles/••••');
+    }
     for (const name of [...parsed.searchParams.keys()]) {
       if (SECRET_QUERY_PARAMS.has(name)) parsed.searchParams.set(name, REDACTED);
       else if (options.maskIdentifiers && IDENTIFIER_QUERY_PARAMS.has(name)) {

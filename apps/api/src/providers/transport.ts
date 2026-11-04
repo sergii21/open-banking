@@ -127,7 +127,15 @@ export class ProviderHttp {
     }
 
     const responseHeaders: Record<string, string> = {};
-    for (const name of ['content-type', 'retry-after', 'x-request-id', 'x-correlation-id']) {
+    for (const name of [
+      'content-type',
+      'retry-after',
+      'x-request-id',
+      'x-correlation-id',
+      'x-trace-id',
+      'x-2fa-approval',
+      'x-2fa-approval-result',
+    ]) {
       const value = response.headers.get(name);
       if (value) responseHeaders[name] = value;
     }

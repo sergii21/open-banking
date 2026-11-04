@@ -9,6 +9,7 @@ import type { BankingProvider } from './port';
 import { MonobankProvider } from './monobank/adapter';
 import { FakeMonobank } from './monobank/demo/fake';
 import { PrivatBankProvider } from './privatbank/adapter';
+import { WiseProvider } from './wise/adapter';
 import { ProviderHttp, fetchTransport, type Transport } from './transport';
 
 /** The real bank's address, for the public rates the demo shows. */
@@ -57,6 +58,7 @@ export class ProviderRegistry {
 export interface ProviderTransports {
   monobank?: Transport;
   privatbank?: Transport;
+  wise?: Transport;
   demo?: Transport;
   /** Waits between PrivatBank requests; tests move their clock instead of the wall clock. */
   pause?: (ms: number) => Promise<void>;
@@ -148,6 +150,38 @@ export function buildRegistry({
       }),
     );
     rateSources.set('privatbank', [live]);
+    // Wise: balances only, valued at monobank's public rates like every other bank.
+    const wiseDiagnostics = new DiagnosticsCollector();
+    collectors.set('wise', wiseDiagnostics);
+    providers.set(
+      'wise',
+      new WiseProvider({
+        id: 'wise',
+        mode: 'live',
+        label: 'Wise',
+        http: new ProviderHttp({
+          provider: 'wise',
+          mode: 'live',
+          transport: transports.wise ?? fetchTransport,
+          inspector,
+          clock,
+        }),
+        apiUrl: config.wise.apiUrl,
+        limits: {
+          statementIntervalMs: config.wise.intervalMs,
+          infoIntervalMs: config.wise.intervalMs,
+          maxWindowDays: 31,
+          maxItemsPerCall: Number.MAX_SAFE_INTEGER,
+          historyMonths: 1,
+          sharedLimit: true,
+          balancesOnly: true,
+        },
+        clock,
+        diagnostics: wiseDiagnostics,
+        ...(transports.pause ? { pause: transports.pause } : {}),
+      }),
+    );
+    rateSources.set('wise', [live]);
     rateSources.set('privat24', [live]);
   }
 
