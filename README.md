@@ -76,7 +76,7 @@ docs                 START_HERE.md, HANDOVER.md (state of the work), UKRAINE.md,
 | Home page weight                       | 1181 kB             | **101 kB**                    |
 | Keystroke to filtered list, 5,892 rows | n/a                 | about one frame (26 to 33 ms) |
 | Source lines (no tests)                | 19,589              | 13,141                        |
-| Tests                                  | 513                 | 178 unit + 23 Playwright      |
+| Tests                                  | 513                 | 179 unit + 23 Playwright      |
 
 Measured on the production build, with Lighthouse 13.6 on `/home` with a session cookie, three runs, median, before PrivatBank was
 added (which made the initial JS + CSS 198.9 kB raw, 58 kB over the wire, and the tests 151 unit + 16 Playwright). Details and
