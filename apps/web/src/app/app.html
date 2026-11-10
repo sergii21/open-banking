@@ -80,6 +80,9 @@
     @defer (when ui.wiseDraft()) {
       <ll-wise-draft />
     }
+    @defer (when ui.payText()) {
+      <ll-pay />
+    }
   }
 
   @if (pull() > 0) {

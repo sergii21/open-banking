@@ -1,0 +1,163 @@
+<ll-sheet title="Pay from pasted text" [open]="ui.payText()" (openChange)="ui.payText.set($event)">
+  <p class="hint" style="margin-bottom: 14px">
+    Paste an invoice or a message with payment details. Ledger Lens turns it into a payment code for
+    your bank’s app. It sends no money and keeps no copy: you confirm the payment in the bank.
+  </p>
+
+  <form style="display: grid; gap: 12px" (submit)="$event.preventDefault()">
+    <div class="field">
+      <label for="pay-text">Invoice or message</label>
+      <textarea
+        #textBox
+        id="pay-text"
+        class="input pay-text"
+        rows="4"
+        spellcheck="false"
+        placeholder="Отримувач, IBAN, код, сума, призначення"
+        [value]="text()"
+        (input)="read($any($event.target).value)"
+      ></textarea>
+      <button type="button" class="btn btn-soft btn-block" (click)="paste()">
+        Paste from the clipboard
+      </button>
+    </div>
+
+    <div class="field">
+      <label for="pay-recipient">Recipient</label>
+      <input
+        id="pay-recipient"
+        class="input"
+        type="text"
+        autocomplete="off"
+        [attr.maxlength]="limits.recipient"
+        [value]="recipient()"
+        [attr.aria-invalid]="problems().recipient ? 'true' : null"
+        [attr.aria-describedby]="problems().recipient ? 'pay-recipient-problem' : null"
+        (input)="recipient.set($any($event.target).value)"
+      />
+      @if (problems().recipient; as problem) {
+        <p class="error-text" id="pay-recipient-problem">{{ problem }}</p>
+      }
+    </div>
+    <div class="field">
+      <label for="pay-iban">Account (IBAN)</label>
+      <input
+        id="pay-iban"
+        class="input num"
+        type="text"
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck="false"
+        maxlength="40"
+        [value]="iban()"
+        [attr.aria-invalid]="problems().iban ? 'true' : null"
+        [attr.aria-describedby]="problems().iban ? 'pay-iban-problem' : null"
+        (input)="setIban($any($event.target).value)"
+      />
+      @if (problems().iban; as problem) {
+        <p class="error-text" id="pay-iban-problem">{{ problem }}</p>
+      }
+    </div>
+    <div class="pay-pair">
+      <div class="field">
+        <label for="pay-code">Recipient’s code</label>
+        <input
+          id="pay-code"
+          class="input num"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          maxlength="10"
+          [value]="code()"
+          [attr.aria-invalid]="problems().code ? 'true' : null"
+          [attr.aria-describedby]="problems().code ? 'pay-code-problem' : null"
+          (input)="code.set($any($event.target).value.trim())"
+        />
+      </div>
+      <div class="field">
+        <label for="pay-amount">Amount, ₴</label>
+        <input
+          id="pay-amount"
+          class="input num"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="Optional"
+          [value]="amount()"
+          [attr.aria-invalid]="amountProblem() ? 'true' : null"
+          [attr.aria-describedby]="amountProblem() ? 'pay-amount-problem' : null"
+          (input)="amount.set($any($event.target).value)"
+        />
+      </div>
+    </div>
+    @if (problems().code; as problem) {
+      <p class="error-text" id="pay-code-problem">{{ problem }}</p>
+    }
+    @if (amountProblem(); as problem) {
+      <p class="error-text" id="pay-amount-problem">{{ problem }}</p>
+    }
+    <div class="field">
+      <label for="pay-purpose">What it is for</label>
+      <input
+        id="pay-purpose"
+        class="input"
+        type="text"
+        autocomplete="off"
+        [attr.maxlength]="limits.purpose"
+        [value]="purpose()"
+        [attr.aria-invalid]="problems().purpose ? 'true' : null"
+        [attr.aria-describedby]="problems().purpose ? 'pay-purpose-problem' : null"
+        (input)="purpose.set($any($event.target).value)"
+      />
+      @if (problems().purpose; as problem) {
+        <p class="error-text" id="pay-purpose-problem">{{ problem }}</p>
+      }
+    </div>
+  </form>
+
+  <div aria-live="polite">
+    @if (qr(); as code) {
+      <div class="pay-code">
+        <svg
+          class="pay-qr"
+          role="img"
+          [attr.aria-label]="summary()"
+          [attr.viewBox]="'-4 -4 ' + (code.size + 8) + ' ' + (code.size + 8)"
+          shape-rendering="crispEdges"
+        >
+          <path [attr.d]="code.path" />
+          <circle
+            class="pay-qr-badge"
+            [attr.cx]="code.size / 2"
+            [attr.cy]="code.size / 2"
+            [attr.r]="code.badge"
+          />
+          <text
+            [attr.x]="code.size / 2"
+            [attr.y]="code.size / 2"
+            [attr.font-size]="code.badge * 1.5"
+            text-anchor="middle"
+            dominant-baseline="central"
+          >
+            ₴
+          </text>
+        </svg>
+        <p class="hint">
+          Scan it in your bank’s app (the scanner for payment QR codes) and check the details there
+          before you confirm. Nothing is paid until you do.
+        </p>
+        <button type="button" class="btn btn-primary btn-block" (click)="copyLink()">
+          Copy the payment link
+        </button>
+        <p class="hint">
+          The link holds the same details: opened on a phone, it goes to a bank app that reads
+          National Bank payment links.
+        </p>
+      </div>
+    } @else if (tooLong()) {
+      <p class="error-text" style="margin-top: 14px">
+        That is too much text for one payment code. Shorten what it is for or the recipient’s name.
+      </p>
+    }
+  </div>
+</ll-sheet>

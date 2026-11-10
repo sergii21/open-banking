@@ -204,6 +204,14 @@
             </a>
           }
         </div>
+        <button
+          type="button"
+          class="btn btn-soft btn-block"
+          style="margin-top: 10px"
+          (click)="ui.payText.set(true)"
+        >
+          Pay from pasted text
+        </button>
         @if (canDraftWise()) {
           <button
             type="button"

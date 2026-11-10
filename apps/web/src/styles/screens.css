@@ -882,3 +882,36 @@ html {
   color: inherit;
   opacity: 0.85;
 }
+
+/* Pay from pasted text */
+.pay-text {
+  min-height: 104px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+.pay-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+.pay-code {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  text-align: center;
+}
+/* A payment code is black on white on every surface: a reader needs it, so these two are not theme tokens. */
+.pay-qr {
+  width: min(100%, 280px);
+  margin: 0 auto;
+  border-radius: var(--r-md);
+  background: #fff;
+  fill: #000;
+}
+.pay-qr-badge {
+  fill: #fff;
+}
+.pay-qr text {
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+}
