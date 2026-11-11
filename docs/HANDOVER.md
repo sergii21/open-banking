@@ -28,7 +28,7 @@ pays nothing.
 - **Rules assumed, shown on the sheet, to confirm with an accountant (not tax advice):** 5 % without VAT or 3 % with, 1 % levy, the
   2026 limit of 10 091 049 UAH (1 167 minimum wages of 8 647) and the 1 902,34 UAH monthly contribution minimum, all as accounting sites
   state them; foreign currency at the National Bank rate on the day it reaches the account, a later sale adds nothing; the return
-  treated as cumulative from 1 January (**not confirmed from a primary source**); deadlines are not tracked.
+  is cumulative from 1 January (seen on the filed form, see below); deadlines are not tracked.
 - **Classification by the words of the purpose** (so a new bank wording can be missed; every row can be decided by hand): `між власними
 рахунками` is an own transfer; `Гр.екв.продажу` (also spelled `Гр.экв.`) is the proceeds of a currency sale; a credit from the bank
   itself is left out; the rest of the credits are income. Money out is tax (`військового збору`, `ЄП`), contribution or other.
@@ -38,6 +38,14 @@ pays nothing.
   not through the running app); that a report matches a filed return; the cumulative rule and the deadlines; an American-English
   check of the sheet's words by the person. UKRSIB has no API section in the cabinet (settings hold only profile, company and visit
   history; "Відкритий банкінг" lists consents given, none), and API access is by asking the bank.
+- **Declaration lines (added 2026-11-11):** each quarter has "Lines for the declaration" (`declarationLines` in `fop-report.ts`):
+  lines 05/06, 08, 10/11, 12, 13, 14.1, 14, 23, 24, 25 of form F0103309, cumulative, each with a Copy button giving `3402992.73`
+  style text. The line numbers and formulas were read from the person's filed declaration for three quarters of 2026 in the tax
+  cabinet, and all ten lines the report gives for that period equal the filed ones (checked in a script; no value is in the
+  repository). This also settles the cumulative rule: line 13 is line 12 of the declaration before. **The tax cabinet has no XML
+  import** (Введення звітності offers Створити, Вилучити, Редагувати, Підписати, Відправити, Вилучити підписи, Дублювати), so no
+  upload file is made; an XML per the form's XSD would only serve M.E.Doc-style software. Not covered: lines 14.2, 15 to 22, 26 to
+  29 (minimum tax liability, corrections, the contribution annex of the annual declaration).
 - CLAUDE.md and the skills do not describe this feature yet (not edited here).
 
 ## Pay from pasted text (added 2026-11-11, at the person's request)

@@ -136,6 +136,30 @@ describe('the report', () => {
     expect(r.periods[2]?.esvMinimumMinor).toBe(570_702);
   });
 
+  it('gives the declaration lines for each period, cumulative, with the period before in 13 and 24', () => {
+    const half = report().periods[1];
+    expect(half?.periodName).toBe('півріччя');
+    expect(half?.lines.map((l) => [l.code, l.amountMinor])).toEqual([
+      ['06', 54_100_000],
+      ['08', 54_100_000],
+      ['11', 2_705_000],
+      ['12', 2_705_000],
+      ['13', 1_400_000],
+      ['14.1', 1_305_000],
+      ['14', 1_305_000],
+      ['23', 541_000],
+      ['24', 280_000],
+      ['25', 261_000],
+    ]);
+    expect(report().periods[0]?.lines.find((l) => l.code === '13')?.amountMinor).toBe(0);
+    // At 3 % the income goes to line 05 and the tax to line 10.
+    expect(
+      report(3)
+        .periods[0]?.lines.map((l) => l.code)
+        .slice(0, 3),
+    ).toEqual(['05', '08', '10']);
+  });
+
   it('says how much of the annual limit the year has used', () => {
     expect(report().limit).toEqual({ limitMinor: 1_009_104_900, usedPercent: 6.6 });
     expect(

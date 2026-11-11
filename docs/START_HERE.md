@@ -177,6 +177,12 @@ and pays nothing, and it needs files: UKRSIB has no key for it.
    counted when it arrived). Foreign currency counts at the hryvnia amount the statement shows, which should be the National Bank rate of
    the day it arrived. **Count it** or **Do not count it** changes any row.
 
+5. When you file: open **Lines for the declaration** under the quarter. It lists the lines of the form (06, 08, 11, 12, 13, 14.1, 14,
+   23, 24, 25) with the amounts from 1 January and a **Copy** button each. In the tax cabinet, **Введення звітності**, either create
+   the declaration or select the one before and use **Додатково, Дублювати**, then set the period and paste the amounts. The cabinet
+   has no file upload for this. Lines 13 and 24 must equal lines 12 and 23 of the declaration you filed before. The annual declaration
+   also has a contribution annex this report does not fill.
+
 The rates, the limit and the rules are assumptions written on the sheet (**What this report assumes**): confirm them with the tax
 office or an accountant. This is not tax advice. A quarter is only as complete as your statements, and the UKRSIB accounts are not in
 **Your money**.

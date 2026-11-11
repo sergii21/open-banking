@@ -54,6 +54,17 @@ export interface FopRow {
   reason: string;
 }
 
+/** One line of the single-tax declaration (form F0103309) as it is typed into the tax cabinet. */
+export interface FopLine {
+  /** The line's code on the form: "06", "14.1". */
+  code: string;
+  label: string;
+  amountMinor: number;
+}
+
+/** What the tax cabinet calls the reporting period that ends with each quarter. */
+export const FOP_PERIOD_NAMES = ['I квартал', 'півріччя', 'три квартали', 'рік'] as const;
+
 export interface FopPeriod {
   /** 1 to 4. */
   quarter: number;
@@ -74,6 +85,10 @@ export interface FopPeriod {
   /** The minimum contribution for the quarter's three months, or null when the year's minimum is not known. */
   esvMinimumMinor: number | null;
   rows: number;
+  /** The declaration's name for the period from 1 January to the end of this quarter. */
+  periodName: string;
+  /** The lines of the declaration for that period, cumulative from 1 January, in the form's order. */
+  lines: FopLine[];
 }
 
 export interface FopAccountCoverage {

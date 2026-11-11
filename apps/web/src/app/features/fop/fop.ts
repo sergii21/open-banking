@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import {
   FOP_RATES,
+  minorToDecimalString,
   type FopImportResult,
   type FopPeriod,
   type FopRate,
@@ -11,6 +12,7 @@ import { Api, ApiError } from '../../core/api';
 import { Prefs } from '../../core/prefs';
 import { Ui } from '../../core/ui';
 import { Amount } from '../../shared/amount';
+import { Clipboard } from '../../shared/copy';
 import { Sheet } from '../../shared/sheet';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -33,6 +35,7 @@ export class Fop {
   private readonly api = inject(Api);
   private readonly prefs = inject(Prefs);
   protected readonly ui = inject(Ui);
+  private readonly clipboard = inject(Clipboard);
 
   protected readonly rates = FOP_RATES;
   protected readonly dayText = dayText;
@@ -159,6 +162,15 @@ export class Fop {
     } catch (error) {
       this.error.set(this.explain(error));
     }
+  }
+
+  /** The amount the way the form takes it: 3402992.73. */
+  protected plain(minor: number): string {
+    return minorToDecimalString(minor, 'UAH');
+  }
+
+  protected copyLine(code: string, minor: number): void {
+    void this.clipboard.copy(this.plain(minor), `Line ${code}`);
   }
 
   /** What the quarter's payment looks like next to what the statements say was paid: in words, never colour alone. */

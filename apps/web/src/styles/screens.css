@@ -968,7 +968,7 @@ html {
   gap: 4px 8px;
 }
 .fop-note {
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: var(--fs-sm);
   font-weight: 500;
 }
@@ -1031,4 +1031,50 @@ html {
 }
 .fop-clear {
   margin-top: 22px;
+}
+
+.fop-lines {
+  margin-top: 10px;
+}
+.fop-lines summary {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--accent-strong);
+}
+.fop-lines ul {
+  display: grid;
+  margin-top: 8px;
+  padding: 0;
+  list-style: none;
+}
+.fop-lines li {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.fop-line-code {
+  font-weight: 700;
+}
+.fop-line-label {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.fop-line-value {
+  grid-column: 2;
+  font-weight: 650;
+}
+.fop-lines li .btn {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+/* Kopiykas inside already-muted text keep full strength, or they fall under the contrast minimum. */
+.fop-note .amt-frac,
+.fop-note .amt-cur,
+ll-fop .hint .amt-frac,
+ll-fop .hint .amt-cur {
+  opacity: 1;
 }

@@ -2,8 +2,10 @@ import {
   FOP_ESV_MONTHLY_UAH_MINOR,
   FOP_INCOME_LIMIT_UAH,
   FOP_MILITARY_LEVY_PERCENT,
+  FOP_PERIOD_NAMES,
   type FopAccountCoverage,
   type FopKind,
+  type FopLine,
   type FopPeriod,
   type FopRate,
   type FopReport,
@@ -84,6 +86,60 @@ function judge(record: FopRecord): Pick<FopRow, 'counted' | 'chosen' | 'reason'>
     chosen: record.override !== guessed,
     reason: record.override ? 'You chose to count it' : 'You chose not to count it',
   };
+}
+
+/**
+ * The lines of form F0103309 (order No. 578 as amended by No. 57 of 31.01.2025) a group 3 payer fills, cumulative from 1 January.
+ * The line numbers and formulas were read from a filed declaration: 13 and 24 are lines 12 and 23 of the declaration before.
+ */
+export function declarationLines(
+  rate: FopRate,
+  cumulativeMinor: number,
+  tax: number,
+  previousTax: number,
+  levy: number,
+  previousLevy: number,
+): FopLine[] {
+  return [
+    {
+      code: rate === 5 ? '06' : '05',
+      label: `Income taxed at ${rate} %`,
+      amountMinor: cumulativeMinor,
+    },
+    { code: '08', label: 'Total income', amountMinor: cumulativeMinor },
+    {
+      code: rate === 5 ? '11' : '10',
+      label: `Tax at ${rate} % (line ${rate === 5 ? '06' : '05'} × ${rate} %)`,
+      amountMinor: tax,
+    },
+    { code: '12', label: 'Tax for the period (lines 9 + 10 + 11)', amountMinor: tax },
+    {
+      code: '13',
+      label: 'Tax of the period before (line 12 of the declaration before)',
+      amountMinor: previousTax,
+    },
+    {
+      code: '14.1',
+      label: 'Single tax to pay (line 12 − line 13)',
+      amountMinor: tax - previousTax,
+    },
+    { code: '14', label: 'Single tax to pay in all (14.1 + 14.2)', amountMinor: tax - previousTax },
+    {
+      code: '23',
+      label: `Military levy at ${FOP_MILITARY_LEVY_PERCENT} % (lines 5 + 6 + 7)`,
+      amountMinor: levy,
+    },
+    {
+      code: '24',
+      label: 'Levy of the period before (line 23 of the declaration before)',
+      amountMinor: previousLevy,
+    },
+    {
+      code: '25',
+      label: 'Military levy to pay (line 23 − line 24)',
+      amountMinor: levy - previousLevy,
+    },
+  ];
 }
 
 export interface FopReportOptions {
@@ -176,6 +232,15 @@ export function buildFopReport(
         .reduce((sum, j) => sum + j.record.amountMinor, 0),
       esvMinimumMinor: esvMonthly === undefined ? null : esvMonthly * 3,
       rows: mine.length,
+      periodName: FOP_PERIOD_NAMES[quarter - 1] ?? '',
+      lines: declarationLines(
+        options.singleTaxPercent,
+        cumulative,
+        tax,
+        cumulativeTax,
+        levy,
+        cumulativeLevy,
+      ),
     });
     cumulativeTax = tax;
     cumulativeLevy = levy;

@@ -20,6 +20,7 @@ async function openReport(page: Page) {
 
 test('statements become income per quarter, tax is worked out, and every row can be decided', async ({
   page,
+  context,
 }) => {
   const violations = await watchCsp(page);
   const sheet = await openReport(page);
@@ -62,6 +63,17 @@ test('statements become income per quarter, tax is worked out, and every row can
   await expect(sheet.getByText('6.6% of the 2026 income limit')).toBeVisible();
   await expect(sheet.getByText(/EUR\s+3\s500/)).toBeVisible();
 
+  // The lines of the half-year declaration, as the tax cabinet's form takes them.
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await second.getByText('Lines for the declaration: півріччя 2026').click();
+  const lines = second.locator('.fop-lines li');
+  await expect(lines).toHaveCount(10);
+  await expect(lines.nth(0)).toContainText('06');
+  await expect(lines.nth(0)).toContainText('541000.00');
+  await expect(lines.nth(4)).toContainText('14000.00');
+  await second.getByRole('button', { name: 'Copy line 14.1, півріччя' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('13050.00');
+
   // The other rate changes the tax and not the levy.
   await sheet.getByRole('radio', { name: '3%' }).click();
   await expect(first.getByText('Single tax for the quarter').locator('..')).toContainText('8 400');
@@ -100,6 +112,8 @@ test('phone, 320 px: the report fits the screen', async ({ page }) => {
   const sheet = await openReport(page);
   await sheet.locator('#fop-file').setInputFiles([UAH, EUR]);
   await expect(sheet.locator('.fop-q')).toHaveCount(4);
+  await sheet.getByText('Lines for the declaration: I квартал 2026').click();
+  await expect(sheet.locator('.fop-q').first().locator('.fop-lines li')).toHaveCount(10);
   await expectNothingPastTheEdge(page);
   await expectNoViolations(page);
 });

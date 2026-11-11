@@ -169,6 +169,31 @@
               </dd>
             </div>
           </dl>
+          <details class="fop-lines">
+            <summary>Lines for the declaration: {{ p.periodName }} {{ r.year }}</summary>
+            <p class="hint">
+              For the declaration of this period in the tax cabinet (Введення звітності, form
+              F0103309). Amounts are from 1 January, as the form asks. Lines 13 and 24 must equal
+              lines 12 and 23 of the declaration you filed before: compare them.
+            </p>
+            <ul>
+              @for (line of p.lines; track line.code) {
+                <li>
+                  <span class="fop-line-code num">{{ line.code }}</span>
+                  <span class="fop-line-label">{{ line.label }}</span>
+                  <span class="num fop-line-value">{{ plain(line.amountMinor) }}</span>
+                  <button
+                    type="button"
+                    class="btn btn-soft"
+                    [attr.aria-label]="'Copy line ' + line.code + ', ' + p.periodName"
+                    (click)="copyLine(line.code, line.amountMinor)"
+                  >
+                    Copy
+                  </button>
+                </li>
+              }
+            </ul>
+          </details>
         </section>
       }
 
@@ -272,9 +297,9 @@
             compare a receipt with the National Bank's rate to be sure of it.
           </li>
           <li>
-            The quarterly figures treat the return as cumulative from 1 January: each quarter's tax
-            is the total so far minus the earlier quarters. That is not confirmed from a primary
-            source.
+            The declaration is cumulative from 1 January: each quarter's tax is the total so far
+            minus the declaration before (lines 13 and 24 of the form say so). The line numbers were
+            read from a filed 2026 declaration; a later edition of the form may move them.
           </li>
           <li>
             "Paid" is read from the words of your payments ("за 1-й квартал 2026 року"), so a
