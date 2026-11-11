@@ -8,15 +8,16 @@ import { Fop } from './src/screens/fop';
 import { Home } from './src/screens/home';
 import { Pay } from './src/screens/pay';
 import { Settings } from './src/screens/settings';
+import { Icon, type IconName } from './src/ui/icons';
 import { useTheme } from './src/ui/theme';
 
 const TABS = [
-  { id: 'home', label: 'Money' },
-  { id: 'activity', label: 'Transactions' },
-  { id: 'pay', label: 'Pay' },
-  { id: 'fop', label: 'ФОП' },
-  { id: 'settings', label: 'Settings' },
-] as const;
+  { id: 'home', label: 'Money', icon: 'wallet' },
+  { id: 'activity', label: 'Activity', icon: 'list' },
+  { id: 'pay', label: 'Pay', icon: 'scan' },
+  { id: 'fop', label: 'ФОП', icon: 'report' },
+  { id: 'settings', label: 'Settings', icon: 'sliders' },
+] as const satisfies readonly { id: string; label: string; icon: IconName }[];
 type TabId = (typeof TABS)[number]['id'];
 
 function Shell() {
@@ -39,6 +40,8 @@ function Shell() {
         accessibilityRole="tablist"
         style={{
           flexDirection: 'row',
+          paddingTop: 6,
+          paddingHorizontal: 6,
           backgroundColor: t.surface,
           borderTopColor: t.line,
           borderTopWidth: 0.5,
@@ -50,19 +53,38 @@ function Shell() {
             <Pressable
               key={item.id}
               accessibilityRole="tab"
+              accessibilityLabel={item.label}
               accessibilityState={{ selected }}
               onPress={() => setTab(item.id)}
-              style={{ flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center' }}
+              hitSlop={4}
+              style={{
+                flex: 1,
+                minHeight: 56,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 3,
+              }}
             >
+              {/* Selected is a filled pill behind a heavier icon and a bolder label: shape and weight, not colour alone. */}
+              <View
+                style={{
+                  width: 56,
+                  height: 30,
+                  borderRadius: 15,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: selected ? t.accentSoft : 'transparent',
+                }}
+              >
+                <Icon name={item.icon} color={selected ? t.accent : t.text2} bold={selected} />
+              </View>
               <Text
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 style={{
                   color: selected ? t.accent : t.text2,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: selected ? '700' : '500',
-                  // Selected is marked by weight and an underline, not by colour alone.
-                  textDecorationLine: selected ? 'underline' : 'none',
                 }}
               >
                 {item.label}
