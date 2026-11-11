@@ -4,6 +4,28 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 (`git checkout v1-full-featured`; its own hand-over is in that tag's `docs/HANDOVER.md`). Node 24 for every command:
 `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
 
+## Pay from pasted text (added 2026-11-11, at the person's request)
+
+The person pastes an invoice or a message; the app reads the recipient, IBAN, code (8 or 10 digits), amount and purpose, shows them as
+editable fields and, once complete, draws a National Bank of Ukraine payment QR code (format 003) and offers the same thing as a link
+(`https://qr.bank.gov.ua/` + Base64URL of 17 line-separated fields). The person confirms in their own bank app. The app still moves no
+money and this adds **no API route, no storage and no network call**: the parser and the link are in `packages/contracts/src/payment.ts`,
+the QR encoder (byte mode, versions 10 to 17, level Q then M, written here because the browser ships no library) is
+`apps/web/src/app/shared/qr.ts`, the sheet is `features/pay` (lazy, 12.0 kB raw; opened from Home through `ui.payText`).
+
+Measured: initial JS + CSS 200.4 kB raw, 59.0 kB over the wire (budget 215 warn). `npm run verify` exits 0 (contracts 24, API 162,
+web 9 unit tests) and the Playwright suite passes (26 tests; `e2e/pay.spec.ts` adds 3).
+
+Verified: unit tests (IBAN check, parsing an invoice and a chat message, the 17 fields, refusals; the QR's fixed patterns, format bits and
+version choice); Playwright (the flow makes no request except the event stream, the copied link decodes back to the fields, a wrong IBAN
+digit is explained, no CSP violation, axe in light and dark, 320 px); by hand in a browser, Chromium's `BarcodeDetector` read the drawn
+code, hryvnia badge included, back to exactly the link; looked at on desktop and at 320 px, light and dark.
+
+**Not verified:** no bank app has scanned a code or opened a link from this app. The format was read from open-source implementations,
+not from the text of NBU Resolution No. 97 of 19.08.2025: the field order, `OTHR/OTHR` in field 10, the empty trailing fields and the
+badge size are taken on their word. The parser has seen only made-up invoices. `CLAUDE.md` and the skills do not describe this feature
+yet.
+
 ## Wise draft transfers (added 2026-11-04, at the person's request)
 
 The first write in v2. The person chooses a saved recipient and an amount, sees Wise's price and creates the transfer **unpaid**; they pay

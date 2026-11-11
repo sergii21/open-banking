@@ -21,6 +21,8 @@ token you issue yourself (it has no code that moves money: the one write is an u
 
 - **Home**: your money in hryvnias (every card and jar, foreign currencies at monobank's own rates), a 30-day line, this month
   against the same days last month, accounts, top categories, regular payments.
+- **Pay from pasted text**: paste an invoice or a message; the details become a National Bank of Ukraine payment QR code and link
+  that your own bank app opens, where you confirm. Made in the browser: nothing is sent, stored or paid by the app.
 - **Activity**: every transaction grouped by day, instant search (press `/`), filters, a detail sheet, category changes that
   stick, CSV export.
 - **Insights**: spending by category and place for any month, change against the month before, and regular payments found
@@ -76,7 +78,7 @@ docs                 START_HERE.md, HANDOVER.md (state of the work), UKRAINE.md,
 | Home page weight                       | 1181 kB             | **101 kB**                    |
 | Keystroke to filtered list, 5,892 rows | n/a                 | about one frame (26 to 33 ms) |
 | Source lines (no tests)                | 19,589              | 13,141                        |
-| Tests                                  | 513                 | 179 unit + 23 Playwright      |
+| Tests                                  | 513                 | 195 unit + 26 Playwright      |
 
 Measured on the production build, with Lighthouse 13.6 on `/home` with a session cookie, three runs, median, before PrivatBank was
 added (which made the initial JS + CSS 198.9 kB raw, 58 kB over the wire, and the tests 151 unit + 16 Playwright). Details and

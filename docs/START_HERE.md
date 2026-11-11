@@ -139,6 +139,20 @@ Singapore and Malaysia, and this app never sends that call anywhere.
 - Some routes need more details than this form asks for (a transfer purpose, for example). Wise then refuses and the sheet shows its
   words; make that one in Wise.
 
+### Pay from pasted text
+
+For a hryvnia payment to a Ukrainian account. **Pay from pasted text** on Home: paste an invoice or a message with payment details
+(or press **Paste from the clipboard**). The app finds the recipient, the account (IBAN), the recipient's code, the amount and what the
+payment is for, and shows them as fields you can correct. When they are complete it draws a National Bank of Ukraine payment QR code.
+
+- Scan the code with your bank app's scanner for payment QR codes, check the details there and confirm. Or press **Copy the payment
+  link** and open the link on your phone.
+- Ledger Lens sends no money and keeps no copy: the text stays in the browser, is not sent to the server and is gone when you close the
+  sheet. Nothing is paid until you confirm in your bank.
+- Leave the amount empty to type it in the bank app.
+- A wrong digit in the IBAN is caught and said in words; always compare the recipient and the amount in your bank app before you confirm.
+- Not tried with a real bank app yet: if yours does not read the code, tell us which bank, and pay from the fields by hand.
+
 ## 8. Check it is real
 
 - Compare one balance with the bank's own app. For a monobank credit card, "own funds" is the balance minus the limit: that is an assumption
