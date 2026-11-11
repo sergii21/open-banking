@@ -18,6 +18,7 @@ export default defineConfig(
   globalIgnores([
     '**/dist/**',
     '**/.angular/**',
+    '**/.expo/**',
     '**/node_modules/**',
     '**/coverage/**',
     'playwright-report/**',
@@ -29,7 +30,8 @@ export default defineConfig(
 
   // ---------------------------------------------------------------- TypeScript (all workspaces)
   {
-    files: ['**/*.ts'],
+    // The phone app (apps/mobile) is React Native: its screens are .tsx.
+    files: ['**/*.ts', 'apps/mobile/**/*.tsx'],
     extends: [eslint.configs.recommended, tseslint.configs.recommendedTypeChecked],
     ...typeAware,
     rules: {
@@ -50,7 +52,7 @@ export default defineConfig(
 
   // Value-only imports for runtime code outside Angular (DI tokens in Angular rely on value imports).
   {
-    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'e2e/**/*.ts'],
+    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'e2e/**/*.ts', 'apps/mobile/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/consistent-type-imports': [
         'error',

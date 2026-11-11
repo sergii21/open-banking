@@ -1,0 +1,10 @@
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+/ios
+/android
+*.p8
+*.p12
+*.mobileprovision
+.metro-health-check*

@@ -1,0 +1,19 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node", "jest"],
+    "paths": {
+      "@ledger-lens/contracts": ["../../packages/contracts/src/index.ts"],
+      "@api/*": ["../api/src/*"],
+      "@web-shared/*": ["../web/src/app/shared/*"]
+    }
+  },
+  "include": ["index.ts", "App.tsx", "src", "__tests__"]
+}
