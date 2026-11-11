@@ -194,3 +194,58 @@ export function nbuPaymentLink(details: PaymentDetails): NbuLink {
   const link = NBU_LINK_BASE + base64Url(utf8(nbuPaymentFields(details).join('\n')));
   return link.length > NBU_LINK_MAX_BYTES ? { ok: false, reason: 'too-long' } : { ok: true, link };
 }
+
+/** A card number and an amount found in pasted text. There is no payment link for a card: the person copies both into their bank app. */
+export interface CardTransfer {
+  /** 16 digits, no spaces, or '' when the text has none. */
+  card: string;
+  /** Hryvnias in kopiykas, or null when the text names no amount. */
+  amountMinor: number | null;
+}
+
+/** The Luhn check every payment card number passes: it catches one wrong digit and most swapped neighbours. */
+export function isValidCardNumber(card: string): boolean {
+  if (!/^\d{16}$/.test(card)) return false;
+  let sum = 0;
+  for (let i = 0; i < 16; i += 1) {
+    let digit = Number(card.charAt(i));
+    if (i % 2 === 0) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  return sum % 10 === 0;
+}
+
+/** 1234 5678 9012 3456: how a card number is read aloud and compared. */
+export const formatCardNumber = (card: string): string => card.replace(/(\d{4})(?=\d)/g, '$1 ');
+
+const CARD = /(?<!\d)\d{4}(?:[ \u00a0-]?\d{4}){3}(?!\d)/g;
+const BARE_AMOUNT =
+  /(?<![\d.,])(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,]\d{1,2})?(?![\d.,])/g;
+
+/**
+ * Reads a message like "4149 … 5678, 500 грн". A number that passes the card check wins over one that does not. The amount is
+ * the one the text labels or gives a unit, or else the only other number in it: with two candidates it stays empty.
+ */
+export function parseCardText(text: string): CardTransfer {
+  const rest = text.replace(IBAN, ' ');
+  const cards = [...rest.matchAll(CARD)].map((m) => m[0].replace(/\D/g, ''));
+  const card = cards.find(isValidCardNumber) ?? cards[0] ?? '';
+  if (card === '') return { card, amountMinor: null };
+  const money = rest.replace(CARD, ' ');
+  let typed = (AMOUNT_LABEL.exec(money) ?? AMOUNT_UNIT.exec(money))?.[1] ?? '';
+  if (typed === '') {
+    const bare = [...money.matchAll(BARE_AMOUNT)];
+    if (bare.length === 1) typed = bare[0]?.[0] ?? '';
+  }
+  const amountMinor = parseAmountToMinor(typed.replace(/\s/g, ''), 'UAH');
+  return {
+    card,
+    amountMinor:
+      amountMinor !== null && amountMinor > 0 && amountMinor <= PAYMENT_LIMITS.amountMinor
+        ? amountMinor
+        : null,
+  };
+}

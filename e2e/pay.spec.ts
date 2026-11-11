@@ -87,6 +87,38 @@ test('an invoice becomes a payment code, in the browser alone, and a mistake is 
   await expect(sheet.getByRole('img')).toHaveCount(0);
 });
 
+test('a card number and an amount become two things to copy, with no payment code', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await connectDemo(page);
+  await page.getByRole('button', { name: 'Pay from pasted text' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Pay from pasted text' });
+  await expect(sheet).toBeVisible();
+  const calls: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname !== '/api/events') calls.push(request.url());
+  });
+
+  // A scheme's documentation test number: not anybody's card.
+  await sheet.getByLabel('Invoice or message').fill('Скинь на 4111 1111 1111 1111\n1 250,50 грн');
+  await expect(sheet.getByLabel('Card number')).toHaveText('4111 1111 1111 1111');
+  await expect(sheet.getByLabel('Amount, ₴')).toHaveValue('1250,50');
+  await expect(sheet.getByLabel('Account (IBAN)')).toHaveCount(0);
+  await expect(sheet.getByRole('img')).toHaveCount(0);
+
+  await sheet.getByRole('button', { name: 'Copy the card number' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('4111111111111111');
+  await sheet.getByRole('button', { name: 'Copy the amount' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('1250,50');
+
+  // One wrong digit is said in words.
+  await sheet.getByLabel('Invoice or message').fill('4111 1111 1111 1112 500');
+  await expect(sheet.getByText('its check digit does not match')).toBeVisible();
+  expect(calls).toEqual([]);
+});
+
 for (const scheme of ['light', 'dark'] as const) {
   test(`the sheet passes axe and fits 320 px (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
@@ -101,6 +133,10 @@ for (const scheme of ['light', 'dark'] as const) {
     await expectNoViolations(page);
     await sheet.getByLabel('Invoice or message').fill(INVOICE);
     await expect(sheet.getByRole('img')).toBeVisible();
+    await expectNoViolations(page);
+    await expectNothingPastTheEdge(page);
+    await sheet.getByLabel('Invoice or message').fill('4111 1111 1111 1112 500 грн');
+    await expect(sheet.getByText('its check digit does not match')).toBeVisible();
     await expectNoViolations(page);
     await expectNothingPastTheEdge(page);
   });

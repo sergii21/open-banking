@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   NBU_LINK_BASE,
+  formatCardNumber,
+  isValidCardNumber,
   isValidUaIban,
   nbuPaymentFields,
   nbuPaymentLink,
+  parseCardText,
   parsePaymentText,
   paymentProblems,
   type PaymentDetails,
@@ -133,5 +136,46 @@ describe('the NBU payment link', () => {
       ok: false,
       reason: 'too-long',
     });
+  });
+});
+
+/** A test number from card-scheme documentation (passes the Luhn check): not anybody's card. */
+const CARD = '4111111111111111';
+
+describe('a card number and an amount from pasted text', () => {
+  it('checks a card number', () => {
+    expect(isValidCardNumber(CARD)).toBe(true);
+    expect(isValidCardNumber('4111111111111112')).toBe(false);
+    expect(isValidCardNumber('411111111111111')).toBe(false);
+    expect(formatCardNumber(CARD)).toBe('4111 1111 1111 1111');
+  });
+
+  it('reads a card and a bare amount', () => {
+    expect(parseCardText('4111 1111 1111 1111 500')).toEqual({ card: CARD, amountMinor: 50_000 });
+    expect(parseCardText('Скинь на 4111-1111-1111-1111\n1 250,50 грн')).toEqual({
+      card: CARD,
+      amountMinor: 125_050,
+    });
+    expect(parseCardText('карта 4111111111111111 сума: 300')).toEqual({
+      card: CARD,
+      amountMinor: 30_000,
+    });
+  });
+
+  it('leaves the amount empty when it cannot tell', () => {
+    expect(parseCardText('4111 1111 1111 1111 до 12.11.2026')).toEqual({
+      card: CARD,
+      amountMinor: null,
+    });
+    expect(parseCardText('4111 1111 1111 1111 200 або 300')).toEqual({
+      card: CARD,
+      amountMinor: null,
+    });
+  });
+
+  it('prefers a number that passes the check, and finds none in an account number', () => {
+    expect(parseCardText('4111 1111 1111 1112 чи 4111 1111 1111 1111').card).toBe(CARD);
+    expect(parseCardText('UA213223130000026007233566001 500 грн').card).toBe('');
+    expect(parseCardText('просто текст 500').card).toBe('');
   });
 });

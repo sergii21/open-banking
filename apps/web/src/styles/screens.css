@@ -894,6 +894,10 @@ html {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
 }
+.pay-card {
+  display: flex;
+  align-items: center;
+}
 .pay-code {
   display: grid;
   gap: 12px;

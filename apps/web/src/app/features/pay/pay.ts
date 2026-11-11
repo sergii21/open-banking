@@ -9,10 +9,13 @@ import {
   viewChild,
 } from '@angular/core';
 import {
+  formatCardNumber,
   formatMoney,
+  isValidCardNumber,
   minorToDecimalString,
   nbuPaymentLink,
   parseAmountToMinor,
+  parseCardText,
   parsePaymentText,
   paymentProblems,
   PAYMENT_LIMITS,
@@ -47,6 +50,16 @@ export class Pay {
   protected readonly code = signal('');
   protected readonly amount = signal('');
   protected readonly purpose = signal('');
+  /** A card number found in the text. There is no payment code for a card: the person copies it and the amount to their bank. */
+  private readonly card = signal('');
+  /** The text names a card and no account: the account fields would only be in the way. */
+  protected readonly cardMode = computed(() => this.card() !== '' && this.iban() === '');
+  protected readonly cardText = computed(() => formatCardNumber(this.card()));
+  protected readonly cardProblem = computed(() =>
+    isValidCardNumber(this.card())
+      ? null
+      : 'This card number has a mistake in it: its check digit does not match.',
+  );
 
   private readonly amountMinor = computed(() => parseAmountToMinor(this.amount(), 'UAH'));
   protected readonly amountProblem = computed(() => {
@@ -70,10 +83,10 @@ export class Pay {
     ),
   );
   protected readonly problems = computed(() =>
-    this.started() ? paymentProblems(this.details()) : {},
+    this.started() && !this.cardMode() ? paymentProblems(this.details()) : {},
   );
   private readonly made = computed(() =>
-    this.amountProblem() ? null : nbuPaymentLink(this.details()),
+    this.amountProblem() || this.cardMode() ? null : nbuPaymentLink(this.details()),
   );
   protected readonly link = computed(() => {
     const made = this.made();
@@ -109,6 +122,9 @@ export class Pay {
   protected read(text: string): void {
     this.text.set(text);
     const found = parsePaymentText(text);
+    const card = parseCardText(text);
+    this.card.set(card.card);
+    if (found.iban === '' && card.card !== '') found.amountMinor = card.amountMinor;
     this.recipient.set(found.recipient);
     this.iban.set(found.iban);
     this.code.set(found.code);
@@ -135,6 +151,14 @@ export class Pay {
       );
       this.textBox()?.nativeElement.focus();
     }
+  }
+
+  protected copyCard(): void {
+    void this.clipboard.copy(this.card(), 'Card number');
+  }
+
+  protected copyAmount(): void {
+    void this.clipboard.copy(this.amount().trim(), 'Amount');
   }
 
   protected copyLink(): void {

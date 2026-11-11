@@ -6,6 +6,11 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 
 ## Pay from pasted text (added 2026-11-11, at the person's request)
 
+**To a card (added 2026-11-11, at the person's request):** a 16-digit card number in the text (Luhn-checked, `parseCardText` in
+`packages/contracts/src/payment.ts`) and an amount switch the sheet to two copy buttons. No link or QR is made: a search found no
+documented monobank or Privat24 link for a transfer to a card number. Contracts tests are now 28; `e2e/pay.spec.ts` has one more test.
+Not looked at by eye yet, and not tried against a real bank app.
+
 The person pastes an invoice or a message; the app reads the recipient, IBAN, code (8 or 10 digits), amount and purpose, shows them as
 editable fields and, once complete, draws a National Bank of Ukraine payment QR code (format 003) and offers the same thing as a link
 (`https://qr.bank.gov.ua/` + Base64URL of 17 line-separated fields). The person confirms in their own bank app. The app still moves no

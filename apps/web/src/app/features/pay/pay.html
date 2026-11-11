@@ -1,7 +1,8 @@
 <ll-sheet title="Pay from pasted text" [open]="ui.payText()" (openChange)="ui.payText.set($event)">
   <p class="hint" style="margin-bottom: 14px">
-    Paste an invoice or a message with payment details. Ledger Lens turns it into a payment code for
-    your bank’s app. It sends no money and keeps no copy: you confirm the payment in the bank.
+    Paste an invoice or a message with payment details, or a card number and an amount. Ledger Lens
+    turns it into a payment code for your bank’s app, or, for a card, into two things to copy. It
+    sends no money and keeps no copy: you confirm the payment in the bank.
   </p>
 
   <form style="display: grid; gap: 12px" (submit)="$event.preventDefault()">
@@ -13,7 +14,7 @@
         class="input pay-text"
         rows="4"
         spellcheck="false"
-        placeholder="Отримувач, IBAN, код, сума, призначення"
+        placeholder="Отримувач, IBAN, код, сума, призначення. Або номер картки і сума"
         [value]="text()"
         (input)="read($any($event.target).value)"
       ></textarea>
@@ -22,97 +23,142 @@
       </button>
     </div>
 
-    <div class="field">
-      <label for="pay-recipient">Recipient</label>
-      <input
-        id="pay-recipient"
-        class="input"
-        type="text"
-        autocomplete="off"
-        [attr.maxlength]="limits.recipient"
-        [value]="recipient()"
-        [attr.aria-invalid]="problems().recipient ? 'true' : null"
-        [attr.aria-describedby]="problems().recipient ? 'pay-recipient-problem' : null"
-        (input)="recipient.set($any($event.target).value)"
-      />
-      @if (problems().recipient; as problem) {
-        <p class="error-text" id="pay-recipient-problem">{{ problem }}</p>
-      }
-    </div>
-    <div class="field">
-      <label for="pay-iban">Account (IBAN)</label>
-      <input
-        id="pay-iban"
-        class="input num"
-        type="text"
-        autocomplete="off"
-        autocapitalize="characters"
-        spellcheck="false"
-        maxlength="40"
-        [value]="iban()"
-        [attr.aria-invalid]="problems().iban ? 'true' : null"
-        [attr.aria-describedby]="problems().iban ? 'pay-iban-problem' : null"
-        (input)="setIban($any($event.target).value)"
-      />
-      @if (problems().iban; as problem) {
-        <p class="error-text" id="pay-iban-problem">{{ problem }}</p>
-      }
-    </div>
-    <div class="pay-pair">
+    @if (cardMode()) {
       <div class="field">
-        <label for="pay-code">Recipient’s code</label>
-        <input
-          id="pay-code"
-          class="input num"
-          type="text"
-          inputmode="numeric"
-          autocomplete="off"
-          maxlength="10"
-          [value]="code()"
-          [attr.aria-invalid]="problems().code ? 'true' : null"
-          [attr.aria-describedby]="problems().code ? 'pay-code-problem' : null"
-          (input)="code.set($any($event.target).value.trim())"
-        />
+        <span class="label" id="pay-card-label">Card number</span>
+        <output class="input num pay-card" aria-labelledby="pay-card-label">{{
+          cardText()
+        }}</output>
+        @if (cardProblem(); as problem) {
+          <p class="error-text">{{ problem }}</p>
+        }
       </div>
       <div class="field">
-        <label for="pay-amount">Amount, ₴</label>
+        <label for="pay-card-amount">Amount, ₴</label>
         <input
-          id="pay-amount"
+          id="pay-card-amount"
           class="input num"
           type="text"
           inputmode="decimal"
           autocomplete="off"
-          placeholder="Optional"
           [value]="amount()"
           [attr.aria-invalid]="amountProblem() ? 'true' : null"
-          [attr.aria-describedby]="amountProblem() ? 'pay-amount-problem' : null"
+          [attr.aria-describedby]="amountProblem() ? 'pay-card-amount-problem' : null"
           (input)="amount.set($any($event.target).value)"
         />
+        @if (amountProblem(); as problem) {
+          <p class="error-text" id="pay-card-amount-problem">{{ problem }}</p>
+        }
       </div>
-    </div>
-    @if (problems().code; as problem) {
-      <p class="error-text" id="pay-code-problem">{{ problem }}</p>
-    }
-    @if (amountProblem(); as problem) {
-      <p class="error-text" id="pay-amount-problem">{{ problem }}</p>
-    }
-    <div class="field">
-      <label for="pay-purpose">What it is for</label>
-      <input
-        id="pay-purpose"
-        class="input"
-        type="text"
-        autocomplete="off"
-        [attr.maxlength]="limits.purpose"
-        [value]="purpose()"
-        [attr.aria-invalid]="problems().purpose ? 'true' : null"
-        [attr.aria-describedby]="problems().purpose ? 'pay-purpose-problem' : null"
-        (input)="purpose.set($any($event.target).value)"
-      />
-      @if (problems().purpose; as problem) {
-        <p class="error-text" id="pay-purpose-problem">{{ problem }}</p>
+      <button type="button" class="btn btn-primary btn-block" (click)="copyCard()">
+        Copy the card number
+      </button>
+      <button
+        type="button"
+        class="btn btn-soft btn-block"
+        [disabled]="amount().trim() === '' || amountProblem() !== null"
+        (click)="copyAmount()"
+      >
+        Copy the amount
+      </button>
+      <p class="hint">
+        There is no payment code for a card. Open your bank’s app, choose a transfer to a card,
+        paste the number and the amount, and compare both with the message before you confirm.
+        Ledger Lens sends nothing.
+      </p>
+    } @else {
+      <div class="field">
+        <label for="pay-recipient">Recipient</label>
+        <input
+          id="pay-recipient"
+          class="input"
+          type="text"
+          autocomplete="off"
+          [attr.maxlength]="limits.recipient"
+          [value]="recipient()"
+          [attr.aria-invalid]="problems().recipient ? 'true' : null"
+          [attr.aria-describedby]="problems().recipient ? 'pay-recipient-problem' : null"
+          (input)="recipient.set($any($event.target).value)"
+        />
+        @if (problems().recipient; as problem) {
+          <p class="error-text" id="pay-recipient-problem">{{ problem }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="pay-iban">Account (IBAN)</label>
+        <input
+          id="pay-iban"
+          class="input num"
+          type="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          maxlength="40"
+          [value]="iban()"
+          [attr.aria-invalid]="problems().iban ? 'true' : null"
+          [attr.aria-describedby]="problems().iban ? 'pay-iban-problem' : null"
+          (input)="setIban($any($event.target).value)"
+        />
+        @if (problems().iban; as problem) {
+          <p class="error-text" id="pay-iban-problem">{{ problem }}</p>
+        }
+      </div>
+      <div class="pay-pair">
+        <div class="field">
+          <label for="pay-code">Recipient’s code</label>
+          <input
+            id="pay-code"
+            class="input num"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            maxlength="10"
+            [value]="code()"
+            [attr.aria-invalid]="problems().code ? 'true' : null"
+            [attr.aria-describedby]="problems().code ? 'pay-code-problem' : null"
+            (input)="code.set($any($event.target).value.trim())"
+          />
+        </div>
+        <div class="field">
+          <label for="pay-amount">Amount, ₴</label>
+          <input
+            id="pay-amount"
+            class="input num"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            placeholder="Optional"
+            [value]="amount()"
+            [attr.aria-invalid]="amountProblem() ? 'true' : null"
+            [attr.aria-describedby]="amountProblem() ? 'pay-amount-problem' : null"
+            (input)="amount.set($any($event.target).value)"
+          />
+        </div>
+      </div>
+      @if (problems().code; as problem) {
+        <p class="error-text" id="pay-code-problem">{{ problem }}</p>
       }
-    </div>
+      @if (amountProblem(); as problem) {
+        <p class="error-text" id="pay-amount-problem">{{ problem }}</p>
+      }
+      <div class="field">
+        <label for="pay-purpose">What it is for</label>
+        <input
+          id="pay-purpose"
+          class="input"
+          type="text"
+          autocomplete="off"
+          [attr.maxlength]="limits.purpose"
+          [value]="purpose()"
+          [attr.aria-invalid]="problems().purpose ? 'true' : null"
+          [attr.aria-describedby]="problems().purpose ? 'pay-purpose-problem' : null"
+          (input)="purpose.set($any($event.target).value)"
+        />
+        @if (problems().purpose; as problem) {
+          <p class="error-text" id="pay-purpose-problem">{{ problem }}</p>
+        }
+      </div>
+    }
   </form>
 
   <div aria-live="polite">
