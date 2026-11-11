@@ -151,6 +151,8 @@ payment is for, and shows them as fields you can correct. When they are complete
   sheet. Nothing is paid until you confirm in your bank.
 - Leave the amount empty to type it in the bank app.
 - A wrong digit in the IBAN is caught and said in words; always compare the recipient and the amount in your bank app before you confirm.
+- **By hand:** nothing has to be pasted. The switch under the text box picks **Account (IBAN)** or **Card number**, and every field of
+  either kind can be typed in. Pasted text only fills them in.
 - **To a card:** paste a message with a 16-digit card number and an amount ("4149 … 5678, 500 грн"). There is no payment code for a
   card and no bank offers a link for one, so the sheet shows the number (a wrong digit is said in words) and the amount with **Copy the
   card number** and **Copy the amount**: paste them into your bank app's transfer to a card and confirm there.

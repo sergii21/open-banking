@@ -103,7 +103,7 @@ test('a card number and an amount become two things to copy, with no payment cod
 
   // A scheme's documentation test number: not anybody's card.
   await sheet.getByLabel('Invoice or message').fill('Скинь на 4111 1111 1111 1111\n1 250,50 грн');
-  await expect(sheet.getByLabel('Card number')).toHaveText('4111 1111 1111 1111');
+  await expect(sheet.getByLabel('Card number', { exact: true })).toHaveValue('4111 1111 1111 1111');
   await expect(sheet.getByLabel('Amount, ₴')).toHaveValue('1250,50');
   await expect(sheet.getByLabel('Account (IBAN)')).toHaveCount(0);
   await expect(sheet.getByRole('img')).toHaveCount(0);
@@ -130,6 +130,34 @@ test('a card number and an amount become two things to copy, with no payment cod
   await expect(sheet.getByText('its check digit does not match')).toBeVisible();
   await expect(privat).toHaveCount(0);
   expect(calls).toEqual([]);
+});
+
+test('every field can be typed in by hand, for an account and for a card', async ({ page }) => {
+  await connectDemo(page);
+  await page.getByRole('button', { name: 'Pay from pasted text' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Pay from pasted text' });
+  await expect(sheet).toBeVisible();
+
+  // Nothing pasted: the switch picks the kind and the fields take typing.
+  await sheet.getByRole('radio', { name: 'Card number' }).click();
+  await sheet.getByLabel('Card number', { exact: true }).pressSequentially('4111111111111111');
+  await expect(sheet.getByLabel('Card number', { exact: true })).toHaveValue('4111 1111 1111 1111');
+  await sheet.getByLabel('Amount, ₴').pressSequentially('250');
+  await expect(sheet.getByRole('link', { name: 'Open in Privat24' })).toBeVisible();
+  await sheet.getByLabel('Card number', { exact: true }).fill('4111 1111');
+  await expect(sheet.getByText('The card number is 16 digits.')).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Copy the card number' })).toBeDisabled();
+
+  await sheet.getByRole('radio', { name: 'Account (IBAN)' }).click();
+  await sheet.getByLabel('Recipient', { exact: true }).pressSequentially('ФОП Іваненко');
+  await sheet.getByLabel('Account (IBAN)', { exact: true }).pressSequentially(IBAN);
+  await sheet.getByLabel('Recipient’s code').pressSequentially('1234567890');
+  // The amount is kept when the kind changes: it is the same payment.
+  await expect(sheet.getByLabel('Amount, ₴')).toHaveValue('250');
+  await sheet.getByLabel('Amount, ₴').fill('');
+  await sheet.getByLabel('Amount, ₴').pressSequentially('100');
+  await sheet.getByLabel('What it is for').pressSequentially('Оплата');
+  await expect(sheet.getByRole('img', { name: /ФОП Іваненко, 100,00 ₴/ })).toBeVisible();
 });
 
 for (const scheme of ['light', 'dark'] as const) {

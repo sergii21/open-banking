@@ -23,14 +23,43 @@
       </button>
     </div>
 
+    <div class="seg seg-wide" role="radiogroup" aria-label="Pay to">
+      <button
+        type="button"
+        role="radio"
+        [attr.aria-checked]="!cardMode()"
+        (click)="kind.set('account')"
+      >
+        Account (IBAN)
+      </button>
+      <button
+        type="button"
+        role="radio"
+        [attr.aria-checked]="cardMode()"
+        (click)="kind.set('card')"
+      >
+        Card number
+      </button>
+    </div>
     @if (cardMode()) {
       <div class="field">
-        <span class="label" id="pay-card-label">Card number</span>
-        <output class="input num pay-card" aria-labelledby="pay-card-label">{{
-          cardText()
-        }}</output>
+        <label for="pay-card">Card number</label>
+        <input
+          id="pay-card"
+          class="input num"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="19"
+          placeholder="1234 5678 9012 3456"
+          [value]="cardText()"
+          [attr.aria-invalid]="cardProblem() ? 'true' : null"
+          [attr.aria-describedby]="cardProblem() ? 'pay-card-problem' : null"
+          (input)="setCard($any($event.target).value)"
+        />
         @if (cardProblem(); as problem) {
-          <p class="error-text">{{ problem }}</p>
+          <p class="error-text" id="pay-card-problem">{{ problem }}</p>
         }
       </div>
       <div class="field">
@@ -41,6 +70,7 @@
           type="text"
           inputmode="decimal"
           autocomplete="off"
+          placeholder="Optional"
           [value]="amount()"
           [attr.aria-invalid]="amountProblem() ? 'true' : null"
           [attr.aria-describedby]="amountProblem() ? 'pay-card-amount-problem' : null"
@@ -50,7 +80,12 @@
           <p class="error-text" id="pay-card-amount-problem">{{ problem }}</p>
         }
       </div>
-      <button type="button" class="btn btn-primary btn-block" (click)="copyCard()">
+      <button
+        type="button"
+        class="btn btn-primary btn-block"
+        [disabled]="cardProblem() !== null"
+        (click)="copyCard()"
+      >
         Copy the card number
       </button>
       <button

@@ -53,14 +53,18 @@ export class Pay {
   protected readonly purpose = signal('');
   /** A card number found in the text. There is no payment code for a card: the person copies it and the amount to their bank. */
   private readonly card = signal('');
-  /** The text names a card and no account: the account fields would only be in the way. */
-  protected readonly cardMode = computed(() => this.card() !== '' && this.iban() === '');
+  /** Pasted text picks the kind; the switch lets the person pick it, and every field of either kind can be typed in. */
+  protected readonly kind = signal<'account' | 'card'>('account');
+  protected readonly cardMode = computed(() => this.kind() === 'card');
   protected readonly cardText = computed(() => formatCardNumber(this.card()));
-  protected readonly cardProblem = computed(() =>
-    isValidCardNumber(this.card())
+  protected readonly cardProblem = computed(() => {
+    const card = this.card();
+    if (card === '') return this.started() ? 'The card number is 16 digits.' : null;
+    if (card.length < 16) return 'The card number is 16 digits.';
+    return isValidCardNumber(card)
       ? null
-      : 'This card number has a mistake in it: its check digit does not match.',
-  );
+      : 'This card number has a mistake in it: its check digit does not match.';
+  });
 
   private readonly amountMinor = computed(() => parseAmountToMinor(this.amount(), 'UAH'));
   protected readonly amountProblem = computed(() => {
@@ -85,7 +89,7 @@ export class Pay {
   }));
   /** Nothing is called wrong before the person has given the form anything. */
   protected readonly started = computed(() =>
-    [this.recipient(), this.iban(), this.code(), this.amount(), this.purpose()].some(
+    [this.recipient(), this.iban(), this.code(), this.amount(), this.purpose(), this.card()].some(
       (value) => value.trim() !== '',
     ),
   );
@@ -131,6 +135,7 @@ export class Pay {
     const found = parsePaymentText(text);
     const card = parseCardText(text);
     this.card.set(card.card);
+    this.kind.set(found.iban === '' && card.card !== '' ? 'card' : 'account');
     if (found.iban === '' && card.card !== '') found.amountMinor = card.amountMinor;
     this.recipient.set(found.recipient);
     this.iban.set(found.iban);
@@ -141,6 +146,10 @@ export class Pay {
         : minorToDecimalString(found.amountMinor, 'UAH').replace('.', ','),
     );
     this.purpose.set(found.purpose);
+  }
+
+  protected setCard(typed: string): void {
+    this.card.set(typed.replace(/\D/g, '').slice(0, 16));
   }
 
   protected setIban(typed: string): void {
