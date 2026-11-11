@@ -162,13 +162,14 @@ payment is for, and shows them as fields you can correct. When they are complete
 
 ### ФОП report (UKRSIB business statements)
 
-For a sole proprietor (ФОП) on the single tax, group 3, with an account at UKRSIB business. **ФОП report** on Home opens a sheet that
+For a sole proprietor (ФОП) on the single tax, group 3, with an account at UKRSIB business. **ФОП report** on Home (or **ФОП report
+from UKRSIB statements** on the first screen: no bank needs to be connected) opens a sheet that
 adds your income up per quarter from your statements, with the single tax and the military levy worked out from it. It files nothing
 and pays nothing, and it needs files: UKRSIB has no key for it.
 
-1. In UKRSIB business open **Рахунки та виписки, Виписки**, choose one account and the period (the whole year to date is fine),
-   press **Сформувати**, then the **CSV** button (not PDF: it does not say money in from money out). Do it again for each account,
-   for example hryvnia and euro.
+1. In UKRSIB business open **Рахунки та виписки, Виписки** (https://business.ukrsibbank.com/extracts/statements, after logging
+   in). Click **Рахунок** and tick every account, set **Дата з** to 1 January and **Дата по** to the last day of the quarter, press
+   **Сформувати**, then the **CSV** icon (not PDF: it does not say money in from money out; not XLS). One file holds every account.
 2. In Ledger Lens press **Add UKRSIB statements (CSV)** and choose the files. Add newer ones later: rows already here are not counted
    twice, and what you decided about a row is kept. The files are read on your computer and thrown away; only their rows are kept.
 3. Look at each quarter: income, the tax and levy it comes to, and what your statements say you paid for it ("Matches", "Paid less",
@@ -182,6 +183,10 @@ and pays nothing, and it needs files: UKRSIB has no key for it.
    the declaration or select the one before and use **Додатково, Дублювати**, then set the period and paste the amounts. The cabinet
    has no file upload for this. Lines 13 and 24 must equal lines 12 and 23 of the declaration you filed before. The annual declaration
    also has a contribution annex this report does not fill.
+
+The sheet starts with **Declarations of the year**: the four periods, the last day to file and to pay each, and where each stands
+(Add statements, Statements end too early, Ready to file, Tax paid). **Mark as filed** is yours to press: a statement cannot show
+that. **How to: export, import, file** in the sheet repeats these steps with the links.
 
 The rates, the limit and the rules are assumptions written on the sheet (**What this report assumes**): confirm them with the tax
 office or an accountant. This is not tax advice. A quarter is only as complete as your statements, and the UKRSIB accounts are not in

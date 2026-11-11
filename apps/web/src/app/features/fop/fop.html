@@ -28,10 +28,9 @@
       <p class="error-text" id="fop-error" role="alert">{{ message }}</p>
     } @else {
       <p class="hint" id="fop-file-hint">
-        In UKRSIB business: Рахунки та виписки, Виписки, choose the account and the period,
-        Сформувати, then the CSV button. One file per account (hryvnia, euro). Add more later: rows
-        already here are not counted twice. Files are read on this computer and thrown away; only
-        their rows are kept.
+        One export with every account ticked is enough; several files work too. Rows already here
+        are not counted twice. Files are read on this computer and thrown away; only their rows are
+        kept.
       </p>
     }
     @if (imported().length > 0) {
@@ -43,7 +42,96 @@
     }
   </div>
 
+  <details class="fop-howto">
+    <summary>How to: export, import, file</summary>
+    <ol>
+      <li>
+        <b>Export from the bank.</b> Open
+        <a
+          href="https://business.ukrsibbank.com/extracts/statements"
+          target="_blank"
+          rel="noopener noreferrer"
+          >UKRSIB business: Виписки</a
+        >
+        (log in first). Click <b>Рахунок</b> and tick every account, set <b>Дата з</b> to 1 January
+        and <b>Дата по</b> to the last day of the quarter, press <b>Сформувати</b>, then the
+        <b>CSV</b> icon above the table (not PDF, not XLS). One file holds all the accounts you
+        ticked.
+      </li>
+      <li>
+        <b>Import here.</b> Press <b>Add UKRSIB statements (CSV)</b> and choose the file. The
+        calendar below then says <b>Ready to file</b> for a quarter the statements reach.
+      </li>
+      <li>
+        <b>Check.</b> Open the quarter, look at the rows that are counted, and open
+        <b>Lines for the declaration</b>.
+      </li>
+      <li>
+        <b>File in the tax cabinet.</b> Open
+        <a href="https://cabinet.tax.gov.ua/reporting" target="_blank" rel="noopener noreferrer"
+          >Електронний кабінет: Введення звітності</a
+        >
+        (log in with your key first). Tick the declaration before and choose
+        <b>Додатково, Дублювати</b>, or press <b>Створити</b> and pick form <b>F0103309</b>. Set the
+        period, paste the lines with their <b>Copy</b> buttons, then <b>Підписати</b> and
+        <b>Відправити</b>. The cabinet takes no file, so the lines are typed or pasted.
+      </li>
+      <li>
+        <b>Confirm and pay.</b> The receipts appear in
+        <a href="https://cabinet.tax.gov.ua/vreporting" target="_blank" rel="noopener noreferrer"
+          >Перегляд звітності</a
+        >. Pay the single tax (line 14) and the military levy (line 25) from your bank by the pay
+        day, with the quarter in the purpose ("за 3-й квартал 2026 року"): the calendar reads that
+        to mark the quarter paid. Then press <b>Mark as filed</b> here.
+      </li>
+    </ol>
+  </details>
+
   @if (report(); as r) {
+    <h3 class="fop-h" id="fop-cal-h">Declarations of {{ r.year }}</h3>
+    <ul class="fop-cal" aria-labelledby="fop-cal-h">
+      @for (c of r.calendar; track c.quarter) {
+        <li>
+          <div class="fop-cal-top">
+            <b>{{ c.periodName }}</b>
+            <span
+              class="pill"
+              [class.pill-good]="isFiled(c) || c.status === 'paid'"
+              [class.pill-accent]="!isFiled(c) && c.status === 'ready'"
+              [class.pill-warn]="
+                !isFiled(c) && (c.status === 'statements-short' || c.status === 'no-statements')
+              "
+              >{{ stand(c) }}</span
+            >
+          </div>
+          <p class="hint">
+            To {{ dayText(c.to) }} · file by {{ dayText(c.fileBy) }} · pay by
+            {{ dayText(c.payBy) }}
+          </p>
+          @if (note(c); as text) {
+            <p class="hint">{{ text }}</p>
+          }
+          @if (canMarkFiled(c)) {
+            <button
+              type="button"
+              class="btn btn-quiet"
+              [attr.aria-label]="
+                (isFiled(c) ? 'Not filed yet' : 'Mark as filed') + ': ' + c.periodName
+              "
+              (click)="setFiled(c, !isFiled(c))"
+            >
+              {{ isFiled(c) ? 'Not filed yet' : 'Mark as filed' }}
+            </button>
+          }
+        </li>
+      }
+    </ul>
+    <p class="hint">
+      File within 40 days after the period ends and pay within 10 days after that, as sources read
+      for group 3; a weekend or holiday moves the day. "Tax paid" is read from your statements;
+      "Filed" is what you mark.
+    </p>
+
     @if (r.hasData) {
       <div class="fop-controls">
         <div class="field">

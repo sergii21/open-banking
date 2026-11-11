@@ -46,6 +46,18 @@ pays nothing.
   import** (Введення звітності offers Створити, Вилучити, Редагувати, Підписати, Відправити, Вилучити підписи, Дублювати), so no
   upload file is made; an XML per the form's XSD would only serve M.E.Doc-style software. Not covered: lines 14.2, 15 to 22, 26 to
   29 (minimum tax liability, corrections, the contribution annex of the annual declaration).
+- **Calendar, how-to and one-file import (added 2026-11-11):** the sheet opens from the first screen too (**ФОП report from UKRSIB
+  statements**; no bank connection is needed) and shows **Declarations of the year**: four periods with the last day to file (period
+  end + 40 days) and to pay (+10 more), and a status worked out in `buildFopReport` (`calendar`): Not started, Quarter in progress,
+  Add statements, Statements end too early, Ready to file, Tax paid (a single-tax payment naming that quarter is in the statements).
+  "Filed" is the person's own mark, kept in the browser (`ll.fopFiled`), because no statement shows it. Weekends and holidays moving a
+  deadline are not worked out. **How to: export, import, file** gives the steps with links to
+  `business.ukrsibbank.com/extracts/statements`, `cabinet.tax.gov.ua/reporting` and `/vreporting`.
+- **Transit account (found by importing one all-accounts export, 2026-11-11):** such an export includes the bank's transit account
+  (розподільчий, balance account 2603), where each foreign receipt lands before the current account, so the euro income was counted
+  twice. Rows of an account whose number starts 2603 are now kind `transit` and never counted by default. With the fix the person's
+  real all-accounts CSV (159 rows) gives exactly the declared nine-month income. Fixture: `fixtures/ukrsib/made-up-all-accounts.csv`.
+  The 2603 rule is from this one bank's numbering; another bank's transit account may be numbered differently.
 - CLAUDE.md and the skills do not describe this feature yet (not edited here).
 
 ## Pay from pasted text (added 2026-11-11, at the person's request)

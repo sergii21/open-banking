@@ -26,6 +26,8 @@ export const UKRSIB_TITLES = [
 export const OWN_CODE = '3000000001';
 export const UAH_ACCOUNT = 'UA113510050000026000000000000';
 export const EUR_ACCOUNT = 'UA223510050000026000000000001';
+/** The bank's transit account for foreign currency: balance account 2603. */
+export const TRANSIT_ACCOUNT = 'UA443510050000026030000000003';
 const OWN_NAME = 'Тестовий Іван Петрович';
 const CLIENT = 'ТОВ "Ромашка"';
 const BANK = 'АТ "УКРСИББАНК"';
@@ -140,6 +142,30 @@ export const EUR_LINES: UkrsibLine[] = [
   },
   exportRevenue('08.07.2026 12:00', '500.00', '20500.00'),
 ];
+
+/** The euro receipts as they first land on the transit account, and their move on to the current account. */
+export const TRANSIT_LINES: UkrsibLine[] = EUR_LINES.filter((l) => l.credit !== undefined).flatMap(
+  (l): UkrsibLine[] => [
+    {
+      account: TRANSIT_ACCOUNT,
+      currency: 'EUR',
+      when: l.when.replace('12:00', '09:00'),
+      credit: l.credit ?? '',
+      coverage: l.coverage ?? '',
+      purpose: 'INVOICE NO. 1 FOR SERVICES',
+      counterparty: 'SOME CLIENT LTD',
+    },
+    {
+      account: TRANSIT_ACCOUNT,
+      currency: 'EUR',
+      when: l.when.replace('12:00', '11:00'),
+      debit: l.credit ?? '',
+      coverage: l.coverage ?? '',
+      purpose: 'Перерахування коштів з розподільчого рахунку',
+      counterparty: OWN_NAME,
+    },
+  ],
+);
 
 const quote = (cell: string): string =>
   /[;"\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;

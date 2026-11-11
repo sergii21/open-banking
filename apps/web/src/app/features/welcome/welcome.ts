@@ -101,6 +101,11 @@ export class Welcome {
     }
   }
 
+  /** The ФОП report needs no bank connection: it reads statement files. */
+  protected openFop(): void {
+    this.ui.fop.set(true);
+  }
+
   protected async demo(): Promise<void> {
     if (this.busy()) return;
     this.busy.set('demo');

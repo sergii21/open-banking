@@ -6,6 +6,7 @@ import { expectNoViolations, expectNothingPastTheEdge, settle, watchCsp } from '
 const PRIVAT24 = 'fixtures/privat24/unverified-statement.csv';
 const UAH = 'fixtures/ukrsib/made-up-uah.csv';
 const EUR = 'fixtures/ukrsib/made-up-eur.csv';
+const ALL = 'fixtures/ukrsib/made-up-all-accounts.csv';
 
 async function openReport(page: Page) {
   await page.goto('/');
@@ -25,6 +26,23 @@ test('statements become income per quarter, tax is worked out, and every row can
   const violations = await watchCsp(page);
   const sheet = await openReport(page);
   await expect(sheet.getByText('Nothing here yet')).toBeVisible();
+
+  // Before anything is loaded the calendar already shows the year's four declarations and asks for statements.
+  const calendar = sheet.locator('.fop-cal li');
+  await expect(calendar).toHaveCount(4);
+  await expect(calendar.nth(0)).toContainText('I квартал');
+  await expect(calendar.nth(0)).toContainText('Add statements');
+  await expect(calendar.nth(2)).toContainText('file by 09.11.2026 · pay by 19.11.2026');
+
+  // The way through, with the two places it happens in.
+  await sheet.getByText('How to: export, import, file').click();
+  await expect(sheet.getByRole('link', { name: 'UKRSIB business: Виписки' })).toHaveAttribute(
+    'href',
+    'https://business.ukrsibbank.com/extracts/statements',
+  );
+  await expect(
+    sheet.getByRole('link', { name: 'Електронний кабінет: Введення звітності' }),
+  ).toHaveAttribute('href', 'https://cabinet.tax.gov.ua/reporting');
 
   // A file that is not a statement is refused with its column titles and none of its values.
   await sheet.locator('#fop-file').setInputFiles({
@@ -62,6 +80,20 @@ test('statements become income per quarter, tax is worked out, and every row can
   await expect(sheet.locator('.fop-year')).toContainText('661 500');
   await expect(sheet.getByText('6.6% of the 2026 income limit')).toBeVisible();
   await expect(sheet.getByText(/EUR\s+3\s500/)).toBeVisible();
+
+  // The calendar: two quarters paid (the statements hold the payments), the third short of statements, the fourth running.
+  await expect(calendar.nth(0)).toContainText('Tax paid');
+  await expect(calendar.nth(1)).toContainText('Tax paid');
+  await expect(calendar.nth(2)).toContainText('Statements end too early');
+  await expect(calendar.nth(2)).toContainText('The latest row is 03.08.2026');
+  await expect(calendar.nth(3)).toContainText('Quarter in progress');
+  await sheet.getByRole('button', { name: 'Mark as filed: півріччя' }).click();
+  await expect(calendar.nth(1)).toContainText('Filed, tax paid');
+  await page.reload();
+  await page.getByRole('button', { name: 'ФОП report' }).click();
+  await expect(calendar.nth(1)).toContainText('Filed, tax paid');
+  await sheet.getByRole('button', { name: 'Not filed yet: півріччя' }).click();
+  await expect(calendar.nth(1)).toContainText('Tax paid');
 
   // The lines of the half-year declaration, as the tax cabinet's form takes them.
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -115,5 +147,20 @@ test('phone, 320 px: the report fits the screen', async ({ page }) => {
   await sheet.getByText('Lines for the declaration: I квартал 2026').click();
   await expect(sheet.locator('.fop-q').first().locator('.fop-lines li')).toHaveCount(10);
   await expectNothingPastTheEdge(page);
+  await expectNoViolations(page);
+});
+
+test('without a bank: the report opens from the first screen, and one file with every account is not counted twice', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'ФОП report from UKRSIB statements' }).click();
+  const sheet = page.getByRole('dialog', { name: 'ФОП report' });
+  await sheet.locator('#fop-file').setInputFiles(ALL);
+  await expect(sheet.getByRole('status').first()).toContainText('Read 22 rows (22 new');
+  // The euro receipts pass through the bank's transit account first: the year is still 661 500.
+  await expect(sheet.locator('.fop-year')).toContainText('661 500');
+  await expect(sheet.getByText('On the transit account').first()).toBeVisible();
+  await settle(page);
   await expectNoViolations(page);
 });

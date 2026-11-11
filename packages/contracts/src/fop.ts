@@ -9,6 +9,7 @@ export const FOP_KINDS = [
   'income', // money received from a client: counted
   'own-transfer', // between the person's own accounts: not income
   'currency-sale', // the hryvnias a sale of currency brought: the currency was counted when it arrived
+  'transit', // on the bank's transit (розподільчий) account: the same money is counted when it reaches the current account
   'bank', // money from the bank itself (a return, interest): not counted unless the person says so
   'tax-single', // single tax paid
   'tax-levy', // military levy paid
@@ -91,6 +92,30 @@ export interface FopPeriod {
   lines: FopLine[];
 }
 
+/**
+ * Where one declaration of the year stands, as far as the statements can tell. `paid` means a single-tax payment for that quarter
+ * is in the statements; whether the declaration was filed is not something a statement shows.
+ */
+export type FopCalendarStatus =
+  | 'upcoming' // the quarter has not begun
+  | 'in-progress' // the quarter has not ended
+  | 'no-statements' // ended, and nothing is loaded for the year
+  | 'statements-short' // ended, but the latest row loaded is before its last day
+  | 'ready' // ended and the statements reach its last day
+  | 'paid';
+
+export interface FopCalendarEntry {
+  quarter: number;
+  periodName: string;
+  /** The last day of the period. */
+  to: string;
+  /** Last day to file: 40 calendar days after the period ends. A weekend or holiday moves it; that is not worked out here. */
+  fileBy: string;
+  /** Last day to pay: 10 calendar days after the last day to file. */
+  payBy: string;
+  status: FopCalendarStatus;
+}
+
 export interface FopAccountCoverage {
   account: string;
   currency: string;
@@ -106,6 +131,12 @@ export interface FopReport {
   singleTaxPercent: FopRate;
   militaryLevyPercent: number;
   periods: FopPeriod[];
+  /** The year's four declarations with their deadlines and where each stands. */
+  calendar: FopCalendarEntry[];
+  /** The Kyiv calendar day the report was made on. */
+  today: string;
+  /** The latest day any loaded row has, or null with nothing loaded. */
+  statementsTo: string | null;
   yearIncomeMinor: number;
   yearSingleTaxMinor: number;
   yearLevyMinor: number;

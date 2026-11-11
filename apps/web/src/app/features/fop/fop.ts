@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal, untracked } from '@angular
 import {
   FOP_RATES,
   minorToDecimalString,
+  type FopCalendarEntry,
   type FopImportResult,
   type FopPeriod,
   type FopRate,
@@ -162,6 +163,56 @@ export class Fop {
     } catch (error) {
       this.error.set(this.explain(error));
     }
+  }
+
+  protected isFiled(entry: FopCalendarEntry): boolean {
+    return this.prefs.fopFiled().includes(`${this.report()?.year ?? ''}-${entry.quarter}`);
+  }
+
+  protected setFiled(entry: FopCalendarEntry, filed: boolean): void {
+    this.prefs.setFopFiled(`${this.report()?.year ?? ''}-${entry.quarter}`, filed);
+  }
+
+  protected canMarkFiled(entry: FopCalendarEntry): boolean {
+    return entry.status !== 'upcoming' && entry.status !== 'in-progress';
+  }
+
+  /** Where a declaration stands, in words: the pill never relies on its colour. */
+  protected stand(entry: FopCalendarEntry): string {
+    if (this.canMarkFiled(entry) && this.isFiled(entry)) {
+      return entry.status === 'paid' ? 'Filed, tax paid' : 'Filed';
+    }
+    switch (entry.status) {
+      case 'upcoming':
+        return 'Not started';
+      case 'in-progress':
+        return 'Quarter in progress';
+      case 'no-statements':
+        return 'Add statements';
+      case 'statements-short':
+        return 'Statements end too early';
+      case 'ready':
+        return 'Ready to file';
+      case 'paid':
+        return 'Tax paid';
+    }
+  }
+
+  protected note(entry: FopCalendarEntry): string {
+    const report = this.report();
+    if (!report) return '';
+    if (entry.status === 'statements-short' && report.statementsTo) {
+      return `The latest row is ${dayText(report.statementsTo)}: export statements up to ${dayText(entry.to)}.`;
+    }
+    if (
+      this.canMarkFiled(entry) &&
+      !this.isFiled(entry) &&
+      entry.status !== 'paid' &&
+      report.today > entry.fileBy
+    ) {
+      return 'The day to file has passed. If you filed it, mark it.';
+    }
+    return '';
   }
 
   /** The amount the way the form takes it: 3402992.73. */

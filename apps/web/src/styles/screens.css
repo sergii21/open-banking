@@ -1078,3 +1078,51 @@ ll-fop .hint .amt-frac,
 ll-fop .hint .amt-cur {
   opacity: 1;
 }
+
+.fop-howto {
+  margin-top: 14px;
+}
+.fop-howto summary {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--accent-strong);
+}
+.fop-howto ol {
+  display: grid;
+  list-style: decimal;
+  gap: 10px;
+  margin-top: 10px;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.fop-howto a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.fop-cal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+.fop-cal li {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.fop-cal-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.fop-cal .btn {
+  justify-self: start;
+}

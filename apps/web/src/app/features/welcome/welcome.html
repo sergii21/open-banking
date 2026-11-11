@@ -246,6 +246,11 @@
     </p>
   }
 
+  @if (session.live() && !adding()) {
+    <button class="btn btn-soft btn-block enter" style="--i: 3" type="button" (click)="openFop()">
+      ФОП report from UKRSIB statements
+    </button>
+  }
   @if (!adding()) {
     <button
       class="btn btn-quiet btn-block enter"

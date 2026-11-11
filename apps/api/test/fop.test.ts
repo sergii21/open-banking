@@ -5,7 +5,14 @@ import { readCsv } from '../src/domain/files/csv';
 import { buildFopReport, percentOf, type FopRecord } from '../src/domain/fop-report';
 import { parseUkrsibStatement } from '../src/domain/ukrsib-statement';
 import { Client, calendar, createTestApp, type TestApp } from './helpers';
-import { EUR_LINES, UAH_LINES, UKRSIB_TITLES, ukrsibCsv, ukrsibCsvText } from './ukrsib-fixtures';
+import {
+  EUR_LINES,
+  TRANSIT_LINES,
+  UAH_LINES,
+  UKRSIB_TITLES,
+  ukrsibCsv,
+  ukrsibCsvText,
+} from './ukrsib-fixtures';
 
 let t: TestApp | undefined;
 afterEach(async () => {
@@ -158,6 +165,45 @@ describe('the report', () => {
         .periods[0]?.lines.map((l) => l.code)
         .slice(0, 3),
     ).toEqual(['05', '08', '10']);
+  });
+
+  it('lays the year out as four declarations with deadlines and where each stands', () => {
+    const r = report();
+    expect(r.calendar.map((c) => [c.periodName, c.to, c.fileBy, c.payBy, c.status])).toEqual([
+      ['I квартал', '2026-03-31', '2026-05-10', '2026-05-20', 'paid'],
+      ['півріччя', '2026-06-30', '2026-08-09', '2026-08-19', 'paid'],
+      // The made-up statements stop on 3 August, before the third quarter ends.
+      ['три квартали', '2026-09-30', '2026-11-09', '2026-11-19', 'statements-short'],
+      ['рік', '2026-12-31', '2027-02-09', '2027-02-19', 'in-progress'],
+    ]);
+    expect(r.statementsTo).toBe('2026-08-03');
+    const longer = records().map((x) => (x.day === '2026-08-03' ? { ...x, day: '2026-09-30' } : x));
+    expect(report(5, longer).calendar[2]?.status).toBe('ready');
+    const empty = buildFopReport([], { year: '2026', singleTaxPercent: 5, today: TODAY });
+    expect(empty.calendar.map((c) => c.status)).toEqual([
+      'no-statements',
+      'no-statements',
+      'no-statements',
+      'in-progress',
+    ]);
+    expect(
+      buildFopReport([], { year: '2026', singleTaxPercent: 5, today: '2026-02-01' }).calendar[1]
+        ?.status,
+    ).toBe('upcoming');
+  });
+
+  it('reads one file with every account, and does not count the transit account a second time', () => {
+    const all = parse(ukrsibCsv([...UAH_LINES, ...EUR_LINES, ...TRANSIT_LINES])).rows;
+    expect(all.filter((r) => r.kind === 'transit')).toHaveLength(6);
+    const r = report(
+      5,
+      all.map((row) => ({ ...row, override: null })),
+    );
+    expect(r.yearIncomeMinor).toBe(66_150_000);
+    expect(r.rows.find((row) => row.kind === 'transit' && row.direction === 'in')).toMatchObject({
+      counted: false,
+      reason: expect.stringContaining('transit account'),
+    });
   });
 
   it('says how much of the annual limit the year has used', () => {

@@ -98,6 +98,14 @@ export function classifyUkrsib(
   return 'other-out';
 }
 
+/**
+ * A transit account (розподільчий рахунок, balance account 2603): foreign currency lands there and moves on to the current
+ * account (2600) the same day or later. Both movements are in an all-accounts export, so counting the first one too would count
+ * the money twice; the day it reaches the current account is the day of the income.
+ */
+export const isTransitAccount = (ibanDigits: string): boolean =>
+  /^0*2603/.test(ibanDigits.slice(-19));
+
 const MAX_ROWS = 100_000;
 
 export function parseUkrsibStatement(
@@ -191,7 +199,7 @@ export function parseUkrsibStatement(
       uahMinor,
       counterparty,
       purpose,
-      kind: classifyUkrsib(direction, purpose, counterparty),
+      kind: isTransitAccount(digits) ? 'transit' : classifyUkrsib(direction, purpose, counterparty),
     });
   }
   if (rows.length === 0) {

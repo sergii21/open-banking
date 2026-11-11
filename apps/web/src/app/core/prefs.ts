@@ -29,6 +29,18 @@ export class Prefs {
   /** The single-tax rate the ФОП report works with: 5 percent without VAT, 3 percent with it. */
   readonly fopRate = signal<FopRate>(read('ll.fopRate') === '3' ? 3 : 5);
 
+  /** Declarations the person marked as filed, as "2026-3": a statement cannot show that, so they say it. */
+  readonly fopFiled = signal<readonly string[]>(
+    (read('ll.fopFiled') ?? '').split(',').filter((key) => /^\d{4}-[1-4]$/.test(key)),
+  );
+
+  setFopFiled(key: string, filed: boolean): void {
+    const rest = this.fopFiled().filter((k) => k !== key);
+    const next = filed ? [...rest, key] : rest;
+    this.fopFiled.set(next);
+    write('ll.fopFiled', next.length > 0 ? next.join(',') : null);
+  }
+
   setFopRate(rate: FopRate): void {
     this.fopRate.set(rate);
     write('ll.fopRate', rate === 3 ? '3' : null);

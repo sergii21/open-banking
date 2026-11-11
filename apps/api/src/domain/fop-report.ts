@@ -4,6 +4,8 @@ import {
   FOP_MILITARY_LEVY_PERCENT,
   FOP_PERIOD_NAMES,
   type FopAccountCoverage,
+  type FopCalendarEntry,
+  type FopCalendarStatus,
   type FopKind,
   type FopLine,
   type FopPeriod,
@@ -33,6 +35,8 @@ const QUARTER_TEXT = /за\s+(\d)\s*-?\s*(?:й|ий|го)?\s*квартал\s+(\
 const REASONS: Record<FopKind, string> = {
   income: 'Money received from a client',
   'own-transfer': 'Between your own accounts',
+  transit:
+    'On the transit account (розподільчий): it is counted when it reaches your current account',
   'currency-sale': 'Hryvnias from selling currency: the currency was counted when it arrived',
   bank: 'Money from the bank itself, not a client',
   'tax-single': 'Single tax paid',
@@ -56,6 +60,14 @@ function quarterRange(year: string, quarter: number): { from: string; to: string
     from: `${year}-${pad(startMonth)}-01`,
     to: `${year}-${pad(endMonth)}-${pad(endDay)}`,
   };
+}
+
+/** A calendar day some days later. Plain calendar arithmetic on the date itself: no clock and no time zone are involved. */
+export function addDays(day: string, days: number): string {
+  const date = new Date(
+    Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)) + days),
+  );
+  return date.toISOString().slice(0, 10);
 }
 
 function judge(record: FopRecord): Pick<FopRow, 'counted' | 'chosen' | 'reason'> {
@@ -246,6 +258,30 @@ export function buildFopReport(
     cumulativeLevy = levy;
   }
 
+  const statementsTo = records.reduce<string | null>(
+    (latest, r) => (latest === null || r.day > latest ? r.day : latest),
+    null,
+  );
+  const calendar: FopCalendarEntry[] = [1, 2, 3, 4].map((quarter) => {
+    const range = quarterRange(year, quarter);
+    let status: FopCalendarStatus;
+    if (range.from > options.today) status = 'upcoming';
+    else if (range.to >= options.today) status = 'in-progress';
+    else if ((paid.get(`tax-single:${quarter}`) ?? 0) > 0) status = 'paid';
+    else if (inYear.length === 0) status = 'no-statements';
+    else if (statementsTo === null || statementsTo < range.to) status = 'statements-short';
+    else status = 'ready';
+    const fileBy = addDays(range.to, 40);
+    return {
+      quarter,
+      periodName: FOP_PERIOD_NAMES[quarter - 1] ?? '',
+      to: range.to,
+      fileBy,
+      payBy: addDays(fileBy, 10),
+      status,
+    };
+  });
+
   const currencies = new Map<string, { amountMinor: number; uahMinor: number }>();
   for (const { record } of counted) {
     if (record.currency === 'UAH') continue;
@@ -309,6 +345,9 @@ export function buildFopReport(
     singleTaxPercent: options.singleTaxPercent,
     militaryLevyPercent: FOP_MILITARY_LEVY_PERCENT,
     periods,
+    calendar,
+    today: options.today,
+    statementsTo,
     yearIncomeMinor: cumulative,
     yearSingleTaxMinor: cumulativeTax,
     yearLevyMinor: cumulativeLevy,

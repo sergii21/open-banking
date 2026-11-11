@@ -4,10 +4,14 @@
  * changing `apps/api/test/ukrsib-fixtures.ts`.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { EUR_LINES, UAH_LINES, ukrsibCsv } from '../apps/api/test/ukrsib-fixtures';
+import { EUR_LINES, TRANSIT_LINES, UAH_LINES, ukrsibCsv } from '../apps/api/test/ukrsib-fixtures';
 
 const dir = new URL('../fixtures/ukrsib/', import.meta.url);
 mkdirSync(dir, { recursive: true });
 writeFileSync(new URL('made-up-uah.csv', dir), ukrsibCsv(UAH_LINES));
 writeFileSync(new URL('made-up-eur.csv', dir), ukrsibCsv(EUR_LINES));
-process.stdout.write('fixtures/ukrsib/made-up-{uah,eur}.csv written\n');
+writeFileSync(
+  new URL('made-up-all-accounts.csv', dir),
+  ukrsibCsv([...UAH_LINES, ...EUR_LINES, ...TRANSIT_LINES]),
+);
+process.stdout.write('fixtures/ukrsib/made-up-{uah,eur,all-accounts}.csv written\n');
