@@ -133,15 +133,61 @@ Not a Ukrainian bank, added because it is the one place with a self-serve person
 - Wise balances are valued in hryvnias at monobank's public rates like every other bank, not at Wise's own rate (they differ a little).
 - **Not verified:** whether the user's account type can create a token at all, what the token form offers, what `/profiles` returns, and every draft call: none has been sent to the real service.
 
-## No other Ukrainian bank has a self-serve API (2026-11-03)
+## The other Ukrainian banks and open banking (read 2026-11-11)
 
-Found by the person who asked: besides monobank and PrivatBank's business Autoclient API, no Ukrainian bank gives a person a token to
-read their own accounts. The National Bank's open-banking APIs (in force since 1 August 2025) are for NBU-authorised providers and need
-a QWAC certificate, and PrivatBank's Open Banking API likewise needs a QWAC. Sources:
-https://privatbank.ua/handbook/openbanking-for-developers,
+Read from the web on 2026-11-11, mostly news reports and bank pages; bank.gov.ua refused the fetch, so nothing here is from the
+National Bank's own text or its register. Nothing was tried against a real service.
+
+**Open banking is live, and it is not for a personal app.** The rules (NBU Resolution No. 80) have been in force since 1 August 2025. An NBU official said in autumn 2026 that the APIs reach 97% of individuals' current accounts and 71% of companies', and that
+about 90% of banks follow the shared Open API Group specification. So the banks are technically open, to authorised providers only:
+
+- A reader of accounts (AISP) must be a **legal entity authorised by the NBU** and entered in the Register of Payment Infrastructure:
+  a business plan, owners' and managers' reputation documents, audited IFRS statements, professional liability insurance, internal
+  rules and information-security measures. There is no fixed minimum capital for account information alone (payment initiation: UAH 1
+  million).
+- Then a **qualified open banking certificate** (QWAC or e-seal), mainly from the NBU's own certification centre. Every bank checks
+  the register and the certificate on each call (PrivatBank, UKRSIBBANK, Raiffeisen and ProCredit all say so on their TPP pages).
+- Authorised so far, as reported in October 2026: four banks (PUMB, PrivatBank, monobank's Universal Bank, UKRSIBBANK), with three
+  more banks applying, and two technology operators (UPC, TASLink). No independent fintech was named. Reports differ on the list.
+- Sandboxes are open without authorisation (UKRSIBBANK says its one is free and needs no steps; Raiffeisen, ProCredit and UPC have
+  developer portals). A sandbox returns made-up data: useful to write an adapter against, useless for the person's money.
+
+So Ledger Lens cannot read "the rest of the banks" through open banking unless someone registers a company with the NBU, which is a
+business decision, not a feature. There is also no sign yet of an authorised provider that resells access to small developers.
+
+**What the person can use today without us:** an authorised bank's own app. Privat24 has "Відкритий банкінг" (add another bank's
+account, see its balance and history; consent lasts 90 days), and PUMB launched the same in June 2026. That shows the accounts in the
+bank's app; it gives Ledger Lens nothing to read.
+
+**Bank by bank, what a customer can get for their own accounts** (the route this app uses for monobank and PrivatBank):
+
+| Bank                                                               | For its own customer                                                                                                                                                                                                                                       | Fit for this app                                 |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| monobank                                                           | Personal token, self-serve                                                                                                                                                                                                                                 | Built                                            |
+| PrivatBank                                                         | Business and ФОП: Autoclient key, self-serve. Personal: none                                                                                                                                                                                               | Built (plus the statement file)                  |
+| Raiffeisen                                                         | Corporate "Open API": Account Balance and ISO Statement, OAuth 2.0, sandbox; a signed application, onboarding said to take a day. The page does not say whether a ФОП qualifies, or the price                                                              | Possible, after asking the bank                  |
+| Ukreximbank                                                        | EXIM API through a personal manager: balances, movements, OAuth 2.0 with signed requests. For companies                                                                                                                                                    | Possible for a company client only               |
+| NovaPay                                                            | ФОП account: a token made in the cabinet's API section (seen in an accounting service's instructions, not NovaPay's own page)                                                                                                                              | Likely possible; not checked                     |
+| UKRSIBBANK                                                         | Sources disagree: one accounting vendor says there is no statement API for clients, another describes sending the bank an RSA key and getting a client id and secret. The bank's site shows only the TPP APIs. UKRSIB business exports statements as files | A statement file now; ask the bank about the API |
+| PUMB                                                               | A partner integration only (the Taxer accounting service reads ФОП statements with the client's consent). No customer token found                                                                                                                          | A statement file                                 |
+| Oschadbank, OTP, A-Bank, Sense, Kredobank, Ukrgasbank and the rest | Nothing found beyond client-bank file exchange (DBF, CSV, XLS) with accounting programs                                                                                                                                                                    | A statement file                                 |
+
+**What this means for the app:** the realistic way to cover the rest is the one already built for Privat24: a statement importer per
+bank (`modules/imports`), each needing one real export from the person to get the column titles right. A live adapter is worth it only
+where the bank gives its own customer a key: Raiffeisen and NovaPay are the candidates, and UKRSIBBANK if the bank confirms the key route.
+
+Sources: https://news.finance.ua/ua/plyus-dlya-fintehu-ta-ryteylu-v-nbu-rozpovily-yak-vidkrytyy-bankinh-zminyuye-platizhnyy-rynok-ukrainy,
 https://www.wolftheiss.com/insights/open-banking-in-ukraine-ais-pis-providers-and-their-regulatory-status/,
-https://lb.ua/economics/2026/11/01/777336_usi_rahunki_zastosunku_scho.html. Wise's own Open Banking API is likewise for regulated
-providers (Open Banking Directory or eIDAS certificate).
+https://lb.ua/economics/2026/11/01/777336_usi_rahunki_zastosunku_scho.html,
+https://privatbank.ua/handbook/openbanking-for-developers, https://ukrsibbank.com/open-banking/payment-initiation-service/,
+https://raiffeisen.ua/en/aem/korporatyvnym-klientam/open-api.html, https://raiffeisen.ua/en/aem/tpp/open-banking.html,
+https://procreditbank.com.ua/en/private/open-banking-tpp,
+https://www.eximb.com/ua/business/corporate/corporate-dystancijne-bankivske-obslugovuvannya/exim-api-connection.html,
+https://support.finmap.online/ua/integracziya-novapay-ta-finmap, https://help.torgsoft.ua/bankivski-vypysky-po-rahunkah.htm,
+https://softup.com.ua/modul-obminu-ukrsibbank-ta-bas-1s/,
+https://news.finance.ua/ua/pumb-i-takser-zapustyly-avtomatychnu-synhronizaciyu-vypysky-dlya-fop-menshe-rutyny-bil-she-chasu-na-biznes,
+https://forbes.ua/news/pumb-pershim-v-ukraini-zapustiv-vidkritiy-banking-shcho-tse-dast-klientam-11062026-39551. Wise's own Open
+Banking API is likewise for regulated providers (Open Banking Directory or eIDAS certificate).
 
 ## Other routes, not built
 
