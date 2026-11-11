@@ -31,6 +31,7 @@ import { WiseDraftService } from './modules/wise-drafts/service';
 import { DiagnosticsService } from './modules/diagnostics/service';
 import { EventBus } from './modules/events/event-bus';
 import { HomeService } from './modules/home/service';
+import { FopService } from './modules/fop/service';
 import { ImportService } from './modules/imports/service';
 import { InsightsService } from './modules/insights/service';
 import { InspectorStore } from './modules/inspector/inspector-store';
@@ -178,6 +179,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   const insights = new InsightsService(core, rates, calendar);
   const diagnostics = new DiagnosticsService(core, providers, sync, rates);
   const imports = new ImportService(core, providers, access, sync, rates, calendar);
+  const fop = new FopService(core, calendar);
   const wiseDrafts = new WiseDraftService(core, access);
   const ctx: AppContext = {
     ...core,
@@ -192,6 +194,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
     insights,
     diagnostics,
     imports,
+    fop,
   };
 
   await registerApi(app, ctx);

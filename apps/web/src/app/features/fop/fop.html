@@ -1,0 +1,302 @@
+<ll-sheet title="ФОП report" [open]="ui.fop()" (openChange)="ui.fop.set($event)">
+  <p class="hint" style="margin-bottom: 14px">
+    Your income by quarter, read from your UKRSIB business statements, with the single tax and the
+    military levy worked out from it. Ledger Lens files nothing and pays nothing: it is a way to
+    look at the numbers before you do.
+  </p>
+
+  <div class="field">
+    <input
+      #picker
+      id="fop-file"
+      type="file"
+      hidden
+      multiple
+      accept=".csv,text/csv"
+      (change)="importFiles(picker)"
+    />
+    <button
+      type="button"
+      class="btn btn-primary btn-block"
+      [disabled]="busy()"
+      [attr.aria-describedby]="error() ? 'fop-error' : 'fop-file-hint'"
+      (click)="picker.click()"
+    >
+      {{ busy() ? 'Reading the statements…' : 'Add UKRSIB statements (CSV)' }}
+    </button>
+    @if (error(); as message) {
+      <p class="error-text" id="fop-error" role="alert">{{ message }}</p>
+    } @else {
+      <p class="hint" id="fop-file-hint">
+        In UKRSIB business: Рахунки та виписки, Виписки, choose the account and the period,
+        Сформувати, then the CSV button. One file per account (hryvnia, euro). Add more later: rows
+        already here are not counted twice. Files are read on this computer and thrown away; only
+        their rows are kept.
+      </p>
+    }
+    @if (imported().length > 0) {
+      <div role="status">
+        @for (line of imported(); track $index) {
+          <p class="hint">{{ line }}</p>
+        }
+      </div>
+    }
+  </div>
+
+  @if (report(); as r) {
+    @if (r.hasData) {
+      <div class="fop-controls">
+        <div class="field">
+          <label for="fop-year">Year</label>
+          <select
+            id="fop-year"
+            class="input"
+            [value]="r.year"
+            (change)="setYear($any($event.target).value)"
+          >
+            @for (y of r.years; track y) {
+              <option [value]="y" [selected]="y === r.year">{{ y }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <span class="label" id="fop-rate-label">Single tax rate</span>
+          <div class="seg" role="radiogroup" aria-labelledby="fop-rate-label">
+            @for (option of rates; track option) {
+              <button
+                type="button"
+                role="radio"
+                [attr.aria-checked]="rate() === option"
+                (click)="setRate(option)"
+              >
+                {{ option }}%
+              </button>
+            }
+          </div>
+        </div>
+      </div>
+      <p class="hint">
+        5% is for a single-tax payer without VAT, 3% with VAT. Which one is yours is in your tax
+        registration.
+      </p>
+
+      <div class="fop-year" aria-live="polite">
+        <div>
+          <span class="label">Income in {{ r.year }}</span>
+          <ll-amount [minor]="r.yearIncomeMinor" size="lg" />
+        </div>
+        <div>
+          <span class="label">Single tax, {{ r.singleTaxPercent }}%</span>
+          <ll-amount [minor]="r.yearSingleTaxMinor" size="md" />
+        </div>
+        <div>
+          <span class="label">Military levy, {{ r.militaryLevyPercent }}%</span>
+          <ll-amount [minor]="r.yearLevyMinor" size="md" />
+        </div>
+      </div>
+      @if (r.limit; as limit) {
+        <div class="fop-limit">
+          <span class="meter" role="presentation"
+            ><i [style.--w]="limit.usedPercent + '%'"></i
+          ></span>
+          <p class="hint">
+            {{ limit.usedPercent }}% of the {{ r.year }} income limit for group 3 (about
+            <ll-amount [minor]="limit.limitMinor" size="sm" [fraction]="false" />, as the sources
+            read for this year; check it).
+          </p>
+        </div>
+      }
+      @if (r.currencies.length > 0) {
+        <p class="hint">
+          Foreign currency counts at the hryvnia amount your statement shows for each receipt. The
+          rule asks for the National Bank's rate of the day it arrived: compare one receipt with it.
+          @for (c of r.currencies; track c.currency) {
+            <span class="num">{{ c.currency }} </span>
+            <ll-amount [minor]="c.amountMinor" [currency]="c.currency" size="sm" /> =
+            <ll-amount [minor]="c.uahMinor" size="sm" />.
+          }
+        </p>
+      }
+      @for (warning of r.warnings; track $index) {
+        <p class="error-text" role="status">{{ warning }}</p>
+      }
+
+      @for (p of r.periods; track p.quarter) {
+        <section class="fop-q" [attr.aria-labelledby]="'fop-q-' + p.quarter">
+          <h3 [id]="'fop-q-' + p.quarter">
+            {{ title(p) }} <small>{{ dayText(p.from) }} to {{ dayText(p.to) }}</small>
+          </h3>
+          <dl class="kv">
+            <div>
+              <dt>Income in the quarter</dt>
+              <dd><ll-amount [minor]="p.incomeMinor" /></dd>
+            </div>
+            <div>
+              <dt>Income since 1 January</dt>
+              <dd><ll-amount [minor]="p.cumulativeMinor" /></dd>
+            </div>
+            <div>
+              <dt>Single tax for the quarter</dt>
+              <dd><ll-amount [minor]="p.singleTaxMinor" /></dd>
+            </div>
+            <div>
+              <dt>Paid for it (your statements)</dt>
+              <dd>
+                <ll-amount [minor]="p.paidSingleTaxMinor" />
+                <span class="pill">{{ check(p.singleTaxMinor, p.paidSingleTaxMinor) }}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Military levy for the quarter</dt>
+              <dd><ll-amount [minor]="p.levyMinor" /></dd>
+            </div>
+            <div>
+              <dt>Paid for it (your statements)</dt>
+              <dd>
+                <ll-amount [minor]="p.paidLevyMinor" />
+                <span class="pill">{{ check(p.levyMinor, p.paidLevyMinor) }}</span>
+              </dd>
+            </div>
+            <div>
+              <dt>Social contribution paid in it</dt>
+              <dd>
+                <ll-amount [minor]="p.paidEsvMinor" />
+                @if (p.esvMinimumMinor !== null) {
+                  <small class="fop-note"
+                    >minimum for the quarter <ll-amount [minor]="p.esvMinimumMinor" size="sm"
+                  /></small>
+                }
+              </dd>
+            </div>
+          </dl>
+        </section>
+      }
+
+      <h3 class="fop-h">Statements loaded</h3>
+      <ul class="fop-accounts">
+        @for (a of r.accounts; track a.account + a.currency) {
+          <li>
+            {{ a.currency }} ····{{ a.account }}: {{ dayText(a.from) }} to {{ dayText(a.to) }},
+            {{ a.rows }} rows
+          </li>
+        }
+      </ul>
+      <p class="hint">
+        A quarter is only as complete as the statements: if a statement stops before the quarter
+        does, its income is missing here.
+      </p>
+
+      <h3 class="fop-h">Rows</h3>
+      <p class="hint">
+        {{ countedRows() }} counted. Money in is counted when it came from a client. Your own
+        transfers and the hryvnias a currency sale brought are left out (the currency was counted
+        when it arrived). Change any row if the report is wrong about it.
+      </p>
+      <div class="chips" role="group" aria-label="Show">
+        @for (
+          option of [
+            ['all', 'All'],
+            ['counted', 'Counted'],
+            ['left-out', 'Not counted'],
+            ['tax', 'Taxes paid'],
+          ];
+          track option[0]
+        ) {
+          <button
+            type="button"
+            class="chip"
+            [attr.aria-pressed]="filter() === option[0]"
+            (click)="filter.set($any(option[0]))"
+          >
+            {{ option[1] }}
+          </button>
+        }
+      </div>
+      <ul class="fop-rows">
+        @for (row of rows(); track row.id) {
+          <li class="fop-row">
+            <div class="fop-row-top">
+              <span class="num">{{ dayText(row.day) }}</span>
+              <span class="pill" [class.pill-good]="row.counted">{{ status(row) }}</span>
+            </div>
+            <p class="fop-who">{{ row.counterparty }}</p>
+            <p class="fop-purpose">{{ row.purpose }}</p>
+            <div class="fop-row-amt">
+              <ll-amount [minor]="row.amountMinor" [currency]="row.currency" />
+              @if (row.currency !== 'UAH' && row.uahMinor !== null) {
+                <small class="fop-note">= <ll-amount [minor]="row.uahMinor" size="sm" /></small>
+              }
+            </div>
+            <p class="hint">{{ row.reason }}</p>
+            @if (row.direction === 'in') {
+              <div class="fop-actions">
+                <button
+                  type="button"
+                  class="btn btn-soft"
+                  [attr.aria-label]="
+                    (row.counted ? 'Do not count it' : 'Count it') +
+                    ': the ' +
+                    dayText(row.day) +
+                    ' receipt from ' +
+                    row.counterparty
+                  "
+                  (click)="decide(row, !row.counted)"
+                >
+                  {{ row.counted ? 'Do not count it' : 'Count it' }}
+                </button>
+                @if (row.chosen) {
+                  <button type="button" class="btn btn-quiet" (click)="decide(row, null)">
+                    Back to automatic
+                  </button>
+                }
+              </div>
+            }
+          </li>
+        } @empty {
+          <li class="hint">Nothing to show here.</li>
+        }
+      </ul>
+
+      <details class="fop-assumptions">
+        <summary>What this report assumes</summary>
+        <ul>
+          <li>
+            Group 3 single tax: 5% of income without VAT or 3% with VAT, and a 1% military levy, as
+            sources read for {{ r.year }}. Rates and limits change: confirm them with the tax office
+            or an accountant. This is not tax advice.
+          </li>
+          <li>
+            Income is money received from clients. Foreign currency counts in hryvnias at the
+            National Bank rate of the day it reached the account; selling it later, and any rate
+            difference, add nothing. The report uses the hryvnia amount the statement shows, so
+            compare a receipt with the National Bank's rate to be sure of it.
+          </li>
+          <li>
+            The quarterly figures treat the return as cumulative from 1 January: each quarter's tax
+            is the total so far minus the earlier quarters. That is not confirmed from a primary
+            source.
+          </li>
+          <li>
+            "Paid" is read from the words of your payments ("за 1-й квартал 2026 року"), so a
+            payment without a quarter in its purpose is not set against one.
+          </li>
+          <li>
+            Nothing is filed, and the deadlines are not tracked here. The social contribution
+            minimum is the monthly figure sources give for the year.
+          </li>
+        </ul>
+      </details>
+
+      <button type="button" class="btn btn-quiet btn-block fop-clear" (click)="clear()">
+        {{ confirmClear() ? 'Press again to remove these statements' : 'Remove the statements' }}
+      </button>
+    } @else {
+      <p class="hint">
+        Nothing here yet. Add a statement file and the quarters appear. Your statements are the only
+        source: this report never talks to the bank.
+      </p>
+    }
+  } @else if (loading()) {
+    <p class="hint">Loading…</p>
+  }
+</ll-sheet>

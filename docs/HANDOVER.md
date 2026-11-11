@@ -4,6 +4,42 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 (`git checkout v1-full-featured`; its own hand-over is in that tag's `docs/HANDOVER.md`). Node 24 for every command:
 `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
 
+## ФОП report (added 2026-11-11, at the person's request)
+
+Income per quarter for a group 3 single-tax ФОП, read from the person's own UKRSIB business statements. **Home, ФОП report** opens a
+sheet; **Add UKRSIB statements (CSV)** reads the files (one per account) and the sheet shows, per quarter, income, income since 1
+January, the single tax (5 % or 3 %) and the military levy (1 %) worked out from the cumulative income, what the statements say was
+paid for that quarter, and the social contribution paid; the rows below can each be counted or left out. It files nothing and
+pays nothing.
+
+- **Where:** `domain/ukrsib-statement.ts` (reader and classifier), `domain/fop-report.ts` (pure report), `modules/fop` (service and
+  routes: `POST /api/imports/ukrsib`, `GET /api/fop?year=&rate=`, `PATCH /api/fop/rows/:id`, `DELETE /api/fop`), migration
+  `004_fop_rows` (a new table, additive; rows go with the session), `packages/contracts/src/fop.ts`, `features/fop` in the SPA.
+  The rows are kept apart from the personal accounts: nothing about Home, Insights or Your money changes, and the UKRSIB balances
+  are **not** in Your money. Only offered when the app runs on the person's own computer and is not the demo.
+- **The real layout, seen once (the person's own exports, 2026-11-11):** CSV, Windows-1251, `;`, 17 titled columns (`Дата операцiї`
+  with a Latin i), separate Дебет and Кредит, `Гривневе покриття` = the hryvnia equivalent of a foreign-currency row (`0.00` on
+  hryvnia rows). The PDF export has one amount per row with no side, so CSV is the way; the XLS is old binary Excel the app cannot
+  read. Fixtures: `fixtures/ukrsib/made-up-{uah,eur}.csv`, made up in that layout by `scripts/make-ukrsib-fixtures.ts`; nothing from
+  the real files is in the repository.
+- **Checked on the real files (counts and totals, nothing printed):** the CSV debit and credit totals equal the cabinet's; 17 receipts
+  (8 hryvnia, 9 euro) are income, 21 currency-sale credits and 31 own transfers are left out, 6 tax payments carry a quarter; on all 9
+  euro receipts the bank's hryvnia equivalent equals amount times the National Bank rate of that day (public NBU service).
+- **Rules assumed, shown on the sheet, to confirm with an accountant (not tax advice):** 5 % without VAT or 3 % with, 1 % levy, the
+  2026 limit of 10 091 049 UAH (1 167 minimum wages of 8 647) and the 1 902,34 UAH monthly contribution minimum, all as accounting sites
+  state them; foreign currency at the National Bank rate on the day it reaches the account, a later sale adds nothing; the return
+  treated as cumulative from 1 January (**not confirmed from a primary source**); deadlines are not tracked.
+- **Classification by the words of the purpose** (so a new bank wording can be missed; every row can be decided by hand): `між власними
+рахунками` is an own transfer; `Гр.екв.продажу` (also spelled `Гр.экв.`) is the proceeds of a currency sale; a credit from the bank
+  itself is left out; the rest of the credits are income. Money out is tax (`військового збору`, `ЄП`), contribution or other.
+- **Measured:** initial JS + CSS 203.06 kB raw, 59.6 kB over the wire (the sheet is its own chunk); tests: contracts 30, API 184, web
+  9 (223), Playwright 30; looked at in dark and light desktop and at 320 px, axe in light and dark.
+- **Not verified:** that the real app imports the person's own files (the reader and report were run on them directly, in a script,
+  not through the running app); that a report matches a filed return; the cumulative rule and the deadlines; an American-English
+  check of the sheet's words by the person. UKRSIB has no API section in the cabinet (settings hold only profile, company and visit
+  history; "Відкритий банкінг" lists consents given, none), and API access is by asking the bank.
+- CLAUDE.md and the skills do not describe this feature yet (not edited here).
+
 ## Pay from pasted text (added 2026-11-11, at the person's request)
 
 **To a card (added 2026-11-11, at the person's request):** a 16-digit card number in the text (Luhn-checked, `parseCardText` in

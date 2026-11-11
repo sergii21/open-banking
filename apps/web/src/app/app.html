@@ -83,6 +83,9 @@
     @defer (when ui.payText()) {
       <ll-pay />
     }
+    @defer (when ui.fop()) {
+      <ll-fop />
+    }
   }
 
   @if (pull() > 0) {

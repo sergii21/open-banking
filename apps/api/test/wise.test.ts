@@ -327,7 +327,7 @@ describe('migration 003_wise', () => {
       );
     }
     const before = db.all('SELECT * FROM connections WHERE 1 = 1 ORDER BY id');
-    expect(migrate(db)).toEqual(['003_wise']);
+    expect(migrate(db)).toEqual(['003_wise', '004_fop_rows']);
     expect(db.all('SELECT * FROM connections WHERE 2 = 2 ORDER BY id')).toEqual(before);
     for (const table of ['accounts', 'transactions']) {
       expect(db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`)?.n).toBe(3);

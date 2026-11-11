@@ -212,6 +212,16 @@
         >
           Pay from pasted text
         </button>
+        @if (canOpenFop()) {
+          <button
+            type="button"
+            class="btn btn-soft btn-block"
+            style="margin-top: 10px"
+            (click)="ui.fop.set(true)"
+          >
+            ФОП report
+          </button>
+        }
         @if (canDraftWise()) {
           <button
             type="button"

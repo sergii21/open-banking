@@ -1,5 +1,6 @@
 import { registerConnectionRoutes } from './modules/connection/routes';
 import { registerEventRoutes } from './modules/events/routes';
+import { registerFopRoutes } from './modules/fop/routes';
 import { registerImportRoutes } from './modules/imports/routes';
 import { registerInspectorRoutes } from './modules/inspector/routes';
 import { registerAppRoutes } from './modules/routes';
@@ -32,6 +33,7 @@ export async function registerApi(app: App, ctx: AppContext): Promise<void> {
       registerSessionRoutes(api, ctx);
       registerConnectionRoutes(api, ctx);
       registerImportRoutes(api, ctx);
+      registerFopRoutes(api, ctx);
       registerAppRoutes(api, ctx);
       registerWiseDraftRoutes(api, ctx);
       registerInspectorRoutes(api, ctx);

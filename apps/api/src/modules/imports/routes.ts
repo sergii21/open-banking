@@ -29,4 +29,21 @@ export function registerImportRoutes(api: App, ctx: AppContext): void {
       return ctx.imports.privat24(requireSession(request), body);
     },
   );
+
+  /** Reads a UKRSIB business statement (CSV) for the ФОП report. Nothing is stored but the rows. */
+  api.post(
+    '/imports/ukrsib',
+    { bodyLimit: MAX_IMPORT_BYTES, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+    (request) => {
+      const body: unknown = request.body;
+      if (!Buffer.isBuffer(body) || body.length === 0) {
+        throw new AppError(
+          'validation_failed',
+          400,
+          'Send the statement file as the request body.',
+        );
+      }
+      return ctx.fop.importUkrsib(requireSession(request), body);
+    },
+  );
 }

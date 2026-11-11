@@ -1,5 +1,6 @@
-import type { Category, ProviderId } from '@ledger-lens/contracts';
+import type { Category, FopKind, ProviderId } from '@ledger-lens/contracts';
 import { newId } from '../domain/crypto';
+import type { FopRecord } from '../domain/fop-report';
 import type { Db } from './database';
 
 // ================================================================================================= sessions
@@ -777,6 +778,116 @@ export class RatesRepo {
 
 // ================================================================================================== bundle
 
+// ====================================================================================================== ФОП rows
+
+export interface FopRowInput {
+  id: string;
+  ts: number;
+  day: string;
+  account: string;
+  currency: string;
+  direction: 'in' | 'out';
+  amountMinor: number;
+  uahMinor: number | null;
+  counterparty: string;
+  purpose: string;
+  kind: FopKind;
+}
+
+interface FopRowRaw {
+  id: string;
+  ts: number;
+  day: string;
+  account: string;
+  currency: string;
+  direction: 'in' | 'out';
+  amount_minor: number;
+  uah_minor: number | null;
+  counterparty: string;
+  purpose: string;
+  kind: FopKind;
+  override: number | null;
+}
+
+/** Statement rows of the person's UKRSIB business accounts, for the ФОП report. They go with the session. */
+export class FopRowsRepo {
+  constructor(private readonly db: Db) {}
+
+  count(sessionId: string): number {
+    return (
+      this.db.get<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM fop_rows WHERE session_id = ?',
+        sessionId,
+      )?.n ?? 0
+    );
+  }
+
+  /** Inserts new rows and refreshes existing ones in place; a decision the person made about a row is kept. Returns how many were new. */
+  upsertMany(sessionId: string, rows: readonly FopRowInput[]): number {
+    const before = this.count(sessionId);
+    this.db.transaction(() => {
+      for (const row of rows) {
+        this.db.run(
+          `INSERT INTO fop_rows (session_id, id, ts, day, account, currency, direction, amount_minor, uah_minor,
+             counterparty, purpose, kind)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (session_id, id) DO UPDATE SET
+             ts = excluded.ts, day = excluded.day, uah_minor = excluded.uah_minor,
+             counterparty = excluded.counterparty, purpose = excluded.purpose, kind = excluded.kind`,
+          sessionId,
+          row.id,
+          row.ts,
+          row.day,
+          row.account,
+          row.currency,
+          row.direction,
+          row.amountMinor,
+          row.uahMinor,
+          row.counterparty,
+          row.purpose,
+          row.kind,
+        );
+      }
+    });
+    return this.count(sessionId) - before;
+  }
+
+  list(sessionId: string): FopRecord[] {
+    return this.db
+      .all<FopRowRaw>('SELECT * FROM fop_rows WHERE session_id = ? ORDER BY ts', sessionId)
+      .map((r) => ({
+        id: r.id,
+        ts: r.ts,
+        day: r.day,
+        account: r.account,
+        currency: r.currency,
+        direction: r.direction,
+        amountMinor: r.amount_minor,
+        uahMinor: r.uah_minor,
+        counterparty: r.counterparty,
+        purpose: r.purpose,
+        kind: r.kind,
+        override: r.override === null ? null : r.override === 1,
+      }));
+  }
+
+  /** The person's decision about one money-in row: true counts it, false does not, null goes back to what the report decides. */
+  setOverride(sessionId: string, id: string, value: boolean | null): boolean {
+    return (
+      this.db.run(
+        `UPDATE fop_rows SET override = ? WHERE session_id = ? AND id = ? AND direction = 'in'`,
+        value === null ? null : value ? 1 : 0,
+        sessionId,
+        id,
+      ).changes > 0
+    );
+  }
+
+  deleteAll(sessionId: string): number {
+    return this.db.run('DELETE FROM fop_rows WHERE session_id = ?', sessionId).changes;
+  }
+}
+
 export interface Repositories {
   sessions: SessionsRepo;
   connections: ConnectionsRepo;
@@ -784,6 +895,7 @@ export interface Repositories {
   transactions: TransactionsRepo;
   syncJobs: SyncJobsRepo;
   rates: RatesRepo;
+  fopRows: FopRowsRepo;
 }
 
 export function createRepositories(db: Db): Repositories {
@@ -794,5 +906,6 @@ export function createRepositories(db: Db): Repositories {
     transactions: new TransactionsRepo(db),
     syncJobs: new SyncJobsRepo(db),
     rates: new RatesRepo(db),
+    fopRows: new FopRowsRepo(db),
   };
 }

@@ -1,4 +1,5 @@
 import { Service, signal } from '@angular/core';
+import type { FopRate } from '@ledger-lens/contracts';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
@@ -25,6 +26,13 @@ export class Prefs {
     read('ll.theme') === 'light' ? 'light' : read('ll.theme') === 'dark' ? 'dark' : 'system',
   );
   readonly hidden = signal(read('ll.private') === '1');
+  /** The single-tax rate the ФОП report works with: 5 percent without VAT, 3 percent with it. */
+  readonly fopRate = signal<FopRate>(read('ll.fopRate') === '3' ? 3 : 5);
+
+  setFopRate(rate: FopRate): void {
+    this.fopRate.set(rate);
+    write('ll.fopRate', rate === 3 ? '3' : null);
+  }
 
   setTheme(choice: ThemeChoice): void {
     this.theme.set(choice);

@@ -18,6 +18,7 @@ import type { WiseDraftService } from './modules/wise-drafts/service';
 import type { DiagnosticsService } from './modules/diagnostics/service';
 import type { EventBus } from './modules/events/event-bus';
 import type { HomeService } from './modules/home/service';
+import type { FopService } from './modules/fop/service';
 import type { ImportService } from './modules/imports/service';
 import type { InsightsService } from './modules/insights/service';
 import type { InspectorStore } from './modules/inspector/inspector-store';
@@ -60,5 +61,6 @@ export interface AppContext extends CoreContext {
   insights: InsightsService;
   diagnostics: DiagnosticsService;
   imports: ImportService;
+  fop: FopService;
   wiseDrafts: WiseDraftService;
 }

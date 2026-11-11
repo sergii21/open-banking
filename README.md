@@ -21,6 +21,8 @@ token you issue yourself (it has no code that moves money: the one write is an u
 
 - **Home**: your money in hryvnias (every card and jar, foreign currencies at monobank's own rates), a 30-day line, this month
   against the same days last month, accounts, top categories, regular payments.
+- **ФОП report**: for a group 3 single-tax sole proprietor with UKRSIB business accounts: statements (CSV) become income per quarter,
+  with the single tax and the military levy worked out and set against what you paid. Files only, nothing is filed or paid.
 - **Pay from pasted text**: paste an invoice or a message; the details become a National Bank of Ukraine payment QR code and link
   that your own bank app opens, where you confirm. Made in the browser: nothing is sent, stored or paid by the app.
 - **Activity**: every transaction grouped by day, instant search (press `/`), filters, a detail sheet, category changes that
@@ -51,6 +53,7 @@ apps/api             Fastify 5 backend-for-frontend: Zod 4 request validation, n
 packages/contracts   plain TypeScript types and small pure helpers (money formatting, CSV) shared by both apps, no dependencies
 e2e                  Playwright: the demo, the token flows against paced fake banks, statement import, axe on every screen, phones
 fixtures/privat24    statement files for the tests, built from a described layout (named unverified: no real export seen yet)
+fixtures/ukrsib      made-up UKRSIB business statements in the real export's layout, for the ФОП report tests
 scripts              app.mjs (npm run app), check-node.mjs, screenshots.mjs, make-privat24-fixtures.ts
 data/                created on the first run, git-ignored: ledger-lens.db and secret.key (0600)
 docs                 START_HERE.md, HANDOVER.md (state of the work), UKRAINE.md, V2_BRIEF.md and PLAN.md (history), screenshots/
@@ -78,7 +81,7 @@ docs                 START_HERE.md, HANDOVER.md (state of the work), UKRAINE.md,
 | Home page weight                       | 1181 kB             | **101 kB**                    |
 | Keystroke to filtered list, 5,892 rows | n/a                 | about one frame (26 to 33 ms) |
 | Source lines (no tests)                | 19,589              | 13,141                        |
-| Tests                                  | 513                 | 195 unit + 26 Playwright      |
+| Tests                                  | 513                 | 223 unit + 30 Playwright      |
 
 Measured on the production build, with Lighthouse 13.6 on `/home` with a session cookie, three runs, median, before PrivatBank was
 added (which made the initial JS + CSS 198.9 kB raw, 58 kB over the wire, and the tests 151 unit + 16 Playwright). Details and

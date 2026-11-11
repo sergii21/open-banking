@@ -8,6 +8,7 @@ export class Ui {
   readonly liveApi = signal(false);
   readonly wiseDraft = signal(false);
   readonly payText = signal(false);
+  readonly fop = signal(false);
   /** What the last statement import did; Home shows it until it is dismissed. */
   readonly imported = signal<ImportResult | null>(null);
   /** Bumped by the `/` shortcut; the Activity screen focuses its search box when it changes. */

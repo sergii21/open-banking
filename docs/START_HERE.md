@@ -160,6 +160,27 @@ payment is for, and shows them as fields you can correct. When they are complete
   tried yet, so check the card and the amount there. Tell us whether it worked.
 - Not tried with a real bank app yet: if yours does not read the code, tell us which bank, and pay from the fields by hand.
 
+### ФОП report (UKRSIB business statements)
+
+For a sole proprietor (ФОП) on the single tax, group 3, with an account at UKRSIB business. **ФОП report** on Home opens a sheet that
+adds your income up per quarter from your statements, with the single tax and the military levy worked out from it. It files nothing
+and pays nothing, and it needs files: UKRSIB has no key for it.
+
+1. In UKRSIB business open **Рахунки та виписки, Виписки**, choose one account and the period (the whole year to date is fine),
+   press **Сформувати**, then the **CSV** button (not PDF: it does not say money in from money out). Do it again for each account,
+   for example hryvnia and euro.
+2. In Ledger Lens press **Add UKRSIB statements (CSV)** and choose the files. Add newer ones later: rows already here are not counted
+   twice, and what you decided about a row is kept. The files are read on your computer and thrown away; only their rows are kept.
+3. Look at each quarter: income, the tax and levy it comes to, and what your statements say you paid for it ("Matches", "Paid less",
+   "Not paid yet"). Choose 5 % (without VAT) or 3 % (with VAT) to match your registration.
+4. Check the rows. Money from clients is counted; your own transfers and the hryvnias a currency sale brought are not (the currency
+   counted when it arrived). Foreign currency counts at the hryvnia amount the statement shows, which should be the National Bank rate of
+   the day it arrived. **Count it** or **Do not count it** changes any row.
+
+The rates, the limit and the rules are assumptions written on the sheet (**What this report assumes**): confirm them with the tax
+office or an accountant. This is not tax advice. A quarter is only as complete as your statements, and the UKRSIB accounts are not in
+**Your money**.
+
 ## 8. Check it is real
 
 - Compare one balance with the bank's own app. For a monobank credit card, "own funds" is the balance minus the limit: that is an assumption

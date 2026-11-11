@@ -4,5 +4,9 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["playwright.config.ts", "scripts/make-privat24-fixtures.ts"]
+  "include": [
+    "playwright.config.ts",
+    "scripts/make-privat24-fixtures.ts",
+    "scripts/make-ukrsib-fixtures.ts"
+  ]
 }

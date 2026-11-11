@@ -164,6 +164,30 @@ export const migrations: Migration[] = [
       ALTER TABLE connections_new RENAME TO connections;
     `,
   },
+  {
+    // The ФОП report: rows of the person's own UKRSIB business statements, kept apart from the personal accounts so that nothing
+    // about Home or Insights changes. Additive: a new table, nothing existing is touched.
+    id: '004_fop_rows',
+    sql: `
+      CREATE TABLE fop_rows (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        id TEXT NOT NULL,
+        ts INTEGER NOT NULL,
+        day TEXT NOT NULL,
+        account TEXT NOT NULL,                  -- the last four digits of the person's own account
+        currency TEXT NOT NULL,
+        direction TEXT NOT NULL CHECK (direction IN ('in','out')),
+        amount_minor INTEGER NOT NULL,
+        uah_minor INTEGER,
+        counterparty TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        override INTEGER CHECK (override IN (0,1)),  -- the person's own decision, null when none
+        PRIMARY KEY (session_id, id)
+      );
+      CREATE INDEX fop_rows_by_day ON fop_rows (session_id, day);
+    `,
+  },
 ];
 
 const tableNames = (db: Db): string[] =>

@@ -114,13 +114,14 @@ function roleOf(title: string): { role: Role; rank: number } | null {
 }
 
 /** A column title looks like a title, not like data: short, and neither a number nor a date. */
-const looksLikeTitle = (text: string): boolean =>
+export const looksLikeTitle = (text: string): boolean =>
   text.length > 0 &&
   text.length <= 48 &&
   !/^[-+−\d\s.,:/]+$/.test(text) &&
   !/\d{1,2}[./]\d{1,2}[./]\d{2,4}/.test(text);
 
-const textOf = (cell: string | undefined): string => (cell ?? '').replace(/\s+/g, ' ').trim();
+export const textOf = (cell: string | undefined): string =>
+  (cell ?? '').replace(/\s+/g, ' ').trim();
 
 interface When {
   day: string;
@@ -129,7 +130,7 @@ interface When {
   second: number;
 }
 
-function parseWhen(text: string, time?: string): When | null {
+export function parseWhen(text: string, time?: string): When | null {
   const t = text.trim();
   let year: number;
   let month: number;
@@ -174,14 +175,14 @@ const CURRENCY_ALIASES: Record<string, string> = {
   '826': 'GBP',
 };
 
-function parseCurrency(text: string): string | null {
+export function parseCurrency(text: string): string | null {
   const t = text.trim().toUpperCase();
   if (CURRENCY_ALIASES[t]) return CURRENCY_ALIASES[t];
   return /^[A-Z]{3}$/.test(t) ? t : null;
 }
 
 /** An amount cell in whatever way it was written: "-250,00", "−1 234.50 UAH", "250". */
-function parseAmount(text: string, currency: string): number | null {
+export function parseAmount(text: string, currency: string): number | null {
   const cleaned = text.replace(/[^\d,.+\-−–\s\u00a0\u202f]/g, '');
   return decimalToMinor(cleaned, currencyExponent(currency));
 }

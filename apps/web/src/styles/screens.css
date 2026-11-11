@@ -919,3 +919,116 @@ html {
   font-family: system-ui, sans-serif;
   font-weight: 700;
 }
+
+/* ФОП report */
+.fop-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.fop-year {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.fop-year > div {
+  display: grid;
+  gap: 2px;
+}
+.fop-limit {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.fop-q {
+  margin-top: 18px;
+}
+.fop-q h3,
+.fop-h {
+  margin-bottom: 8px;
+  font-size: var(--fs-md);
+}
+.fop-h {
+  margin-top: 22px;
+}
+.fop-q h3 small {
+  margin-left: 6px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.fop-q .kv dd {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px 8px;
+}
+.fop-note {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.fop-accounts {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
+.fop-rows {
+  display: grid;
+  margin-top: 10px;
+  padding: 0;
+  list-style: none;
+}
+.fop-row {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.fop-row-top,
+.fop-row-amt,
+.fop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+.fop-who {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.fop-purpose {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.fop-actions {
+  justify-content: flex-start;
+}
+.fop-assumptions {
+  margin-top: 22px;
+}
+.fop-assumptions summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+.fop-assumptions ul {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.fop-clear {
+  margin-top: 22px;
+}

@@ -4,3 +4,4 @@ export * from './model';
 export * from './money';
 export * from './csv';
 export * from './payment';
+export * from './fop';

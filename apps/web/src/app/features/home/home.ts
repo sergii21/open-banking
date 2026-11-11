@@ -182,6 +182,8 @@ export class Home {
     this.ui.imported.set(null);
   }
 
+  /** The ФОП report reads files on the person's own computer: not offered to the demo or a public copy. */
+  protected readonly canOpenFop = computed(() => this.session.live() && !this.session.demo());
   protected readonly canDraftWise = computed(() =>
     this.session.connections().some((c) => c.bank === 'wise' && c.status === 'active'),
   );
