@@ -31,6 +31,12 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6b7eee44-18ab-46cb-80c0-b672fa91752d"
+      }
+    },
+    "owner": "serjvnet"
   }
 }
