@@ -61,6 +61,16 @@
       >
         Copy the amount
       </button>
+      @if (privatLink(); as href) {
+        <a class="btn btn-soft btn-block" target="_blank" rel="noopener noreferrer" [href]="href">
+          Open in Privat24
+        </a>
+        <p class="hint">
+          Opens Privat24’s transfer form with the card and the amount filled in. PrivatBank does not
+          document this link and it has not been tried yet: check both in Privat24 before you
+          confirm.
+        </p>
+      }
       <p class="hint">
         There is no payment code for a card. Open your bank’s app, choose a transfer to a card,
         paste the number and the amount, and compare both with the message before you confirm.

@@ -113,9 +113,22 @@ test('a card number and an amount become two things to copy, with no payment cod
   await sheet.getByRole('button', { name: 'Copy the amount' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('1250,50');
 
-  // One wrong digit is said in words.
+  // Privat24's transfer form, filled in: a plain link the person follows, nothing the app opens.
+  const privat = sheet.getByRole('link', { name: 'Open in Privat24' });
+  const form = (await privat.getAttribute('href'))?.split('/money-transfer/form/')[1] ?? '';
+  expect(JSON.parse(decodeURIComponent(form))).toEqual({
+    form: {
+      receiver: { source: 'manual', number: '4111111111111111' },
+      amount: 1250.5,
+      currency: 'UAH',
+    },
+  });
+  await expect(privat).toHaveAttribute('rel', 'noopener noreferrer');
+
+  // One wrong digit is said in words, and no link is offered.
   await sheet.getByLabel('Invoice or message').fill('4111 1111 1111 1112 500');
   await expect(sheet.getByText('its check digit does not match')).toBeVisible();
+  await expect(privat).toHaveCount(0);
   expect(calls).toEqual([]);
 });
 
@@ -137,6 +150,9 @@ for (const scheme of ['light', 'dark'] as const) {
     await expectNothingPastTheEdge(page);
     await sheet.getByLabel('Invoice or message').fill('4111 1111 1111 1112 500 грн');
     await expect(sheet.getByText('its check digit does not match')).toBeVisible();
+    await expectNoViolations(page);
+    await sheet.getByLabel('Invoice or message').fill('4111 1111 1111 1111 500 грн');
+    await expect(sheet.getByRole('link', { name: 'Open in Privat24' })).toBeVisible();
     await expectNoViolations(page);
     await expectNothingPastTheEdge(page);
   });

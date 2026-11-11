@@ -154,6 +154,8 @@ payment is for, and shows them as fields you can correct. When they are complete
 - **To a card:** paste a message with a 16-digit card number and an amount ("4149 … 5678, 500 грн"). There is no payment code for a
   card and no bank offers a link for one, so the sheet shows the number (a wrong digit is said in words) and the amount with **Copy the
   card number** and **Copy the amount**: paste them into your bank app's transfer to a card and confirm there.
+  **Open in Privat24** opens Privat24's transfer form with both filled in; PrivatBank does not document that link and it has not been
+  tried yet, so check the card and the amount there. Tell us whether it worked.
 - Not tried with a real bank app yet: if yours does not read the code, tell us which bank, and pay from the fields by hand.
 
 ## 8. Check it is real

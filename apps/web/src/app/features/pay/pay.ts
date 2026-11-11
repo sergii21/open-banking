@@ -18,6 +18,7 @@ import {
   parseCardText,
   parsePaymentText,
   paymentProblems,
+  privat24CardLink,
   PAYMENT_LIMITS,
   type PaymentDetails,
 } from '@ledger-lens/contracts';
@@ -69,6 +70,12 @@ export class Pay {
       ? 'An amount in hryvnias, like 1500 or 1500,50. Leave it empty to type it in the bank app.'
       : null;
   });
+  /** Privat24's transfer form with the card and the amount filled in: an address PrivatBank does not document. */
+  protected readonly privatLink = computed(() =>
+    this.amountProblem()
+      ? null
+      : privat24CardLink({ card: this.card(), amountMinor: this.amountMinor() }),
+  );
   private readonly details = computed<PaymentDetails>(() => ({
     recipient: this.recipient(),
     iban: this.iban(),

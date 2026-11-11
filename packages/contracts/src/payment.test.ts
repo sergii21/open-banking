@@ -8,6 +8,7 @@ import {
   nbuPaymentLink,
   parseCardText,
   parsePaymentText,
+  privat24CardLink,
   paymentProblems,
   type PaymentDetails,
 } from './payment';
@@ -177,5 +178,25 @@ describe('a card number and an amount from pasted text', () => {
     expect(parseCardText('4111 1111 1111 1112 чи 4111 1111 1111 1111').card).toBe(CARD);
     expect(parseCardText('UA213223130000026007233566001 500 грн').card).toBe('');
     expect(parseCardText('просто текст 500').card).toBe('');
+  });
+});
+
+describe('the Privat24 transfer form address', () => {
+  it('carries the card and the amount', () => {
+    const link = privat24CardLink({ card: CARD, amountMinor: 125_050 }) ?? '';
+    expect(link.startsWith('https://next.privat24.ua/money-transfer/form/%7B%22form%22:%7B')).toBe(
+      true,
+    );
+    expect(JSON.parse(decodeURIComponent(link.split('/form/')[1] ?? ''))).toEqual({
+      form: { receiver: { source: 'manual', number: CARD }, amount: 1250.5, currency: 'UAH' },
+    });
+  });
+
+  it('leaves the amount out when there is none, and refuses a wrong card', () => {
+    const link = privat24CardLink({ card: CARD, amountMinor: null }) ?? '';
+    expect(JSON.parse(decodeURIComponent(link.split('/form/')[1] ?? ''))).toEqual({
+      form: { receiver: { source: 'manual', number: CARD } },
+    });
+    expect(privat24CardLink({ card: '4111111111111112', amountMinor: 100 })).toBeNull();
   });
 });

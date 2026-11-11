@@ -249,3 +249,23 @@ export function parseCardText(text: string): CardTransfer {
         : null,
   };
 }
+
+export const PRIVAT24_TRANSFER_BASE = 'https://next.privat24.ua/money-transfer/form/';
+
+/**
+ * Privat24's website transfer form with the card and the amount filled in. PrivatBank does not document this address: its shape
+ * was read from a page a search engine had indexed, and nobody has opened one made here yet (docs/HANDOVER.md). The person logs
+ * in and confirms in Privat24; null when the card number does not pass its check.
+ */
+export function privat24CardLink(transfer: CardTransfer): string | null {
+  if (!isValidCardNumber(transfer.card)) return null;
+  const amount =
+    transfer.amountMinor === null
+      ? ''
+      : `,"amount":${minorToDecimalString(transfer.amountMinor, 'UAH')},"currency":"UAH"`;
+  const form = `{"form":{"receiver":{"source":"manual","number":"${transfer.card}"}${amount}}}`;
+  // The indexed address leaves colons and commas as they are.
+  return (
+    PRIVAT24_TRANSFER_BASE + encodeURIComponent(form).replace(/%3A/g, ':').replace(/%2C/g, ',')
+  );
+}

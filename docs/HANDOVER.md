@@ -11,6 +11,10 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 documented monobank or Privat24 link for a transfer to a card number. Contracts tests are now 28; `e2e/pay.spec.ts` has one more test.
 Not looked at by eye yet, and not tried against a real bank app.
 
+**Open in Privat24 (2026-11-11):** `privat24CardLink` builds `next.privat24.ua/money-transfer/form/{json}` with the card, the amount
+and UAH. The shape was read from one search-indexed Privat24 address; PrivatBank does not document it and no link made here has been
+opened. Unknown: whether it still prefills, whether it accepts UAH and a decimal amount, whether a phone opens the app or the website.
+
 The person pastes an invoice or a message; the app reads the recipient, IBAN, code (8 or 10 digits), amount and purpose, shows them as
 editable fields and, once complete, draws a National Bank of Ukraine payment QR code (format 003) and offers the same thing as a link
 (`https://qr.bank.gov.ua/` + Base64URL of 17 line-separated fields). The person confirms in their own bank app. The app still moves no
