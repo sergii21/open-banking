@@ -18,8 +18,9 @@ person: `apps/mobile/DEPLOY.md`; how it is built: `apps/mobile/README.md`.
   (HKDF-SHA256; XChaCha20-Poly1305 from `@noble/ciphers`; random bytes from `expo-crypto`, a new native module, so the app needs a
   fresh `expo prebuild`). Details: `apps/mobile/README.md`, `apps/relay/README.md`. **Verified:** relay rules on memory and SQLite
   (21 tests), two phones against a real relay in-process (22 tests: totals, budget, what leaves the phone, what the relay sees), the
-  Node server over HTTP on a spare port, typecheck, lint, an iOS bundle export. **Not verified:** the relay is not hosted anywhere
-  (`DEFAULT_RELAY_URL` in `apps/mobile/src/family/config.ts` is empty, so nobody can start a family yet), the Family screen has
+  Node server over HTTP on a spare port, typecheck, lint, an iOS bundle export. The relay runs on Cloudflare Workers with D1
+  (`https://ledger-lens-relay.ledger-lens-relay.workers.dev`, the default in `apps/mobile/src/family/config.ts`), checked there with
+  made-up bytes. **Not verified:** the Family screen has
   never been seen on a phone or simulator, the camera opening `ledgerlens://family#…`, `expo-crypto` on a device, and a request
   body of bytes from React Native's `fetch`. Individual transactions are not shared; that was offered and not built.
 - **Five tabs:** Money (balances, total in hryvnias at monobank's rate), Transactions (search as you type, on the phone), Pay (the

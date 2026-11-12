@@ -48,5 +48,5 @@ folder, signed in with `npx wrangler login`: `npx wrangler d1 create ledger-lens
 ## What is and is not verified
 
 `npm test -w @ledger-lens/relay`: the rules above, on the in-memory store, on SQLite and on the D1 store (over Node's SQLite, not on Cloudflare). The phone app's tests run two
-phones against this relay in-process and check that nothing readable reaches it. **Not done:** it has not been hosted
-anywhere, and no real phone has talked to it.
+phones against this relay in-process and check that nothing readable reaches it. It is deployed at `https://ledger-lens-relay.ledger-lens-relay.workers.dev` (2026-11-13), where storing, reading back, a wrong key and removal were
+checked with made-up bytes. **Not done:** no real phone has talked to it.

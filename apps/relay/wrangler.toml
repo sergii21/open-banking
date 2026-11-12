@@ -9,5 +9,5 @@ enabled = false
 [[d1_databases]]
 binding = "DB"
 database_name = "ledger-lens-relay"
-# Filled in after `npx wrangler d1 create ledger-lens-relay`. An identifier, not a secret.
-database_id = "REPLACE_AFTER_D1_CREATE"
+# From `npx wrangler d1 create ledger-lens-relay`. An identifier, not a secret.
+database_id = "411477bc-0786-44c3-9393-c3712d232d12"
