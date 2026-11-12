@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryRelayStore, Relay, type RelayStore } from '../src/relay';
+import { DatabaseSync } from 'node:sqlite';
+import { D1RelayStore, type D1Like, type D1Statement } from '../src/d1-store';
 import { SqliteRelayStore } from '../src/sqlite-store';
+
+/** D1's calls on Node's SQLite: the D1 store's SQL runs for real, though not on Cloudflare. */
+function fakeD1(): D1Like {
+  const db = new DatabaseSync(':memory:');
+  const statement = (sql: string, values: (string | number | null)[] = []): D1Statement => ({
+    bind: (...next) => statement(sql, next),
+    first: <T>() => Promise.resolve((db.prepare(sql).get(...values) as T | undefined) ?? null),
+    all: <T>() => Promise.resolve({ results: db.prepare(sql).all(...values) as T[] }),
+    run: () => Promise.resolve(db.prepare(sql).run(...values)),
+  });
+  return {
+    prepare: (sql) => statement(sql),
+    batch: async (statements) => {
+      for (const each of statements) await each.run();
+    },
+  };
+}
 
 const FAMILY = 'a'.repeat(32);
 const OTHER_FAMILY = 'b'.repeat(32);
@@ -41,6 +60,7 @@ const bytesOf = (base64: string): number[] => [...Buffer.from(base64, 'base64')]
 describe.each([
   ['in memory', () => new MemoryRelayStore()],
   ['on SQLite', () => new SqliteRelayStore(':memory:')],
+  ['on D1', () => new D1RelayStore(fakeD1())],
 ])('the family relay, %s', (_name, makeStore) => {
   it('keeps what a phone leaves and hands it back unchanged to whoever holds the key', async () => {
     const { put, list } = setup(makeStore());

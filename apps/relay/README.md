@@ -39,8 +39,14 @@ npm run start -w @ledger-lens/relay
 `src/relay.ts` is written against the web's `Request` and `Response` with storage passed in, so it can be moved to
 another runtime by writing a store for it.
 
+## On Cloudflare
+
+`src/worker.ts` is the same relay as a Cloudflare Worker with D1 for storage (`src/d1-store.ts`, `wrangler.toml`). From this
+folder, signed in with `npx wrangler login`: `npx wrangler d1 create ledger-lens-relay`, put the id it prints into
+`wrangler.toml`, then `npx wrangler deploy`. The tables are made on the first request.
+
 ## What is and is not verified
 
-`npm test -w @ledger-lens/relay`: the rules above, on the in-memory store and on SQLite. The phone app's tests run two
+`npm test -w @ledger-lens/relay`: the rules above, on the in-memory store, on SQLite and on the D1 store (over Node's SQLite, not on Cloudflare). The phone app's tests run two
 phones against this relay in-process and check that nothing readable reaches it. **Not done:** it has not been hosted
 anywhere, and no real phone has talked to it.

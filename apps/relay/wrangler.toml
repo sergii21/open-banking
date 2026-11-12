@@ -1,0 +1,13 @@
+# The family relay on Cloudflare Workers. Deploy from this folder: `npx wrangler deploy`.
+name = "ledger-lens-relay"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+# No request logs are kept.
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ledger-lens-relay"
+# Filled in after `npx wrangler d1 create ledger-lens-relay`. An identifier, not a secret.
+database_id = "REPLACE_AFTER_D1_CREATE"
