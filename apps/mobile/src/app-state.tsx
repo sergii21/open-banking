@@ -14,7 +14,10 @@ import { AppState as NativeAppState } from 'react-native';
 import { demoBank, liveBank } from './bank/provider';
 import { Sync, type SyncState } from './bank/sync';
 import { Store } from './data/db';
-import { keychainVault } from './platform/keychain';
+import { fetchRelayWire } from './family/relay';
+import { Family } from './family/service';
+import { keychainFamily, keychainVault } from './platform/keychain';
+import { secureRandom } from './platform/random';
 import { openPhoneDb } from './platform/sqlite';
 
 export interface AppServices {
@@ -24,6 +27,8 @@ export interface AppServices {
   calendar: Calendar;
   sync: Sync;
   syncState: SyncState;
+  /** Family mode: this phone's sealed summary on the relay and everyone else's read back. */
+  family: Family;
   /** Goes up whenever stored data may have changed: screens reload from the store when it does. */
   version: number;
   touch(): void;
@@ -152,6 +157,7 @@ export function AppProvider(props: { children: ReactNode; fallback: ReactNode })
     };
     return {
       store,
+      family: new Family(store, keychainFamily, fetchRelayWire, clock, calendar, secureRandom),
       clock,
       calendar,
       sync,

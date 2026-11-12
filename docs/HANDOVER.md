@@ -11,6 +11,17 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 only for the first version, and the bundle identifier `ua.ledgerlens.app` (their other app is `ua.alertnearby.app`). Guide for the
 person: `apps/mobile/DEPLOY.md`; how it is built: `apps/mobile/README.md`.
 
+- **Family mode (added 2026-11-13, at the person's request; they chose "Encrypted relay" over "My Mac at home").** A sixth
+  tab, Family, and a new workspace, `apps/relay`. Each person keeps their own token on their own phone; phones share a sealed
+  summary (the month's spending by category in hryvnias, their money only if they choose) through the relay, which holds no key.
+  One 256-bit family secret, passed as a QR code or pasted link, gives the family id, the relay access key and the encryption key
+  (HKDF-SHA256; XChaCha20-Poly1305 from `@noble/ciphers`; random bytes from `expo-crypto`, a new native module, so the app needs a
+  fresh `expo prebuild`). Details: `apps/mobile/README.md`, `apps/relay/README.md`. **Verified:** relay rules on memory and SQLite
+  (21 tests), two phones against a real relay in-process (22 tests: totals, budget, what leaves the phone, what the relay sees), the
+  Node server over HTTP on a spare port, typecheck, lint, an iOS bundle export. **Not verified:** the relay is not hosted anywhere
+  (`DEFAULT_RELAY_URL` in `apps/mobile/src/family/config.ts` is empty, so nobody can start a family yet), the Family screen has
+  never been seen on a phone or simulator, the camera opening `ledgerlens://family#…`, `expo-crypto` on a device, and a request
+  body of bytes from React Native's `fetch`. Individual transactions are not shared; that was offered and not built.
 - **Five tabs:** Money (balances, total in hryvnias at monobank's rate), Transactions (search as you type, on the phone), Pay (the
   NBU link first, because a phone cannot scan its own screen; the QR code for another device; card mode with copy buttons and the
   Privat24 link), ФОП (import UKRSIB CSV from Files, calendar, quarters, declaration lines with Copy, rows with a counted switch),

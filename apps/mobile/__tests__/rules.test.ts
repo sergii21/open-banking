@@ -19,15 +19,26 @@ describe('the rules the phone keeps', () => {
       expect([file, /\bconsole\s*\./.test(read(file))]).toEqual([file, false]);
   });
 
-  it('the app has one way to the network, and it only reads', () => {
+  it('the app has two ways to the network: the bank, which it only reads, and the family relay', () => {
     const callers = files.filter((file) =>
       /\bfetch\s*\(|XMLHttpRequest|WebSocket/.test(read(file)),
     );
-    expect(callers).toEqual(['src/bank/http.ts']);
-    for (const file of files) {
-      expect([file, /['"`](POST|PUT|PATCH|DELETE)['"`]/.test(read(file))]).toEqual([file, false]);
-    }
+    expect(callers).toEqual(['src/bank/http.ts', 'src/family/relay.ts']);
+    // Only the relay client can write, and what it writes was sealed on this phone first.
+    const writers = files.filter((file) => /['"`](POST|PUT|PATCH|DELETE)['"`]/.test(read(file)));
+    expect(writers).toEqual(['src/family/relay.ts']);
+    expect(read('src/family/relay.ts')).not.toMatch(/['"`](POST|PATCH)['"`]/);
     expect(read('src/bank/http.ts')).toContain("method: 'GET'");
+  });
+
+  it('the bank token and the family secret never meet', () => {
+    for (const file of sources('src/family')) {
+      expect([
+        file,
+        /keychainVault|TokenVault|vault\.read|from '\.\.\/bank\//.test(read(file)),
+      ]).toEqual([file, false]);
+    }
+    expect(read('src/family/relay.ts')).toContain("startsWith('https://')");
   });
 
   it('the token is read back in one place and kept on this device only', () => {
@@ -36,6 +47,8 @@ describe('the rules the phone keeps', () => {
     expect(read('src/platform/keychain.ts')).toContain('WHEN_UNLOCKED_THIS_DEVICE_ONLY');
     const vaultUsers = files.filter((file) => /vault\.read\(\)/.test(read(file)));
     expect(vaultUsers).toEqual(['src/bank/sync.ts']);
+    const secretUsers = files.filter((file) => /keyring\.load\(\)/.test(read(file)));
+    expect(secretUsers).toEqual(['src/family/service.ts']);
   });
 
   it('the build settings are the ones the deploy guide describes', () => {

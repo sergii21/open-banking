@@ -21,3 +21,18 @@ export const keychainVault: TokenVault = {
   save: (token) => SecureStore.setItemAsync(KEY, token, OPTIONS),
   forget: () => SecureStore.deleteItemAsync(KEY, OPTIONS),
 };
+
+const FAMILY_KEY = 'family-secret';
+
+/** The family secret, kept the way the bank token is: in the Keychain, on this device only. */
+export interface FamilyKeyring {
+  load(): Promise<string | null>;
+  keep(secret: string): Promise<void>;
+  drop(): Promise<void>;
+}
+
+export const keychainFamily: FamilyKeyring = {
+  load: () => SecureStore.getItemAsync(FAMILY_KEY, OPTIONS),
+  keep: (secret) => SecureStore.setItemAsync(FAMILY_KEY, secret, OPTIONS),
+  drop: () => SecureStore.deleteItemAsync(FAMILY_KEY, OPTIONS),
+};

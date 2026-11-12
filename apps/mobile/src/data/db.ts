@@ -110,6 +110,20 @@ interface FopSql {
   override: number | null;
 }
 
+const toTransaction = (row: TransactionSql): TransactionRow => ({
+  id: row.id,
+  accountId: row.account_id,
+  ts: row.ts,
+  status: row.status,
+  amountMinor: row.amount_minor,
+  currency: row.currency,
+  description: row.description,
+  counterparty: row.counterparty,
+  comment: row.comment,
+  mcc: row.mcc,
+  category: row.category,
+});
+
 /**
  * Everything the app keeps on the phone, except the bank token (that is the Keychain's). Plain data in the app's own
  * folder, which iOS keeps from other apps: the history is not encrypted by this app and is never described as such.
@@ -254,19 +268,20 @@ export class Store {
       `SELECT * FROM transactions ${where ? `WHERE ${where}` : ''} ORDER BY ts DESC, id DESC LIMIT ?`,
       [...words.map((word) => `%${escapeLike(word)}%`), limit],
     );
-    return rows.map((row) => ({
-      id: row.id,
-      accountId: row.account_id,
-      ts: row.ts,
-      status: row.status,
-      amountMinor: row.amount_minor,
-      currency: row.currency,
-      description: row.description,
-      counterparty: row.counterparty,
-      comment: row.comment,
-      mcc: row.mcc,
-      category: row.category,
-    }));
+    return rows.map(toTransaction);
+  }
+
+  /** Booked rows from a moment on, in no particular order: what a month's totals are added up from. */
+  async bookedSince(ts: number): Promise<TransactionRow[]> {
+    const rows = await this.db.all<TransactionSql>(
+      "SELECT * FROM transactions WHERE ts >= ? AND status = 'booked'",
+      [ts],
+    );
+    return rows.map(toTransaction);
+  }
+
+  async clearMetaLike(prefix: string): Promise<void> {
+    await this.db.run("DELETE FROM meta WHERE key LIKE ? ESCAPE '\\'", [`${escapeLike(prefix)}%`]);
   }
 
   async transactionCount(): Promise<number> {
@@ -316,7 +331,8 @@ export class Store {
   async clearBank(): Promise<void> {
     await this.db.transaction(async () => {
       await this.db.exec('DELETE FROM transactions; DELETE FROM windows; DELETE FROM accounts;');
-      await this.db.run("DELETE FROM meta WHERE key <> 'fopRate'");
+      // The ФОП rate and the family (its name, relay and budget) are the person's own, not the bank's: they stay.
+      await this.db.run("DELETE FROM meta WHERE key <> 'fopRate' AND key NOT LIKE 'family.%'");
     });
   }
 

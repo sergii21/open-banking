@@ -8,7 +8,8 @@ import Svg, { Circle, Path, Rect, Text as SvgText } from 'react-native-svg';
 export function QrCodeView(props: {
   size: number;
   path: string;
-  badgeRadius: number;
+  /** The hryvnia badge of a payment code; a code that is not a payment has none. */
+  badgeRadius?: number;
   label: string;
 }) {
   const quiet = 4;
@@ -24,17 +25,21 @@ export function QrCodeView(props: {
       <Svg width="100%" height="100%" viewBox={`0 0 ${side} ${side}`}>
         <Rect x={0} y={0} width={side} height={side} fill="#ffffff" />
         <Path d={props.path} fill="#000000" transform={`translate(${quiet} ${quiet})`} />
-        <Circle cx={middle} cy={middle} r={props.badgeRadius} fill="#ffffff" />
-        <SvgText
-          x={middle}
-          y={middle + props.badgeRadius * 0.45}
-          fontSize={props.badgeRadius * 1.3}
-          fontWeight="700"
-          fill="#000000"
-          textAnchor="middle"
-        >
-          ₴
-        </SvgText>
+        {props.badgeRadius ? (
+          <>
+            <Circle cx={middle} cy={middle} r={props.badgeRadius} fill="#ffffff" />
+            <SvgText
+              x={middle}
+              y={middle + props.badgeRadius * 0.45}
+              fontSize={props.badgeRadius * 1.3}
+              fontWeight="700"
+              fill="#000000"
+              textAnchor="middle"
+            >
+              ₴
+            </SvgText>
+          </>
+        ) : null}
       </Svg>
     </View>
   );
