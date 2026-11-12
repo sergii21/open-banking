@@ -45,6 +45,7 @@ not word-split unquoted variables and macOS has no `timeout`; keep scripts POSIX
 | `npm run e2e`                                  | Build, then Playwright (see Testing). `e2e:only` skips the build, `e2e:report` opens the last report                                                                                                                                                                                                        |
 | `node scripts/screenshots.mjs`                 | Retakes `docs/screenshots` from running servers (its header says which)                                                                                                                                                                                                                                     |
 | `npm test -w @ledger-lens/api`                 | One workspace's tests                                                                                                                                                                                                                                                                                       |
+| `npm test -w @ledger-lens/mobile`              | The iPhone app's Jest tests; `npx expo export --platform ios` in `apps/mobile` checks that Metro bundles it                                                                                                                                                                                                 |
 
 `package-lock.json` is the source of truth: use `npm ci`, commit lockfile changes, never `--legacy-peer-deps`.
 TypeScript stays `~6.0.x` (Angular 22 peers `>=6.0 <6.1`; npm `latest` 7.x is unsupported).
@@ -53,6 +54,7 @@ TypeScript stays `~6.0.x` (Angular 22 peers `>=6.0 <6.1`; npm `latest` 7.x is un
 
 ```
 apps/web             Angular 22 SPA: zoneless, signals, no router, no UI library. Own CSS design system in src/styles
+apps/mobile          The iPhone app (Expo SDK 58, React Native): no server, see "The iPhone app" below and apps/mobile/README.md
 apps/api             Fastify 5 BFF (zod 4 for request schemas, node:sqlite, pino). src/{plugins,modules,providers,domain,db}
 packages/contracts   Plain TypeScript types and pure helpers (money, CSV) shared by both apps. Source only, no build step
 e2e                  Playwright: demo, monobank, privat and wise (the real-token flows), import, a11y (axe, light and dark), phone
@@ -161,6 +163,26 @@ Project specifics on top of it (ESLint enforces what it can):
   zone inside domain code.
 - No `console.*` in the API (use the request or app logger). No PII in logs.
 
+## The iPhone app (`apps/mobile`)
+
+Pay from pasted text, the ФОП report and monobank (balances in hryvnias, transactions with search), on the phone with no server.
+How to ship it: `apps/mobile/DEPLOY.md` (EAS build, `eas submit`, TestFlight; the owner's accounts, never ours).
+
+- **It imports the server's code in place** through the aliases `@api/*` (`apps/api/src`) and `@web-shared/*`
+  (`apps/web/src/app/shared`), set in its `tsconfig.json`, `metro.config.js` and `jest.config.js`. So a change to the monobank
+  adapter, the fake bank, `domain/calendar`, `categoriser`, `rates`, `fop-report`, `ukrsib-statement`, `files/csv`, `errors`,
+  `clock` or `shared/qr.ts` is a change to the phone too: those files must stay free of Node-only APIs at run time, except
+  `node:crypto`'s `createHash` (SHA-256 and SHA-1), which `src/platform/node-crypto.ts` stands in for. `npm run verify` runs the
+  phone's typecheck and Jest tests, which catch a break.
+- The token lives in the iOS Keychain (`src/platform/keychain.ts`) and is read back only in `src/bank/sync.ts`. No `console`
+  anywhere in the app. `src/bank/http.ts` is the only network code and refuses anything but a GET to the bank's own address.
+  `__tests__/rules.test.ts` guards all three.
+- The history is plain SQLite in the app's folder (`src/data/db.ts`), migrations additive only. Never describe it as encrypted.
+- Tests are Jest (`jest-expo`), not Vitest. The store's SQL runs on `node:sqlite` behind the same interface expo-sqlite sits behind.
+- `eas.json` holds no Apple ID, team id or App Store Connect id (the repository is public); `app.json` gets `extra.eas.projectId`
+  from `eas init`, which is not a secret.
+- Never verified from here: a real EAS build, TestFlight, the app on a device or simulator, a real token on the phone.
+
 ## Testing
 
 - Vitest for contracts, the API and the SPA (`@angular/build:unit-test`). The API tests run the whole app on an in-memory database and a
@@ -188,4 +210,6 @@ Project specifics on top of it (ESLint enforces what it can):
 
 - `.env` and `data/` (the database and the key) are git-ignored; `apps/api/.env.example` is committed. Never ask for, print or paste a
   token in chat or commit one: the person pastes it into the app themselves, or types it in their own terminal for `doctor`.
-- Commit locally at the end of each milestone with a descriptive message. There is no remote; never push.
+- Commit at the end of each milestone with a descriptive message. Since 2026-11-11 the repository is **public** at
+  `github.com/sergii21/open-banking`: work on a branch and open a pull request, never push to `main`, and never commit anything
+  personal (names, account numbers, amounts, tokens, real statements, an Apple ID or team id). Fixtures are made up.

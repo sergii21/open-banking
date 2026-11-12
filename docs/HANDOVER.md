@@ -4,6 +4,51 @@ The v2 brief is `docs/V2_BRIEF.md` (source of truth). v1, with everything that w
 (`git checkout v1-full-featured`; its own hand-over is in that tag's `docs/HANDOVER.md`). Node 24 for every command:
 `export PATH=$HOME/.nvm/versions/node/v24.15.0/bin:$PATH`.
 
+## The iPhone app (added 2026-11-11, at the person's request)
+
+`apps/mobile`: Expo SDK 58, React Native 0.88, TypeScript, built on EAS and delivered through TestFlight, modelled on the person's
+Тривога Поруч app. **No server**: the person approved "the phone does everything" over "the phone talks to the computer", monobank
+only for the first version, and the bundle identifier `ua.ledgerlens.app` (their other app is `ua.alertnearby.app`). Guide for the
+person: `apps/mobile/DEPLOY.md`; how it is built: `apps/mobile/README.md`.
+
+- **Family mode (added 2026-11-13, at the person's request; they chose "Encrypted relay" over "My Mac at home").** A sixth
+  tab, Family, and a new workspace, `apps/relay`. Each person keeps their own token on their own phone; phones share a sealed
+  summary (the month's spending by category in hryvnias, their money only if they choose) through the relay, which holds no key.
+  One 256-bit family secret, passed as a QR code or pasted link, gives the family id, the relay access key and the encryption key
+  (HKDF-SHA256; XChaCha20-Poly1305 from `@noble/ciphers`; random bytes from `expo-crypto`, a new native module, so the app needs a
+  fresh `expo prebuild`). Details: `apps/mobile/README.md`, `apps/relay/README.md`. **Verified:** relay rules on memory and SQLite
+  (21 tests), two phones against a real relay in-process (22 tests: totals, budget, what leaves the phone, what the relay sees), the
+  Node server over HTTP on a spare port, typecheck, lint, an iOS bundle export. The relay runs on Cloudflare Workers with D1
+  (`https://ledger-lens-relay.ledger-lens-relay.workers.dev`, the default in `apps/mobile/src/family/config.ts`), checked there with
+  made-up bytes. **Not verified:** the Family screen has
+  never been seen on a phone or simulator, the camera opening `ledgerlens://family#…`, `expo-crypto` on a device, and a request
+  body of bytes from React Native's `fetch`. Individual transactions are not shared; that was offered and not built.
+- **Five tabs:** Money (balances, total in hryvnias at monobank's rate), Transactions (search as you type, on the phone), Pay (the
+  NBU link first, because a phone cannot scan its own screen; the QR code for another device; card mode with copy buttons and the
+  Privat24 link), ФОП (import UKRSIB CSV from Files, calendar, quarters, declaration lines with Copy, rows with a counted switch),
+  Settings (token, made-up data, disconnect).
+- **Reuse, in place, nothing copied and nothing changed in the other workspaces:** the monobank adapter and DTOs, `FakeMonobank` and
+  its dataset (the demo), `calendar`, `categoriser`, `rates`, `diagnostics`, `errors`, `clock`, `files/csv`, `ukrsib-statement`,
+  `fop-report` from `apps/api/src`; `shared/qr.ts` from the SPA; all of `@ledger-lens/contracts`. Two stand-ins make it run on a
+  phone: `src/platform/node-crypto.ts` (SHA-256 and SHA-1, equal to Node's in tests, so imported rows get the same ids as on the
+  server) and `src/platform/text-decoder.ts` (Windows-1251, strict UTF-8, UTF-16; all 256 Windows-1251 bytes equal Node's).
+- **New on the phone:** `src/bank/http.ts` (GET only, one origin, nothing logged, a failure's words hold no token or address),
+  `src/bank/sync.ts` (`step()` does one read at most and returns the wait; three months, 31-day windows, newest month of every card
+  first; a 429 is a wait; a rejected token stops and asks for a new one; a refresh re-reads balances and the last three days),
+  `src/data/db.ts` (SQLite: accounts, transactions, windows, meta, fop_rows), `src/platform/keychain.ts` (expo-secure-store,
+  `WHEN_UNLOCKED_THIS_DEVICE_ONLY`).
+- **The same token on the computer and the phone share monobank's one read a minute.** Each slows the other; neither breaks.
+- **Measured:** Jest 49 tests in 6 files; `tsc --noEmit` clean; `npx expo export --platform ios` bundles 920 modules into a 2.8 MB
+  Hermes bundle; adding the workspace changed no resolved dependency version of the SPA, the API or contracts (checked by walking both
+  lockfiles), only where npm places them.
+- **Not verified, and not claimed:** no EAS build, no TestFlight upload (both need the person's Expo and Apple accounts); the app has
+  never run on an iPhone or a simulator, so no screen has been looked at and VoiceOver, Dynamic Type and dark mode are untested; no
+  real monobank token from the phone; on Hermes, `Intl.DateTimeFormat` with `Europe/Kyiv` (the calendar needs it) and expo-sqlite
+  running this SQL (it ran on `node:sqlite`); that the Files picker returns a UKRSIB CSV's bytes; that iOS offers a bank app for a
+  `qr.bank.gov.ua` link.
+- **Left out of this version:** PrivatBank business, Wise, Privat24 files, Insights, the Live API drawer, the "Filed" mark on the ФОП
+  calendar, month-against-last-month on Money, a Face ID lock, privacy blur, Ukrainian interface text.
+
 ## ФОП report (added 2026-11-11, at the person's request)
 
 Income per quarter for a group 3 single-tax ФОП, read from the person's own UKRSIB business statements. **Home, ФОП report** opens a

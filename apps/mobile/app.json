@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Ledger Lens",
+    "slug": "ledger-lens",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "ledgerlens",
+    "ios": {
+      "bundleIdentifier": "ua.ledgerlens.app",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-document-picker",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F6F7F9",
+          "dark": {
+            "backgroundColor": "#0b0c11"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6b7eee44-18ab-46cb-80c0-b672fa91752d"
+      }
+    },
+    "owner": "serjvnet"
+  }
+}

@@ -87,6 +87,13 @@ Measured on the production build, with Lighthouse 13.6 on `/home` with a session
 added (which made the initial JS + CSS 198.9 kB raw, 58 kB over the wire, and the tests 151 unit + 16 Playwright). Details and
 method in [docs/HANDOVER.md](docs/HANDOVER.md).
 
+## On an iPhone
+
+`apps/mobile` is the same thing for a phone, with no server: Pay from pasted text, the ФОП report, and monobank balances and
+transactions with the token in the iOS Keychain. It reuses the adapter, the report and the QR encoder from this repository as they
+are. [`apps/mobile/README.md`](apps/mobile/README.md) says how it is built and [`apps/mobile/DEPLOY.md`](apps/mobile/DEPLOY.md) how
+to get it onto your phone through TestFlight. It has not run on a device yet.
+
 ## Developing
 
 Node 24 (`.nvmrc`; `./start.sh` finds it through nvm), then `npm ci`.

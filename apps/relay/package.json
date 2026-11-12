@@ -1,0 +1,17 @@
+{
+  "name": "@ledger-lens/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The family relay: keeps sealed summaries the phones leave for each other. It holds no key and cannot read them.",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.161.0"
+  }
+}
